@@ -1,0 +1,281 @@
+/* PhishGuard Extension Styles */
+
+.phishguard-indicator {
+  margin: 0 8px;
+  display: inline-flex;
+  z-index: 100;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.phishguard-indicator:hover {
+  transform: scale(1.05);
+}
+
+/* Modal Styles */
+.phishguard-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999999;
+  animation: phishguard-modal-fadein 0.3s ease;
+  direction: rtl;
+}
+
+@keyframes phishguard-modal-fadein {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.phishguard-modal-content {
+  background: white;
+  border-radius: 16px;
+  max-width: 500px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: phishguard-modal-slidein 0.3s ease;
+}
+
+@keyframes phishguard-modal-slidein {
+  from {
+    opacity: 0;
+    transform: translateY(-30px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.phishguard-modal-header {
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  color: white;
+  padding: 20px;
+  border-radius: 16px 16px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.phishguard-modal-header h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.phishguard-close {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  font-size: 20px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.phishguard-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.phishguard-modal-body {
+  padding: 24px;
+}
+
+.risk-score-display {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.risk-score-circle {
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+.risk-score-inner {
+  width: 120px;
+  height: 120px;
+  background: white;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.risk-score-number {
+  font-size: 42px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.risk-score-label {
+  font-size: 13px;
+  color: #6b7280;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.risk-level {
+  background: linear-gradient(135deg, #f3f4f6, #e5e7eb);
+  padding: 16px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  font-size: 15px;
+  text-align: center;
+}
+
+.risk-level strong {
+  color: #374151;
+}
+
+.indicators {
+  background: #f8fafc;
+  padding: 16px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  border: 2px solid #e5e7eb;
+}
+
+.indicators strong {
+  display: block;
+  margin-bottom: 12px;
+  color: #374151;
+  font-size: 15px;
+}
+
+.indicators ul {
+  margin: 0;
+  padding-right: 20px;
+  list-style: none;
+}
+
+.indicators li {
+  padding: 6px 0;
+  color: #6b7280;
+  position: relative;
+  font-size: 14px;
+}
+
+.indicators li:before {
+  content: "•";
+  color: #3b82f6;
+  font-weight: bold;
+  display: inline-block;
+  width: 1em;
+  margin-right: -1em;
+  position: absolute;
+  right: -15px;
+}
+
+.recommendation {
+  padding: 16px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+
+.recommendation.warning {
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  border: 2px solid #fbbf24;
+}
+
+.recommendation.info {
+  background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+  border: 2px solid #3b82f6;
+}
+
+.recommendation strong {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 15px;
+  color: #374151;
+}
+
+.recommendation p {
+  margin: 0;
+  color: #4b5563;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.response-time {
+  text-align: center;
+  padding: 12px;
+  background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+  border-radius: 8px;
+  font-size: 13px;
+  color: #166534;
+  font-weight: 600;
+  border: 2px solid #86efac;
+}
+
+.phishguard-modal-footer {
+  padding: 16px 24px;
+  border-top: 2px solid #f3f4f6;
+  display: flex;
+  justify-content: center;
+}
+
+.phishguard-btn {
+  padding: 12px 32px;
+  border: none;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.phishguard-btn-primary {
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  color: white;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+.phishguard-btn-primary:hover {
+  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.5);
+  transform: translateY(-2px);
+}
+
+/* Scrollbar Styling */
+.phishguard-modal-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.phishguard-modal-content::-webkit-scrollbar-track {
+  background: #f3f4f6;
+  border-radius: 10px;
+}
+
+.phishguard-modal-content::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  border-radius: 10px;
+}
+
+.phishguard-modal-content::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+}

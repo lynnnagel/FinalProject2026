@@ -1,0 +1,33 @@
+# PhishGuard Backend Requirements
+
+# FastAPI Framework
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+pydantic[email]==2.10.0
+
+# Database
+sqlalchemy==2.0.36
+alembic==1.14.0
+
+# NLP & ML
+transformers==4.46.0
+torch==2.5.1
+numpy==1.26.4
+scikit-learn==1.5.2
+
+# Security & Utilities
+python-multipart==0.0.6
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+httpx==0.25.2
+
+# Utilities
+python-dotenv==1.0.0
+tqdm==4.66.1
+
+# Optional: For production deployment
+# gunicorn==21.2.0
+# redis==5.0.1  # For caching
+# celery==5.3.4  # For background tasks
