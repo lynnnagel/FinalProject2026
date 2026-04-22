@@ -53,14 +53,35 @@ async def scan_email(email_data: EmailInput, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(user)
 
-    # Run analysis (Heuristics + BERT ensemble)
+    # ✅ בדוק אם כבר נסרק — אל תספור פעמיים
+    existing = (
+        db.query(EmailRecord)
+        .filter(
+            EmailRecord.user_id == user.id,
+            EmailRecord.sender == email_data.sender,
+            EmailRecord.subject == email_data.subject[:200],
+        )
+        .first()
+    )
+    if existing:
+        # החזר תוצאה ישנה בלי לספור מחדש
+        return RiskAnalysis(
+            risk_score=existing.risk_score,
+            is_phishing=existing.is_phishing,
+            risk_level=_get_risk_level(existing.risk_score),
+            indicators=["נסרק בעבר"],
+            recommendation=_get_recommendation(existing.risk_score),
+            response_time=0.0,
+        )
+
+    # Run analysis
     analysis = get_risk_score(
         email_data.sender,
         email_data.subject,
         email_data.content,
     )
 
-    # Persist email record
+    # Persist
     email_record = EmailRecord(
         user_id=user.id,
         sender=email_data.sender,
@@ -72,7 +93,6 @@ async def scan_email(email_data: EmailInput, db: Session = Depends(get_db)):
     db.add(email_record)
     db.flush()
 
-    # Update user stats
     user.total_scanned += 1
     if analysis["is_phishing"]:
         user.phishing_blocked += 1
@@ -87,16 +107,13 @@ async def scan_email(email_data: EmailInput, db: Session = Depends(get_db)):
     if recent:
         user.risk_score = round(sum(e.risk_score for e in recent) / len(recent), 2)
 
-    # Create alert for high-risk email
     if analysis["risk_score"] >= ALERT_THRESHOLD:
-        alert = Alert(
+        db.add(Alert(
             user_id=user.id,
             email_id=email_record.id,
             risk_level=analysis["risk_level"],
             message=f"זוהה מייל פישינג מ-{email_data.sender}",
-        )
-        db.add(alert)
-
+        ))
         if user.guardian_id:
             db.add(Alert(
                 user_id=user.guardian_id,
@@ -107,3 +124,18 @@ async def scan_email(email_data: EmailInput, db: Session = Depends(get_db)):
 
     db.commit()
     return RiskAnalysis(**analysis)
+
+
+def _get_risk_level(score: float) -> str:
+    if score >= 80: return "סכנה גבוהה"
+    if score >= 50: return "חשוד"
+    if score >= 30: return "זהירות"
+    return "בטוח"
+
+
+def _get_recommendation(score: float) -> str:
+    if score >= 80: return "⛔ אל תלחץ על שום קישור! מחק את המייל מיד."
+    if score >= 50: return "⚠️ היזהר מאוד. בדוק את המקור לפני כל פעולה."
+    if score >= 30: return "🔍 המייל מכיל אלמנטים חשודים. היה ערני."
+    return "✅ המייל נראה תקין."
+
