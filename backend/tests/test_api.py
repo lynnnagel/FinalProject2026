@@ -41,10 +41,15 @@ class TestScanEndpoint:
         stats = client.get(f"/stats/{phishing_email['user_email']}").json()
         assert stats["phishing_blocked"] >= 1
 
-    def test_multiple_scans_increment_total(self, client, safe_email):
-        for _ in range(3):
-            client.post("/scan", json=safe_email)
-        stats = client.get(f"/stats/{safe_email['user_email']}").json()
+    def test_multiple_scans_increment_total(self, client):
+        for i in range(3):
+            client.post("/scan", json={
+                "user_email": "test@example.com",
+                "sender": f"sender{i}@company.com",
+                "subject": f"נושא מספר {i}",
+                "content": "תוכן רגיל",
+            })
+        stats = client.get("/stats/test@example.com").json()
         assert stats["total_scanned"] == 3
 
     def test_invalid_email_returns_422(self, client):

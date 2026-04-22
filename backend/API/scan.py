@@ -53,7 +53,7 @@ async def scan_email(email_data: EmailInput, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(user)
 
-    # ✅ בדוק אם כבר נסרק — אל תספור פעמיים
+    #
     existing = (
         db.query(EmailRecord)
         .filter(

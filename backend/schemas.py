@@ -1,7 +1,7 @@
 """
 Pydantic request/response schemas for the PhishGuard API.
 """
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel, EmailStr
 
 
@@ -27,12 +27,19 @@ class RiskAnalysis(BaseModel):
 # ---------------------------------------------------------------------------
 # /stats
 # ---------------------------------------------------------------------------
+class AlertSummary(BaseModel):
+    risk_level: str
+    message: str
+    created_at: Optional[str] = None
+
+
 class UserStats(BaseModel):
     total_scanned: int
     phishing_blocked: int
     risk_score: float
     daily_active: bool
     recent_alerts: int
+    recent_alerts_list: List[AlertSummary] = []
 
 
 # ---------------------------------------------------------------------------
