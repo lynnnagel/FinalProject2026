@@ -1,0 +1,82 @@
+    const API = 'http://localhost:8000';
+
+    function showTab(tab) {
+      document.getElementById('loginForm').style.display    = tab === 'login'    ? 'flex' : 'none';
+      document.getElementById('registerForm').style.display = tab === 'register' ? 'flex' : 'none';
+      document.getElementById('tabLogin').classList.toggle('active',    tab === 'login');
+      document.getElementById('tabRegister').classList.toggle('active', tab === 'register');
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const errEl = document.getElementById('loginError');
+      errEl.style.display = 'none';
+
+      try {
+        const r = await fetch(`${API}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: document.getElementById('loginEmail').value,
+            password: document.getElementById('loginPassword').value,
+          }),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.detail || 'שגיאה בהתחברות');
+
+        localStorage.setItem('pg_token', data.token);
+        localStorage.setItem('pg_email', data.email);
+        localStorage.setItem('pg_name',  data.name);
+        window.location.href = 'dashboard.html';
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.style.display = 'block';
+      }
+    }
+
+    async function handleRegister(e) {
+      e.preventDefault();
+      const errEl = document.getElementById('registerError');
+      errEl.style.display = 'none';
+
+      const pass  = document.getElementById('regPassword').value;
+      const pass2 = document.getElementById('regPassword2').value;
+
+      if (pass !== pass2) {
+        errEl.textContent = 'הסיסמאות אינן תואמות';
+        errEl.style.display = 'block';
+        return;
+      }
+      if (pass.length < 6) {
+        errEl.textContent = 'הסיסמה חייבת להכיל לפחות 6 תווים';
+        errEl.style.display = 'block';
+        return;
+      }
+
+      try {
+        const r = await fetch(`${API}/auth/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: document.getElementById('regEmail').value,
+            password: pass,
+            name:  document.getElementById('regName').value,
+          }),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.detail || 'שגיאה בהרשמה');
+
+        localStorage.setItem('pg_token', data.token);
+        localStorage.setItem('pg_email', data.email);
+        localStorage.setItem('pg_name',  data.name);
+        window.location.href = 'dashboard.html';
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.style.display = 'block';
+      }
+    }
+
+    // Redirect if already logged in
+    if (localStorage.getItem('pg_token')) {
+      window.location.href = 'dashboard.html';
+    }
