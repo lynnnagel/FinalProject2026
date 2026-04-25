@@ -26,6 +26,7 @@ httpx==0.25.2
 # Utilities
 python-dotenv==1.0.0
 tqdm==4.66.1
+PyJWT==2.8.0
 
 # Optional: For production deployment
 # gunicorn==21.2.0

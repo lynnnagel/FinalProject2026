@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PhishGuard — אזור אישי</title>
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body class="dash-page">
+
+  <!-- NAV -->
+  <nav class="navbar">
+    <div class="nav-brand">🛡️ PhishGuard</div>
+    <div class="nav-links">
+      <a href="index.html">בית</a>
+      <span class="nav-user" id="navUser"></span>
+      <button class="btn-logout" onclick="logout()">יציאה</button>
+    </div>
+  </nav>
+
+  <div class="dash-layout">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-avatar" id="sidebarInitial">?</div>
+      <div class="sidebar-name" id="sidebarName">טוען...</div>
+      <div class="sidebar-email" id="sidebarEmail"></div>
+      <nav class="sidebar-nav">
+        <a href="#overview"  class="sidebar-link active" onclick="showSection('overview')">📊 סקירה כללית</a>
+        <a href="#scanner"   class="sidebar-link"        onclick="showSection('scanner')">🔍 סריקת קישור</a>
+        <a href="#alerts"    class="sidebar-link"        onclick="showSection('alerts')">🔔 התראות</a>
+        <a href="#guardian"  class="sidebar-link"        onclick="showSection('guardian')">👁️ מצב הורה</a>
+      </nav>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="dash-main">
+
+      <!-- Overview -->
+      <section id="sec-overview" class="dash-section">
+        <h2 class="section-title">סקירה כללית</h2>
+        <div class="stats-grid">
+          <div class="stat-card blue">
+            <div class="stat-icon">📧</div>
+            <div class="stat-val" id="statScanned">—</div>
+            <div class="stat-lbl">מיילים נסרקו</div>
+          </div>
+          <div class="stat-card red">
+            <div class="stat-icon">🎣</div>
+            <div class="stat-val" id="statBlocked">—</div>
+            <div class="stat-lbl">פישינג נחסם</div>
+          </div>
+          <div class="stat-card yellow">
+            <div class="stat-icon">⚡</div>
+            <div class="stat-val" id="statAlerts">—</div>
+            <div class="stat-lbl">התראות היום</div>
+          </div>
+          <div class="stat-card green">
+            <div class="stat-icon">📡</div>
+            <div class="stat-val" id="statStatus">—</div>
+            <div class="stat-lbl">סטטוס היום</div>
+          </div>
+        </div>
+
+        <!-- Risk meter -->
+        <div class="risk-card">
+          <h3>מדד סיכון אישי</h3>
+          <div class="risk-row">
+            <div class="risk-circle" id="riskCircle">
+              <div class="risk-inner">
+                <span class="risk-num" id="riskNum">0</span>
+                <span class="risk-sub">/ 100</span>
+              </div>
+            </div>
+            <div class="risk-info">
+              <div class="risk-level" id="riskLevel">טוען...</div>
+              <div class="risk-bar-track">
+                <div class="risk-bar-fill" id="riskBar" style="width:0%"></div>
+              </div>
+              <p class="risk-desc">הציון מחושב על בסיס 10 המיילים האחרונים שנסרקו.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- URL Scanner -->
+      <section id="sec-scanner" class="dash-section" style="display:none">
+        <h2 class="section-title">🔍 סריקת קישור</h2>
+        <div class="scanner-box">
+          <div class="scanner-input-wrap">
+            <input type="text" id="dashUrlInput" class="url-input"
+              placeholder="הדבק כתובת URL..." dir="ltr">
+            <button class="btn-scan" onclick="dashScanURL()">נתח</button>
+          </div>
+          <div id="dashScanResult" style="display:none"></div>
+        </div>
+      </section>
+
+      <!-- Alerts -->
+      <section id="sec-alerts" class="dash-section" style="display:none">
+        <h2 class="section-title">🔔 התראות היום</h2>
+        <div id="alertsList" class="alerts-list">
+          <div class="empty-state">⏳ טוען התראות...</div>
+        </div>
+      </section>
+
+      <!-- Guardian -->
+      <section id="sec-guardian" class="dash-section" style="display:none">
+        <h2 class="section-title">👁️ מצב הורה</h2>
+        <div class="guardian-box">
+          <p>חבר כתובת מייל של ילד כדי לנטר את הפעילות שלו ולקבל התראות בזמן אמת.</p>
+          <div class="form-group" style="margin-top:16px;">
+            <label>מייל הילד</label>
+            <input type="email" id="childEmail" placeholder="child@example.com" dir="ltr">
+          </div>
+          <button class="btn-primary" style="margin-top:12px;" onclick="connectGuardian()">
+            🔗 חבר
+          </button>
+          <div id="guardianResult" style="margin-top:16px;"></div>
+          <div id="guardianData" style="margin-top:24px;"></div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script>
+    const API = 'http://localhost:8000';
+    let userEmail = '';
+
+    function logout() {
+      localStorage.clear();
+      window.location.href = 'login.html';
+    }
+
+    function showSection(name) {
+      ['overview','scanner','alerts','guardian'].forEach(s => {
+        document.getElementById(`sec-${s}`).style.display = s === name ? 'block' : 'none';
+      });
+      document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
+      event.target.classList.add('active');
+    }
+
+    function riskColor(score) {
+      return score >= 80 ? '#ef4444' : score >= 50 ? '#f97316' : score >= 30 ? '#eab308' : '#22c55e';
+    }
+    function riskLabel(score) {
+      return score >= 80 ? 'סכנה גבוהה' : score >= 50 ? 'חשוד' : score >= 30 ? 'זהירות' : 'בטוח';
+    }
+
+    async function loadDashboard() {
+      const token = localStorage.getItem('pg_token');
+      userEmail   = localStorage.getItem('pg_email') || '';
+      const name  = localStorage.getItem('pg_name')  || userEmail;
+
+      if (!token) { window.location.href = 'login.html'; return; }
+
+      document.getElementById('navUser').textContent       = `שלום, ${name}`;
+      document.getElementById('sidebarName').textContent   = name;
+      document.getElementById('sidebarEmail').textContent  = userEmail;
+      document.getElementById('sidebarInitial').textContent = name.charAt(0).toUpperCase();
+
+      try {
+        const r = await fetch(`${API}/stats/${userEmail}`);
+        if (r.status === 404) return; // no scans yet
+        const d = await r.json();
+
+        document.getElementById('statScanned').textContent = d.total_scanned;
+        document.getElementById('statBlocked').textContent = d.phishing_blocked;
+        document.getElementById('statAlerts').textContent  = d.recent_alerts;
+        document.getElementById('statStatus').textContent  = d.daily_active ? 'פעיל' : 'לא פעיל';
+
+        const score = Math.round(d.risk_score || 0);
+        const color = riskColor(score);
+        document.getElementById('riskNum').textContent   = score;
+        document.getElementById('riskNum').style.color   = color;
+        document.getElementById('riskLevel').textContent = riskLabel(score);
+        document.getElementById('riskLevel').style.color = color;
+        document.getElementById('riskBar').style.width   = `${score}%`;
+        document.getElementById('riskCircle').style.background =
+          `conic-gradient(${color} ${score}%, #334155 ${score}%)`;
+
+        // Alerts
+        const list = d.recent_alerts_list || [];
+        const alertsEl = document.getElementById('alertsList');
+        if (list.length === 0) {
+          alertsEl.innerHTML = '<div class="empty-state">✅ אין התראות היום</div>';
+        } else {
+          alertsEl.innerHTML = list.map(a => `
+            <div class="alert-item">
+              <div class="alert-dot ${a.risk_level.includes('גבוה') ? 'high' : 'medium'}"></div>
+              <div>
+                <div class="alert-msg">${a.message}</div>
+                <div class="alert-time">${a.created_at ? new Date(a.created_at).toLocaleTimeString('he-IL') : ''}</div>
+              </div>
+            </div>`).join('');
+        }
+
+        // Try guardian data
+        const gr = await fetch(`${API}/guardian/${userEmail}`);
+        if (gr.ok) {
+          const gd = await gr.json();
+          document.getElementById('guardianData').innerHTML = `
+            <div class="guardian-child-card">
+              <h4>👦 ${gd.child_name} (${gd.child_email})</h4>
+              <div class="guardian-stats-row">
+                <span>פישינג היום: <b>${gd.phishing_blocked_today}</b></span>
+                <span>מדד סיכון: <b style="color:${riskColor(gd.risk_score)}">${Math.round(gd.risk_score)}</b></span>
+              </div>
+            </div>`;
+        }
+
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function dashScanURL() {
+      const url = document.getElementById('dashUrlInput').value.trim();
+      if (!url) return;
+      const resultEl = document.getElementById('dashScanResult');
+      resultEl.innerHTML = '<div class="empty-state">⏳ סורק...</div>';
+      resultEl.style.display = 'block';
+      try {
+        const r = await fetch(`${API}/scan-url`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url }),
+        });
+        const data = await r.json();
+        const score = data.risk_score ?? 0;
+        const color = score >= 70 ? '#ef4444' : score >= 40 ? '#f97316' : score >= 20 ? '#eab308' : '#22c55e';
+        resultEl.innerHTML = `
+          <div class="result-card" style="border-color:${color};margin-top:16px;">
+            <div class="result-header">
+              <div class="result-level" style="color:${color}">${data.risk_level}</div>
+              <div class="result-score" style="background:${color}">${score}%</div>
+            </div>
+            <div class="result-indicators">
+              ${data.indicators.map(i => `<span class="indicator-tag">⚡ ${i}</span>`).join('')}
+            </div>
+            <div class="result-recommendation" style="border-color:${color};background:${color}15">
+              💡 ${data.recommendation}
+            </div>
+          </div>`;
+      } catch {
+        resultEl.innerHTML = '<div class="result-error">שגיאת חיבור לשרת</div>';
+      }
+    }
+
+    async function connectGuardian() {
+      const childEmail = document.getElementById('childEmail').value.trim();
+      if (!childEmail) return;
+      const resultEl = document.getElementById('guardianResult');
+      try {
+        const r = await fetch(`${API}/guardian/connect`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ child_email: childEmail, parent_email: userEmail }),
+        });
+        const data = await r.json();
+        if (r.ok) {
+          resultEl.innerHTML = `<div class="form-success">✅ מצב הורה הופעל עבור ${childEmail}</div>`;
+        } else {
+          resultEl.innerHTML = `<div class="form-error">${data.detail}</div>`;
+        }
+      } catch {
+        resultEl.innerHTML = '<div class="form-error">שגיאת חיבור לשרת</div>';
+      }
+    }
+
+    loadDashboard();
+  </script>
+</body>
+</html>

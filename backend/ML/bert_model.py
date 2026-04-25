@@ -132,7 +132,7 @@ def load_model(
 
     try:
         model = PhishingBertClassifier()
-        state_dict = torch.load(checkpoint_path, map_location=DEVICE)
+        state_dict = torch.load(checkpoint_path, map_location=DEVICE, weights_only=True)
         model.bert.load_state_dict(state_dict)
         model = model.to(DEVICE)
         model.eval()

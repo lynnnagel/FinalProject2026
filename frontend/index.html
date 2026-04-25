@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PhishGuard — הגנה חכמה מפני פישינג</title>
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav class="navbar">
+    <div class="nav-brand">🛡️ PhishGuard</div>
+    <div class="nav-links">
+      <a href="index.html" class="active">בית</a>
+      <a href="dashboard.html" id="navDashboard" style="display:none">לוח בקרה</a>
+      <a href="login.html" id="navLogin">התחברות</a>
+      <button class="btn-logout" id="navLogout" style="display:none" onclick="logout()">יציאה</button>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-content">
+      <div class="hero-badge">✨ מערכת זיהוי פישינג בזמן אמת</div>
+      <h1>הגן על עצמך<br><span class="gradient-text">מפני פישינג</span></h1>
+      <p class="hero-sub">
+        PhishGuard סורקת את תיבת הדוא"ל שלך בזמן אמת ומתריעה לפני שתלחץ על קישור מסוכן.
+        8 שכבות הגנה, תמיכה בעברית ואנגלית, מצב הורה מובנה.
+      </p>
+      <div class="hero-actions">
+        <a href="#scanner" class="btn-primary">🔍 נסה סריקת קישור</a>
+        <a href="login.html" class="btn-secondary">🚀 התחל עכשיו</a>
+      </div>
+      <div class="hero-stats">
+        <div class="hero-stat"><span id="totalScanned">—</span><small>מיילים נסרקו</small></div>
+        <div class="hero-stat"><span id="totalBlocked">—</span><small>פישינג נחסם</small></div>
+        <div class="hero-stat"><span>&lt;2s</span><small>זמן תגובה</small></div>
+      </div>
+    </div>
+    <div class="hero-visual">
+      <div class="shield-animation">🛡️</div>
+    </div>
+  </section>
+
+  <!-- URL SCANNER -->
+  <section class="scanner-section" id="scanner">
+    <div class="container">
+      <h2>🔍 סרוק קישור עכשיו</h2>
+      <p class="section-sub">הדבק כתובת URL וקבל ניתוח סיכון מיידי</p>
+
+      <div class="scanner-box">
+        <div class="scanner-input-wrap">
+          <input
+            type="text"
+            id="urlInput"
+            class="url-input"
+            placeholder="הדבק כתובת URL כאן... למשל: http://suspicious-site.xyz/login"
+            dir="ltr"
+          >
+          <button class="btn-scan" id="scanBtn" onclick="scanURL()">נתח</button>
+        </div>
+        <div id="scanResult" class="scan-result" style="display:none"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="features-section">
+    <div class="container">
+      <h2>מה מציע PhishGuard?</h2>
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">🔌</div>
+          <h3>תוסף Gmail חכם</h3>
+          <p>מותקן ישירות בדפדפן. סורק כל מייל ומציג ציון סיכון ישירות על השורה.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🤖</div>
+          <h3>ניתוח AI + היוריסטיקה</h3>
+          <p>8 בדיקות חכמות: מילות מפתח, דומיינים מזויפים, IP חשוף, קיצורי קישורים ועוד.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">👁️</div>
+          <h3>מצב הורה</h3>
+          <p>חבר את חשבון הילד שלך וקבל התראות בזמן אמת כשמתגלה מייל מסוכן.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">📊</div>
+          <h3>לוח בקרה אישי</h3>
+          <p>עקוב אחר כל הסריקות, ההתראות ומדד הסיכון האישי שלך.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <p>🛡️ PhishGuard v1.0.0 — פרויקט גמר 2026</p>
+  </footer>
+
+  <script>
+    const API = 'http://localhost:8000';
+
+    // Nav state
+    function initNav() {
+      const token = localStorage.getItem('pg_token');
+      const name  = localStorage.getItem('pg_name');
+      if (token) {
+        document.getElementById('navLogin').style.display = 'none';
+        document.getElementById('navLogout').style.display = 'block';
+        document.getElementById('navDashboard').style.display = 'block';
+      }
+    }
+
+    function logout() {
+      localStorage.clear();
+      window.location.reload();
+    }
+
+    // Load system stats
+    async function loadStats() {
+      try {
+        const r = await fetch(`${API}/metrics`);
+        if (r.ok) {
+          const d = await r.json();
+          document.getElementById('totalScanned').textContent =
+            (d.total_emails_scanned || 0).toLocaleString();
+          document.getElementById('totalBlocked').textContent =
+            (d.phishing_blocked || 0).toLocaleString();
+        }
+      } catch {}
+    }
+
+    // URL Scanner
+    async function scanURL() {
+      const url = document.getElementById('urlInput').value.trim();
+      if (!url) return;
+
+      const btn = document.getElementById('scanBtn');
+      btn.textContent = '⏳ סורק...';
+      btn.disabled = true;
+
+      const resultEl = document.getElementById('scanResult');
+      resultEl.style.display = 'none';
+
+      try {
+        const r = await fetch(`${API}/scan-url`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url }),
+        });
+        const data = await r.json();
+        renderResult(data, resultEl);
+      } catch {
+        resultEl.innerHTML = `<div class="result-error">לא ניתן להתחבר לשרת. ודא שהשרת פועל.</div>`;
+        resultEl.style.display = 'block';
+      }
+
+      btn.textContent = 'נתח';
+      btn.disabled = false;
+    }
+
+    function renderResult(data, el) {
+      const score = data.risk_score ?? 0;
+      const color = score >= 70 ? '#ef4444' : score >= 40 ? '#f97316' : score >= 20 ? '#eab308' : '#22c55e';
+      const emoji = score >= 70 ? '🚨' : score >= 40 ? '⚠️' : score >= 20 ? '⚠' : '✅';
+
+      el.innerHTML = `
+        <div class="result-card" style="border-color:${color}">
+          <div class="result-header">
+            <span class="result-emoji">${emoji}</span>
+            <div>
+              <div class="result-level" style="color:${color}">${data.risk_level}</div>
+              <div class="result-url">${data.url || ''}</div>
+            </div>
+            <div class="result-score" style="background:${color}">${score}%</div>
+          </div>
+          <div class="result-indicators">
+            ${data.indicators.map(i => `<span class="indicator-tag">⚡ ${i}</span>`).join('')}
+          </div>
+          <div class="result-recommendation" style="border-color:${color};background:${color}15">
+            💡 ${data.recommendation}
+          </div>
+        </div>
+      `;
+      el.style.display = 'block';
+    }
+
+    // Enter key support
+    document.addEventListener('DOMContentLoaded', () => {
+      initNav();
+      loadStats();
+      document.getElementById('urlInput').addEventListener('keydown', e => {
+        if (e.key === 'Enter') scanURL();
+      });
+    });
+  </script>
+</body>
+</html>

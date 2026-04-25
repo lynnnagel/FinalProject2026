@@ -1,22 +1,21 @@
 """
 PhishGuard FastAPI Application
 ================================
-Entry-point for the backend server.
-
 Run with:
     uvicorn server:app --host localhost --port 8000 --reload
-
-Or directly:
-    python server.py
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+import os
 
 from database import init_db
 from API.scan import router as scan_router
 from API.stats import router as stats_router
 from API.guardian import router as guardian_router
 from API.metrics import router as metrics_router
+from API.auth import router as auth_router
+from API.url_scan import router as url_scan_router
 
 app = FastAPI(
     title="PhishGuard API",
@@ -26,8 +25,9 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# allow_origins=["*"] + allow_credentials=False is required because Gmail
-# sends requests from https://mail.google.com which is not a chrome-extension origin
+# allow_origins=["*"] with allow_credentials=False is required because
+# Gmail sends requests from https://mail.google.com which does not match
+# a chrome-extension:// origin regex.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -42,6 +42,12 @@ app.include_router(scan_router)
 app.include_router(stats_router)
 app.include_router(guardian_router)
 app.include_router(metrics_router)
+
+
+# Serve frontend static files
+frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend")
+if os.path.exists(frontend_path):
+    app.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")
 
 
 @app.get("/", tags=["health"])

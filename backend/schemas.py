@@ -56,3 +56,32 @@ class GuardianData(BaseModel):
     risk_score: float
     recent_alerts: List[dict]
     phishing_blocked_today: int
+
+
+# /auth
+#------------------------------------------------------------------------------
+
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    password: str
+    name: Optional[str] = None
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class TokenResponse(BaseModel):
+    token: str
+    email: str
+    name: str
+
+
+class UserProfile(BaseModel):
+    email: str
+    name: str
+    total_scanned: int
+    phishing_blocked: int
+    risk_score: float
+    daily_active: bool

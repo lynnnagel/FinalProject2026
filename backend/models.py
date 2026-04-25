@@ -16,6 +16,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
     name = Column(String, nullable=False)
+    password_hash = Column(String, nullable=True)
     risk_score = Column(Float, default=0.0)
     total_scanned = Column(Integer, default=0)
     phishing_blocked = Column(Integer, default=0)

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PhishGuard — התחברות</title>
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body class="auth-page">
+
+  <div class="auth-container">
+    <div class="auth-brand">🛡️ PhishGuard</div>
+    <p class="auth-sub">הגנה חכמה מפני פישינג</p>
+
+    <!-- Tabs -->
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="tabLogin" onclick="showTab('login')">התחברות</button>
+      <button class="auth-tab" id="tabRegister" onclick="showTab('register')">הרשמה</button>
+    </div>
+
+    <!-- Login Form -->
+    <form id="loginForm" class="auth-form" onsubmit="handleLogin(event)">
+      <div class="form-group">
+        <label>כתובת מייל</label>
+        <input type="email" id="loginEmail" placeholder="you@example.com" required dir="ltr">
+      </div>
+      <div class="form-group">
+        <label>סיסמה</label>
+        <input type="password" id="loginPassword" placeholder="הזן סיסמה" required>
+      </div>
+      <div id="loginError" class="form-error" style="display:none"></div>
+      <button type="submit" class="btn-primary btn-full">התחבר</button>
+      <p class="auth-switch">
+        אין לך חשבון?
+        <a href="#" onclick="showTab('register')">הרשם עכשיו</a>
+      </p>
+    </form>
+
+    <!-- Register Form -->
+    <form id="registerForm" class="auth-form" style="display:none" onsubmit="handleRegister(event)">
+      <div class="form-group">
+        <label>שם מלא</label>
+        <input type="text" id="regName" placeholder="שם מלא">
+      </div>
+      <div class="form-group">
+        <label>כתובת מייל</label>
+        <input type="email" id="regEmail" placeholder="you@example.com" required dir="ltr">
+      </div>
+      <div class="form-group">
+        <label>סיסמה</label>
+        <input type="password" id="regPassword" placeholder="לפחות 6 תווים" required>
+      </div>
+      <div class="form-group">
+        <label>אימות סיסמה</label>
+        <input type="password" id="regPassword2" placeholder="הזן שוב את הסיסמה" required>
+      </div>
+      <div id="registerError" class="form-error" style="display:none"></div>
+      <button type="submit" class="btn-primary btn-full">צור חשבון</button>
+      <p class="auth-switch">
+        יש לך כבר חשבון?
+        <a href="#" onclick="showTab('login')">התחבר</a>
+      </p>
+    </form>
+  </div>
+
+  <script>
+    const API = 'http://localhost:8000';
+
+    function showTab(tab) {
+      document.getElementById('loginForm').style.display    = tab === 'login'    ? 'flex' : 'none';
+      document.getElementById('registerForm').style.display = tab === 'register' ? 'flex' : 'none';
+      document.getElementById('tabLogin').classList.toggle('active',    tab === 'login');
+      document.getElementById('tabRegister').classList.toggle('active', tab === 'register');
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const errEl = document.getElementById('loginError');
+      errEl.style.display = 'none';
+
+      try {
+        const r = await fetch(`${API}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: document.getElementById('loginEmail').value,
+            password: document.getElementById('loginPassword').value,
+          }),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.detail || 'שגיאה בהתחברות');
+
+        localStorage.setItem('pg_token', data.token);
+        localStorage.setItem('pg_email', data.email);
+        localStorage.setItem('pg_name',  data.name);
+        window.location.href = 'dashboard.html';
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.style.display = 'block';
+      }
+    }
+
+    async function handleRegister(e) {
+      e.preventDefault();
+      const errEl = document.getElementById('registerError');
+      errEl.style.display = 'none';
+
+      const pass  = document.getElementById('regPassword').value;
+      const pass2 = document.getElementById('regPassword2').value;
+
+      if (pass !== pass2) {
+        errEl.textContent = 'הסיסמאות אינן תואמות';
+        errEl.style.display = 'block';
+        return;
+      }
+      if (pass.length < 6) {
+        errEl.textContent = 'הסיסמה חייבת להכיל לפחות 6 תווים';
+        errEl.style.display = 'block';
+        return;
+      }
+
+      try {
+        const r = await fetch(`${API}/auth/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: document.getElementById('regEmail').value,
+            password: pass,
+            name:  document.getElementById('regName').value,
+          }),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.detail || 'שגיאה בהרשמה');
+
+        localStorage.setItem('pg_token', data.token);
+        localStorage.setItem('pg_email', data.email);
+        localStorage.setItem('pg_name',  data.name);
+        window.location.href = 'dashboard.html';
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.style.display = 'block';
+      }
+    }
+
+    // Redirect if already logged in
+    if (localStorage.getItem('pg_token')) {
+      window.location.href = 'dashboard.html';
+    }
+  </script>
+</body>
+</html>
