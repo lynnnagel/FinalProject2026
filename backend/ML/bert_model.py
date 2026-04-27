@@ -120,7 +120,7 @@ def load_model(
     Load the fine-tuned model from *checkpoint_path*.
 
     Returns None if the checkpoint does not exist so the application can
-    gracefully fall back to the heuristics engine.
+    gracefully fall back to the heuristics' engine.
     """
     if not os.path.exists(checkpoint_path):
         logger.warning(
