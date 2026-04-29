@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import User
-from schemas import RegisterRequest, LoginRequest, TokenResponse, UserProfile
+from schemas import RegisterRequest, LoginRequest, TokenResponse, UserProfile, ResetPasswordRequest
 from utils import get_name_from_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -90,6 +90,17 @@ async def login(data: LoginRequest, db: Session = Depends(get_db)):
         email=str(data.email),
         name=user.name,
     )
+
+@router.post("/reset-password", summary="איפוס סיסמה")
+async def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == str(data.email)).first()
+    if not user:
+        raise HTTPException(404, "כתובת המייל לא נמצאה במערכת")
+    if len(data.new_password) < 6:
+        raise HTTPException(400, "הסיסמה חייבת להכיל לפחות 6 תווים")
+    user.password_hash = hash_password(data.new_password)
+    db.commit()
+    return {"message": "הסיסמה עודכנה בהצלחה"}
 
 
 @router.get("/me", response_model=UserProfile)

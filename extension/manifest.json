@@ -9,7 +9,8 @@
     "notifications",
     "alarms",
     "contextMenus",
-    "tabs"
+    "tabs",
+    "scripting"
   ],
   "host_permissions": [
     "https://mail.google.com/*",

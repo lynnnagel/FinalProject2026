@@ -7,8 +7,6 @@
   <link rel="stylesheet" href="css/main.css">
 </head>
 <body class="dash-page">
-
-  <!-- NAV -->
   <nav class="navbar">
     <div class="nav-brand">🛡️ PhishGuard</div>
     <div class="nav-links">
@@ -19,24 +17,19 @@
   </nav>
 
   <div class="dash-layout">
-
-    <!-- SIDEBAR -->
     <aside class="sidebar">
       <div class="sidebar-avatar" id="sidebarInitial">?</div>
       <div class="sidebar-name" id="sidebarName">טוען...</div>
       <div class="sidebar-email" id="sidebarEmail"></div>
       <nav class="sidebar-nav">
-        <a href="#overview"  class="sidebar-link active" onclick="showSection('overview')">📊 סקירה כללית</a>
-        <a href="#scanner"   class="sidebar-link"        onclick="showSection('scanner')">🔍 סריקת קישור</a>
-        <a href="#alerts"    class="sidebar-link"        onclick="showSection('alerts')">🔔 התראות</a>
-        <a href="#guardian"  class="sidebar-link"        onclick="showSection('guardian')">👁️ מצב הורה</a>
+        <a href="#overview" class="sidebar-link active" onclick="showSection('overview')">📊 סקירה כללית</a>
+        <a href="#scanner"  class="sidebar-link"        onclick="showSection('scanner')">🔍 סריקת קישור</a>
+        <a href="#alerts"   class="sidebar-link"        onclick="showSection('alerts')">🔔 התראות</a>
+        <a href="#guardian" class="sidebar-link"        onclick="showSection('guardian')">👁️ מצב הורה</a>
       </nav>
     </aside>
 
-    <!-- MAIN -->
     <main class="dash-main">
-
-      <!-- Overview -->
       <section id="sec-overview" class="dash-section">
         <h2 class="section-title">סקירה כללית</h2>
         <div class="stats-grid">
@@ -61,8 +54,6 @@
             <div class="stat-lbl">סטטוס היום</div>
           </div>
         </div>
-
-        <!-- Risk meter -->
         <div class="risk-card">
           <h3>מדד סיכון אישי</h3>
           <div class="risk-row">
@@ -83,20 +74,17 @@
         </div>
       </section>
 
-      <!-- URL Scanner -->
       <section id="sec-scanner" class="dash-section" style="display:none">
         <h2 class="section-title">🔍 סריקת קישור</h2>
         <div class="scanner-box">
           <div class="scanner-input-wrap">
-            <input type="text" id="dashUrlInput" class="url-input"
-              placeholder="הדבק כתובת URL..." dir="ltr">
+            <input type="text" id="dashUrlInput" class="url-input" placeholder="הדבק כתובת URL..." dir="ltr">
             <button class="btn-scan" onclick="dashScanURL()">נתח</button>
           </div>
           <div id="dashScanResult" style="display:none"></div>
         </div>
       </section>
 
-      <!-- Alerts -->
       <section id="sec-alerts" class="dash-section" style="display:none">
         <h2 class="section-title">🔔 התראות היום</h2>
         <div id="alertsList" class="alerts-list">
@@ -104,7 +92,6 @@
         </div>
       </section>
 
-      <!-- Guardian -->
       <section id="sec-guardian" class="dash-section" style="display:none">
         <h2 class="section-title">👁️ מצב הורה</h2>
         <div class="guardian-box">
@@ -113,19 +100,14 @@
             <label>מייל הילד</label>
             <input type="email" id="childEmail" placeholder="child@example.com" dir="ltr">
           </div>
-          <button class="btn-primary" style="margin-top:12px;" onclick="connectGuardian()">
-            🔗 חבר
-          </button>
+          <button class="btn-primary" style="margin-top:12px;" onclick="connectGuardian()">🔗 חבר</button>
           <div id="guardianResult" style="margin-top:16px;"></div>
           <div id="guardianData" style="margin-top:24px;"></div>
         </div>
       </section>
-
     </main>
   </div>
 
-  <script>
-      scr="dashboard.js"
-  </script>
+  <script src="js/dashboard.js"></script>
 </body>
 </html>

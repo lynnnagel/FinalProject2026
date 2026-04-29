@@ -1,8 +1,6 @@
 """
 PhishGuard FastAPI Application
-================================
-Run with:
-    uvicorn server:app --host localhost --port 8000 --reload
+Run with: uvicorn server:app --host localhost --port 8000 --reload
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,15 +17,12 @@ from API.url_scan import router as url_scan_router
 
 app = FastAPI(
     title="PhishGuard API",
-    description="זיהוי פישינג בזמן אמת – Real-time phishing detection with Guardian Mode",
+    description="זיהוי פישינג בזמן אמת",
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
 )
 
-# allow_origins=["*"] with allow_credentials=False is required because
-# Gmail sends requests from https://mail.google.com which does not match
-# a chrome-extension:// origin regex.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -42,13 +37,12 @@ app.include_router(scan_router)
 app.include_router(stats_router)
 app.include_router(guardian_router)
 app.include_router(metrics_router)
+app.include_router(auth_router)
+app.include_router(url_scan_router)
 
-
-# Serve frontend static files
 frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend")
 if os.path.exists(frontend_path):
-    app.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")
-
+    app.mount("/app", StaticFiles(directory=frontend_path, html=True), name="frontend")
 
 @app.get("/", tags=["health"])
 async def root():
@@ -58,13 +52,16 @@ async def root():
         "endpoints": {
             "scan":             "POST /scan",
             "stats":            "GET  /stats/{user_email}",
+            "auth_register":    "POST /auth/register",
+            "auth_login":       "POST /auth/login",
+            "scan_url":         "POST /scan-url",
             "guardian_connect": "POST /guardian/connect",
             "guardian_data":    "GET  /guardian/{parent_email}",
             "metrics":          "GET  /metrics",
             "swagger_docs":     "GET  /docs",
+            "frontend":         "GET  /app",
         },
     }
-
 
 if __name__ == "__main__":
     import uvicorn

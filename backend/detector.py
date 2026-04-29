@@ -144,7 +144,7 @@ class PhishingDetector:
             recommendation = "⛔ אל תלחץ על שום קישור! מחק את המייל מיד."
         elif risk_score >= MEDIUM_RISK_THRESHOLD:
             risk_level = "חשוד"
-            recommendation = "⚠️ היזהר. בדוק את המקור לפני כל פעולה."
+            recommendation = "⚠️ היזהר מאוד. בדוק את המקור לפני כל פעולה."
         elif risk_score >= LOW_RISK_THRESHOLD:
             risk_level = "זהירות"
             recommendation = "🔍 המייל מכיל אלמנטים חשודים. היה ערני."

@@ -14,8 +14,8 @@
 
     <!-- Tabs -->
     <div class="auth-tabs">
-      <button class="auth-tab active" id="tabLogin" onclick="showTab('login')">התחברות</button>
-      <button class="auth-tab" id="tabRegister" onclick="showTab('register')">הרשמה</button>
+      <button class="auth-tab active" id="tabLogin"    onclick="showTab('login')">התחברות</button>
+      <button class="auth-tab"        id="tabRegister" onclick="showTab('register')">הרשמה</button>
     </div>
 
     <!-- Login Form -->
@@ -31,8 +31,9 @@
       <div id="loginError" class="form-error" style="display:none"></div>
       <button type="submit" class="btn-primary btn-full">התחבר</button>
       <p class="auth-switch">
-        אין לך חשבון?
-        <a href="#" onclick="showTab('register')">הרשם עכשיו</a>
+        אין לך חשבון? <a href="#" onclick="showTab('register')">הרשם עכשיו</a>
+        &nbsp;·&nbsp;
+        <a href="#" onclick="showTab('reset')">שכחתי סיסמה</a>
       </p>
     </form>
 
@@ -57,14 +58,35 @@
       <div id="registerError" class="form-error" style="display:none"></div>
       <button type="submit" class="btn-primary btn-full">צור חשבון</button>
       <p class="auth-switch">
-        יש לך כבר חשבון?
-        <a href="#" onclick="showTab('login')">התחבר</a>
+        יש לך כבר חשבון? <a href="#" onclick="showTab('login')">התחבר</a>
       </p>
     </form>
+
+    <!-- Reset Password Form -->
+    <form id="resetForm" class="auth-form" style="display:none" onsubmit="handleReset(event)">
+      <p style="font-size:13px;color:var(--muted);margin-bottom:4px;">
+        הזיני את כתובת המייל שלך וסיסמה חדשה.
+      </p>
+      <div class="form-group">
+        <label>כתובת מייל</label>
+        <input type="email" id="resetEmail" placeholder="you@example.com" required dir="ltr">
+      </div>
+      <div class="form-group">
+        <label>סיסמה חדשה</label>
+        <input type="password" id="resetPassword" placeholder="לפחות 6 תווים" required>
+      </div>
+      <div class="form-group">
+        <label>אימות סיסמה חדשה</label>
+        <input type="password" id="resetPassword2" placeholder="הזן שוב" required>
+      </div>
+      <div id="resetError"   class="form-error"   style="display:none"></div>
+      <div id="resetSuccess" class="form-success" style="display:none"></div>
+      <button type="submit" class="btn-primary btn-full">עדכן סיסמה</button>
+      <p class="auth-switch"><a href="#" onclick="showTab('login')">חזרה להתחברות</a></p>
+    </form>
+
   </div>
 
-  <script>
-    scr="login.js"
-  </script>
+  <script src="js/login.js"></script>
 </body>
 </html>

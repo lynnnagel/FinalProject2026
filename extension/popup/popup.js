@@ -83,7 +83,7 @@ function renderStats(stats) {
     <div class="risk-section">
       <div class="risk-header">
         <div>
-          <div class="risk-title">⚠️ מדד הסיכון שלך</div>
+          <div class="risk-title">מדד הסיכון שלך</div>
           <div class="risk-number" style="color:${color}">${score}</div>
           <div class="risk-sub">מתוך 100</div>
         </div>
@@ -106,12 +106,10 @@ function renderStats(stats) {
       </div>
 
       <button class="btn btn-primary" id="scanBtn">
-        <span>🔍</span>
         <span>סרוק עכשיו</span>
       </button>
 
       <button class="btn btn-secondary" id="dashBtn">
-        <span>📊</span>
         <span>לוח בקרה מלא</span>
       </button>
     </div>
@@ -174,14 +172,14 @@ function scanNow() {
   chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
     if (!tabs[0]) {
       btn.classList.remove('scanning');
-      btn.innerHTML = '<span>🔍</span><span>סרוק עכשיו</span>';
+      btn.innerHTML = '<span></span><span>סרוק עכשיו</span>';
       alert('פתח את Gmail ונסה שוב.');
       return;
     }
     chrome.tabs.sendMessage(tabs[0].id, { action: 'scanAll' }, () => {
       setTimeout(() => {
         btn.classList.remove('scanning');
-        btn.innerHTML = '<span>🔍</span><span>סרוק עכשיו</span>';
+        btn.innerHTML = '<span></span><span>סרוק עכשיו</span>';
         loadStats();
       }, 1500);
     });

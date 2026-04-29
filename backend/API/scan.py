@@ -14,7 +14,6 @@ from config import ALERT_THRESHOLD, RECENT_EMAILS_WINDOW
 
 router = APIRouter(tags=["scan"])
 
-# Try to load BERT – returns None if checkpoint not ready yet
 try:
     from ML.bert_model import bert_model
 except Exception:
@@ -22,10 +21,6 @@ except Exception:
 
 
 def get_risk_score(sender: str, subject: str, content: str) -> dict:
-    """
-    Ensemble: 70% BERT + 30% Heuristics when BERT is available.
-    Falls back to 100% Heuristics when checkpoint is missing.
-    """
     heuristic_result = detector.analyze_email(sender, subject, content)
 
     if bert_model is not None:
@@ -35,14 +30,13 @@ def get_risk_score(sender: str, subject: str, content: str) -> dict:
             heuristic_result["risk_score"] = min(ensemble_score, 100.0)
             heuristic_result["indicators"].append("✨ BERT ניתוח סמנטי")
         except Exception:
-            pass  # fall back to heuristics silently
+            pass
 
     return heuristic_result
 
 
 @router.post("/scan", response_model=RiskAnalysis, summary="סריקת מייל לזיהוי פישינג")
 async def scan_email(email_data: EmailInput, db: Session = Depends(get_db)):
-    # Get or create user
     user = db.query(User).filter(User.email == email_data.user_email).first()
     if not user:
         user = User(
@@ -53,7 +47,6 @@ async def scan_email(email_data: EmailInput, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(user)
 
-    #
     existing = (
         db.query(EmailRecord)
         .filter(
@@ -64,7 +57,6 @@ async def scan_email(email_data: EmailInput, db: Session = Depends(get_db)):
         .first()
     )
     if existing:
-        # החזר תוצאה ישנה בלי לספור מחדש
         return RiskAnalysis(
             risk_score=existing.risk_score,
             is_phishing=existing.is_phishing,
@@ -74,14 +66,12 @@ async def scan_email(email_data: EmailInput, db: Session = Depends(get_db)):
             response_time=0.0,
         )
 
-    # Run analysis
     analysis = get_risk_score(
         email_data.sender,
         email_data.subject,
         email_data.content,
     )
 
-    # Persist
     email_record = EmailRecord(
         user_id=user.id,
         sender=email_data.sender,
@@ -138,4 +128,3 @@ def _get_recommendation(score: float) -> str:
     if score >= 50: return "⚠️ היזהר מאוד. בדוק את המקור לפני כל פעולה."
     if score >= 30: return "🔍 המייל מכיל אלמנטים חשודים. היה ערני."
     return "✅ המייל נראה תקין."
-
