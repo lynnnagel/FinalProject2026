@@ -2,7 +2,7 @@
 POST /scan – Analyse an email and return a risk assessment.
 Ensemble: BERT (when available) + Heuristics weighted average.
 """
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -11,6 +11,7 @@ from schemas import EmailInput, RiskAnalysis
 from detector import detector
 from utils import get_name_from_email
 from config import ALERT_THRESHOLD, RECENT_EMAILS_WINDOW
+from email_service import send_guardian_phishing_alert
 
 router = APIRouter(tags=["scan"])
 
@@ -36,7 +37,11 @@ def get_risk_score(sender: str, subject: str, content: str) -> dict:
 
 
 @router.post("/scan", response_model=RiskAnalysis, summary="סריקת מייל לזיהוי פישינג")
-async def scan_email(email_data: EmailInput, db: Session = Depends(get_db)):
+async def scan_email(
+    email_data: EmailInput,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     user = db.query(User).filter(User.email == email_data.user_email).first()
     if not user:
         user = User(
@@ -104,13 +109,32 @@ async def scan_email(email_data: EmailInput, db: Session = Depends(get_db)):
             risk_level=analysis["risk_level"],
             message=f"זוהה מייל פישינג מ-{email_data.sender}",
         ))
+
         if user.guardian_id:
+            # שמור התראה במסד הנתונים עבור המפקח
+            guardian = db.query(User).filter(User.id == user.guardian_id).first()
             db.add(Alert(
                 user_id=user.guardian_id,
                 email_id=email_record.id,
-                risk_level="התראת הורה",
-                message=f"ילדך {user.name} קיבל מייל פישינג בסיכון {analysis['risk_score']}%",
+                risk_level="התראת מפקח",
+                message=(
+                    f"{user.name} קיבל מייל פישינג בסיכון "
+                    f"{analysis['risk_score']}% מ-{email_data.sender}"
+                ),
             ))
+
+            # שלח מייל למפקח ברקע (ללא עיכוב בתגובה)
+            if guardian:
+                background_tasks.add_task(
+                    send_guardian_phishing_alert,
+                    guardian_email=guardian.email,
+                    monitored_name=user.name,
+                    monitored_email=user.email,
+                    risk_score=analysis["risk_score"],
+                    phishing_sender=email_data.sender,
+                    phishing_subject=email_data.subject,
+                    risk_level=analysis["risk_level"],
+                )
 
     db.commit()
     return RiskAnalysis(**analysis)

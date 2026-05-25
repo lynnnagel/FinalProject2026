@@ -47,3 +47,14 @@ RECENT_EMAILS_WINDOW = 10     # Rolling average window for user risk score
 ALERT_THRESHOLD = 70          # Min risk score to create an Alert record
 GUARDIAN_NOTIFY_THRESHOLD = 70
 ALERT_HISTORY_LIMIT = 5       # Alerts returned in guardian dashboard
+
+
+# ---------------------------------------------------------------------------
+# Email / SMTP –
+# ---------------------------------------------------------------------------
+SMTP_HOST       = os.getenv("SMTP_HOST",       "smtp.gmail.com")
+SMTP_PORT       = int(os.getenv("SMTP_PORT",   "587"))
+SMTP_USER       = os.getenv("SMTP_USER",       "")   # מייל השולח
+SMTP_PASSWORD   = os.getenv("SMTP_PASSWORD",   "")   # App Password
+EMAIL_FROM_NAME = os.getenv("EMAIL_FROM_NAME", "PhishGuard")
+EMAIL_ENABLED   = os.getenv("EMAIL_ENABLED",   "false").lower() == "true"

@@ -1,4 +1,4 @@
-  <script>
+
     const API = 'http://localhost:8000';
 
     async function handleReset(e) {
@@ -50,4 +50,3 @@
         btn.disabled = false;
       }
     }
-  </script>
