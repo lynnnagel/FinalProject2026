@@ -165,12 +165,109 @@ a:hover { text-decoration: underline; }
 .hero-stat span { display: block; font-size: 28px; font-weight: 800; color: var(--purple); }
 .hero-stat small { font-size: 12px; color: var(--muted); }
 
-.hero-visual { font-size: 140px; opacity: 0.12; flex-shrink: 0; }
+/* ── Hero scan animation (8s story loop) ── */
+.hero-visual   { flex: 0 0 420px; display: flex; align-items: center; justify-content: center; }
+.hero-scan     { width: 100%; max-width: 420px; }
+.hero-scan svg { width: 100%; height: auto; display: block; }
 
-.shield-animation { animation: float 3s ease-in-out infinite; }
-@keyframes float {
+.lura-panel { animation: lura-float 5s ease-in-out infinite; }
+@keyframes lura-float {
   0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-16px); }
+  50%      { transform: translateY(-7px); }
+}
+
+.lura-beam { animation: lura-sweep 8s cubic-bezier(.45,.05,.55,.95) infinite; }
+@keyframes lura-sweep {
+  0%   { transform: translateY(0);     opacity: 0; }
+  3%   { opacity: 1; }
+  30%  { transform: translateY(175px); opacity: 1; }
+  35%  { transform: translateY(192px); opacity: 0; }
+  100% { transform: translateY(0);     opacity: 0; }
+}
+
+.lura-badge {
+  opacity: 0; transform-box: fill-box; transform-origin: center;
+  animation: lura-pop 8s ease-out infinite;
+}
+.lura-badge-1 { animation-delay: .25s; }
+.lura-badge-2 { animation-delay: .85s; }
+.lura-badge-3 { animation-delay: 1.45s; }
+@keyframes lura-pop {
+  0%   { opacity: 0; transform: scale(.4); }
+  4%   { opacity: 1; transform: scale(1.2); }
+  7%   { transform: scale(1); }
+  92%  { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(.4); }
+}
+
+.lura-alarm {
+  transform-box: fill-box; transform-origin: center;
+  animation: lura-alarm 2s ease-out .3s infinite;
+}
+@keyframes lura-alarm {
+  0%   { opacity: .45; transform: scale(.85); }
+  70%  { opacity: 0;   transform: scale(2); }
+  100% { opacity: 0;   transform: scale(.85); }
+}
+
+.lura-hook { animation: lura-hook 8s cubic-bezier(.35,0,.5,1) infinite; }
+@keyframes lura-hook {
+  0%, 33%   { transform: translateY(-215px); opacity: 0; }
+  36%       { opacity: 1; }
+  45%       { transform: translateY(0); }
+  47%       { transform: translateY(6px); }
+  50%       { transform: translateY(0); }
+  67%       { transform: translateY(0);      opacity: 1; }
+  71%       { transform: translateY(12px); }
+  80%       { transform: translateY(-95px); }
+  90%       { transform: translateY(-215px); opacity: 1; }
+  93%, 100% { transform: translateY(-215px); opacity: 0; }
+}
+
+.lura-hook-sway {
+  transform-box: fill-box; transform-origin: 50% 0%;
+  animation: lura-sway 2.4s ease-in-out infinite;
+}
+@keyframes lura-sway {
+  0%, 100% { transform: rotate(-4deg); }
+  50%      { transform: rotate(4deg); }
+}
+
+.lura-bait { animation: lura-bait 1.3s ease-in-out infinite; }
+@keyframes lura-bait {
+  0%, 100% { opacity: .5; }
+  50%      { opacity: 1; }
+}
+
+.lura-shield {
+  opacity: 0; transform-box: fill-box; transform-origin: center;
+  animation: lura-shield 8s cubic-bezier(.2,1.5,.35,1) infinite;
+}
+@keyframes lura-shield {
+  0%, 65%   { opacity: 0; transform: scale(.3); }
+  70%       { opacity: 1; transform: scale(1.32); }
+  74%       { transform: scale(1); }
+  90%       { opacity: 1; transform: scale(1); }
+  96%, 100% { opacity: 0; transform: scale(.7); }
+}
+
+.lura-ring {
+  opacity: 0; transform-box: fill-box; transform-origin: center;
+  animation: lura-ring 8s ease-out infinite;
+}
+.lura-ring-2 { animation-delay: .16s; }
+@keyframes lura-ring {
+  0%, 67% { opacity: 0;   transform: scale(.25); }
+  71%     { opacity: .85; }
+  84%     { opacity: 0;   transform: scale(3); }
+  100%    { opacity: 0;   transform: scale(.25); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lura-panel, .lura-beam, .lura-badge, .lura-alarm, .lura-hook,
+  .lura-hook-sway, .lura-bait, .lura-shield, .lura-ring { animation: none; }
+  .lura-badge, .lura-shield { opacity: 1; transform: none; }
+  .lura-hook, .lura-ring, .lura-alarm { opacity: 0; }
 }
 
 /* ── Scanner Section ── */
@@ -627,7 +724,7 @@ a:hover { text-decoration: underline; }
 @media (max-width: 768px) {
   .hero { flex-direction: column; padding: 40px 16px; }
   .hero h1 { font-size: 36px; }
-  .hero-visual { display: none; }
+  .hero-visual { flex: 0 0 auto; max-width: 340px; }
   .features-grid { grid-template-columns: 1fr 1fr; }
   .stats-grid { grid-template-columns: 1fr 1fr; }
   .dash-layout { flex-direction: column; }

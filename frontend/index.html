@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LURA — Don't Take The Bait</title>
   <link rel="stylesheet" href="css/main.css">
+    <link rel="icon" href="icons/icon128.png">
 </head>
 <body>
   <nav class="navbar">
@@ -36,7 +37,133 @@
       </div>
     </div>
     <div class="hero-visual">
-            <div class="shield-animation"><img src="icons/icon128.png" alt="LURA" style="width:140px;height:140px;"></div>
+            <div class="hero-scan" role="img"
+     aria-label="LURA סורקת את תיבת הדואר, מסמנת כל מייל בציון סיכון, וחוסמת את קרס הפישינג במגן">
+  <svg viewBox="0 0 360 340" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="luraBeam" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%"   stop-color="#42A5F5" stop-opacity="0"/>
+        <stop offset="50%"  stop-color="#7C4DFF" stop-opacity=".95"/>
+        <stop offset="100%" stop-color="#E040FB" stop-opacity="0"/>
+      </linearGradient>
+      <linearGradient id="luraTrail" x1="0" y1="1" x2="0" y2="0">
+        <stop offset="0%"   stop-color="#7C4DFF" stop-opacity=".22"/>
+        <stop offset="100%" stop-color="#7C4DFF" stop-opacity="0"/>
+      </linearGradient>
+      <linearGradient id="luraFrame" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%"   stop-color="#42A5F5"/>
+        <stop offset="50%"  stop-color="#7C4DFF"/>
+        <stop offset="100%" stop-color="#E040FB"/>
+      </linearGradient>
+      <linearGradient id="luraShield" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%"   stop-color="#5B8DEF"/>
+        <stop offset="100%" stop-color="#7C4DFF"/>
+      </linearGradient>
+      <filter id="luraGlow" x="-70%" y="-70%" width="240%" height="240%">
+        <feGaussianBlur stdDeviation="5" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <filter id="luraSoft" x="-60%" y="-60%" width="220%" height="220%">
+        <feGaussianBlur stdDeviation="7"/>
+      </filter>
+    </defs>
+
+    <circle cx="180" cy="170" r="155" fill="url(#luraFrame)" opacity=".10"/>
+    <circle cx="180" cy="170" r="112" fill="url(#luraFrame)" opacity=".07"/>
+
+    <g class="lura-panel">
+      <rect x="40" y="45" width="280" height="250" rx="18" fill="#fff" opacity=".94"/>
+      <rect x="40" y="45" width="280" height="250" rx="18" fill="none"
+            stroke="url(#luraFrame)" stroke-width="2" opacity=".55"/>
+
+      <circle cx="64" cy="70" r="4.5" fill="#E040FB" opacity=".75"/>
+      <circle cx="80" cy="70" r="4.5" fill="#7C4DFF" opacity=".75"/>
+      <circle cx="96" cy="70" r="4.5" fill="#42A5F5" opacity=".75"/>
+      <line x1="40" y1="88" x2="320" y2="88" stroke="#7C4DFF" stroke-width="1" opacity=".18"/>
+
+      <g>
+        <rect x="128" y="112" width="170" height="9" rx="4.5" fill="#7C4DFF" opacity=".22"/>
+        <rect x="128" y="128" width="120" height="7" rx="3.5" fill="#7C4DFF" opacity=".13"/>
+        <rect x="128" y="177" width="150" height="9" rx="4.5" fill="#7C4DFF" opacity=".22"/>
+        <rect x="128" y="193" width="105" height="7" rx="3.5" fill="#7C4DFF" opacity=".13"/>
+        <rect x="128" y="242" width="165" height="9" rx="4.5" fill="#7C4DFF" opacity=".22"/>
+        <rect x="128" y="258" width="128" height="7" rx="3.5" fill="#7C4DFF" opacity=".13"/>
+      </g>
+
+      <g transform="translate(87,123)">
+        <circle class="lura-alarm" cx="0" cy="0" r="20" fill="#dc2626"/>
+      </g>
+
+      <g class="lura-badge lura-badge-1">
+        <rect x="60" y="110" width="54" height="26" rx="13" fill="#dc2626"/>
+        <text x="87" y="128" text-anchor="middle" font-family="Segoe UI,Arial,sans-serif"
+              font-size="13" font-weight="700" fill="#fff">92%</text>
+      </g>
+      <g class="lura-badge lura-badge-2">
+        <rect x="60" y="175" width="54" height="26" rx="13" fill="#10b981"/>
+        <text x="87" y="193" text-anchor="middle" font-family="Segoe UI,Arial,sans-serif"
+              font-size="13" font-weight="700" fill="#fff">4%</text>
+      </g>
+      <g class="lura-badge lura-badge-3">
+        <rect x="60" y="240" width="54" height="26" rx="13" fill="#f59e0b"/>
+        <text x="87" y="258" text-anchor="middle" font-family="Segoe UI,Arial,sans-serif"
+              font-size="13" font-weight="700" fill="#fff">67%</text>
+      </g>
+
+      <g class="lura-beam">
+        <rect x="46" y="72" width="268" height="28" fill="url(#luraTrail)"/>
+        <rect x="46" y="100" width="268" height="3" rx="1.5"
+              fill="url(#luraBeam)" filter="url(#luraGlow)"/>
+      </g>
+    </g>
+
+    <!-- PHISHING HOOK -->
+    <g transform="translate(232,96)">
+      <g class="lura-hook">
+        <g class="lura-hook-sway">
+          <line x1="0" y1="-195" x2="0" y2="-47" stroke="#7c8899"
+                stroke-width="1.6" stroke-linecap="round" opacity=".55"/>
+
+          <circle cx="0" cy="-42" r="5" fill="none" stroke="#475569" stroke-width="3.4"/>
+          <circle cx="0" cy="-42" r="5" fill="none" stroke="#a8b3c2" stroke-width="1.3"/>
+
+          <path d="M 0,-37 L 0,4 C 0,15 -6,22 -14,22 C -21,22 -25,16 -25,8 L -25,-7"
+                fill="none" stroke="#475569" stroke-width="4.8"
+                stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M 0,-37 L 0,4 C 0,15 -6,22 -14,22 C -21,22 -25,16 -25,8 L -25,-7"
+                fill="none" stroke="#a8b3c2" stroke-width="1.9"
+                stroke-linecap="round" stroke-linejoin="round"/>
+
+          <path d="M -25,-7 L -19,-0.5" fill="none" stroke="#475569"
+                stroke-width="3.2" stroke-linecap="round"/>
+          <path d="M -25,-7 L -19,-0.5" fill="none" stroke="#a8b3c2"
+                stroke-width="1.2" stroke-linecap="round"/>
+
+          <g class="lura-bait">
+            <circle cx="-12" cy="17" r="9.5" fill="#f59e0b" opacity=".28"/>
+            <circle cx="-12" cy="17" r="5" fill="#fbbf24"/>
+            <circle cx="-13.6" cy="15.3" r="1.6" fill="#fffbeb"/>
+          </g>
+        </g>
+      </g>
+    </g>
+
+    <!-- SHIELD BLOCK -->
+    <g transform="translate(232,131)">
+      <circle class="lura-ring" cx="0" cy="0" r="22" fill="none"
+              stroke="#7C4DFF" stroke-width="2.4"/>
+      <circle class="lura-ring lura-ring-2" cx="0" cy="0" r="22" fill="none"
+              stroke="#42A5F5" stroke-width="1.8"/>
+      <g class="lura-shield">
+        <ellipse cx="0" cy="2" rx="25" ry="27" fill="#7C4DFF" opacity=".3" filter="url(#luraSoft)"/>
+        <path d="M 0,-19 L 15,-13 L 15,4 C 15,14 0,21 0,21 C 0,21 -15,14 -15,4 L -15,-13 Z"
+              fill="url(#luraShield)"/>
+        <path d="M -6.5,0.5 L -2,6 L 7,-6.5" fill="none" stroke="#fff"
+              stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+    </g>
+  </svg>
+</div>
     </div>
   </section>
 
