@@ -1,4 +1,5 @@
-# PhishGuard Backend Requirements
+# LURA Backend Requirements
+
 
 # FastAPI Framework
 fastapi==0.115.0
@@ -14,9 +15,10 @@ transformers==4.46.0
 torch==2.5.1
 numpy==1.26.4
 scikit-learn==1.5.2
-bcrypt==4.2.0
 
-# Security & Utilities
+# Security & Auth
+bcrypt==4.2.0
+PyJWT==2.8.0
 python-multipart==0.0.6
 
 # Testing
@@ -27,9 +29,10 @@ httpx==0.25.2
 # Utilities
 python-dotenv==1.0.0
 tqdm==4.66.1
-PyJWT==2.8.0
 
 # Optional: For production deployment
 # gunicorn==21.2.0
 # redis==5.0.1  # For caching
 # celery==5.3.4  # For background tasks
+
+

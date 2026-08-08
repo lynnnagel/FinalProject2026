@@ -1,8 +1,8 @@
 """
-Pytest configuration and shared fixtures for PhishGuard backend tests.
+Pytest configuration and shared fixtures for LURA backend tests.
 
 All tests use an in-memory SQLite database so the production
-phishguard.db is never touched.
+LURA.db is never touched.
 """
 import os
 import sys

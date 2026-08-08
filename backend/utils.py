@@ -1,6 +1,5 @@
-"""
-Shared utility helpers used across the PhishGuard backend.
-"""
+"""Shared utility helpers used across the LURA backend."""
+
 from datetime import datetime, date
 
 

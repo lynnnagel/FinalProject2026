@@ -4,7 +4,7 @@ const API_URL = 'http://localhost:8000';
 // Installation handler
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install') {
-    console.log('PhishGuard installed successfully!');
+    console.log('LURA installed successfully!');
 
     // Set default settings
     chrome.storage.local.set({
@@ -23,7 +23,7 @@ chrome.runtime.onInstalled.addListener((details) => {
     chrome.notifications.create({
       type: 'basic',
       iconUrl: 'icons/icon128.png',
-      title: 'ברוכים הבאים ל-PhishGuard!',
+      title: 'ברוכים הבאים ל-LURA!',
       message: 'התוסף מוכן להגן עליך מפני פישינג בזמן אמת. פתח Gmail כדי להתחיל.',
       priority: 2
     });
@@ -205,7 +205,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 // Context menu for manual scan
 chrome.contextMenus.create({
   id: 'scanEmail',
-  title: 'סרוק מייל זה עם PhishGuard',
+  title: 'סרוק מייל זה עם LURA',
   contexts: ['selection']
 });
 
@@ -218,4 +218,4 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   }
 });
 
-console.log('PhishGuard background service started');
+console.log('LURA background service started');

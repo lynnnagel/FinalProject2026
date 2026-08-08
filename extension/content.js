@@ -7,7 +7,7 @@ let scanQueue     = Promise.resolve();
 
 async function init() {
   userEmail = await getUserEmail();
-  console.log('PhishGuard ✅ user:', userEmail);
+  console.log('LURA ✅ user:', userEmail);
   observeEmailChanges();
   setTimeout(scanVisibleEmails, 2000);
   setInterval(scanVisibleEmails, 3000);
@@ -46,7 +46,7 @@ function observeEmailChanges() {
     clearTimeout(timer);
     timer = setTimeout(scanVisibleEmails, 400);
   }).observe(main, { childList: true, subtree: true });
-  console.log('PhishGuard 👁 watching');
+  console.log('LURA watching');
 }
 
 function getEmailRows() {
@@ -132,7 +132,7 @@ async function scanEmail(row, id) {
     const currentRow = findRowById(id) || row;
     addBadge(currentRow, result);
   } catch (err) {
-    console.warn('PhishGuard scan error:', err.message);
+    console.warn('LURA scan error:', err.message);
     const errResult = { risk_score: 0, risk_level: 'שגיאה', indicators: [], recommendation: '' };
     resultCache.set(id, errResult);
     addBadge(row, errResult);
@@ -167,11 +167,11 @@ function addBadge(row, result) {
   }
 
   const s = Math.round(score);
-  let color, bgColor, icon, label, pulse;
-  if (s >= 80)      { color='#ef4444'; bgColor='#450a0a'; icon='🚨'; label='סכנה';   pulse=true;  }
-  else if (s >= 50) { color='#f97316'; bgColor='#431407'; icon='⚡'; label='חשוד';   pulse=false; }
-  else if (s >= 30) { color='#fbbf24'; bgColor='#422006'; icon='⚠️'; label='זהירות'; pulse=false; }
-  else              { color='#34d399'; bgColor='#022c22'; icon='✓';  label='בטוח';   pulse=false; }
+  let color, bgColor, label, pulse;
+  if      (s >= 80) { color='#ef4444'; bgColor='#450a0a'; label='סכנה';   pulse=true;  }
+  else if (s >= 50) { color='#f97316'; bgColor='#431407'; label='חשוד';   pulse=false; }
+  else if (s >= 30) { color='#fbbf24'; bgColor='#422006'; label='זהירות'; pulse=false; }
+  else              { color='#34d399'; bgColor='#022c22'; label='בטוח';   pulse=false; }
 
   const b = document.createElement('span');
   b.className = 'pg-badge';
@@ -187,15 +187,10 @@ function addBadge(row, result) {
       : 'pg-in .4s cubic-bezier(.34,1.56,.64,1)'};
   `;
   b.innerHTML = `
-    <span style="font-size:13px;line-height:1">${icon}</span>
     <span style="font-size:11px">${label}</span>
-    <span style="
-      background:${color};color:#000;
-      padding:1px 6px;border-radius:10px;
-      font-size:10px;font-weight:800;
-    ">${s}%</span>
+    <span style="background:${color};color:#000;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:800;">${s}%</span>
   `;
-  b.title = `PhishGuard: ${result.risk_level || ''}\n${(result.indicators || []).join(' • ')}`;
+  b.title = `LURA: ${result.risk_level || ''}\n${(result.indicators || []).join(' • ')}`;
   b.addEventListener('click', e => { e.stopPropagation(); showModal(result); });
   insertBadge(row, b);
 }
@@ -229,8 +224,7 @@ function showModal(result) {
   else if (s >= 50) { color = '#f97316'; bg = 'rgba(249,115,22,.2)'; }
   else if (s >= 30) { color = '#fbbf24'; bg = 'rgba(251,191,36,.2)'; }
 
-  const chips = (result.indicators || [])
-    .map(i => `<span class="pg-chip">⚡ ${i}</span>`).join('');
+  const chips = (result.indicators || []).map(i => `<span class="pg-chip">${i}</span>`).join('');
 
   const m = document.createElement('div');
   m.id = 'pg-modal';
@@ -238,7 +232,7 @@ function showModal(result) {
     <div class="pg-overlay">
       <div class="pg-box">
         <div class="pg-head">
-          <span>🛡️ ניתוח PhishGuard</span>
+                    <span><img src="${chrome.runtime.getURL('icons/icon128.png')}" style="width:18px;height:18px;vertical-align:middle;margin-left:6px;">ניתוח LURA</span>
           <button class="pg-x">✕</button>
         </div>
         <div class="pg-body">
@@ -256,7 +250,7 @@ function showModal(result) {
           <div class="pg-stitle">אינדיקטורים שזוהו</div>
           <div class="pg-chips">${chips || '<span class="pg-chip">✅ לא נמצאו</span>'}</div>
           <div class="pg-rec">💡 <strong>המלצה:</strong> ${result.recommendation || ''}</div>
-          <div class="pg-time">⚡ זמן תגובה: ${result.response_time || 0}s</div>
+          <div class="pg-time">זמן תגובה: ${result.response_time || 0}s</div>
         </div>
         <div class="pg-foot">
           <button class="pg-close-btn">סגור</button>

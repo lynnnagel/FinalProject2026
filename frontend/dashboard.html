@@ -3,18 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PhishGuard — אזור אישי</title>
+  <title>LURA — אזור אישי</title>
   <link rel="stylesheet" href="css/main.css">
 </head>
 <body class="dash-page">
-  <nav class="navbar">
-    <div class="nav-brand">🛡️ PhishGuard</div>
+ <nav class="navbar">
+    <div class="nav-brand">LURA</div>
     <div class="nav-links">
       <a href="index.html">בית</a>
       <span class="nav-user" id="navUser"></span>
       <button class="btn-logout" onclick="logout()">יציאה</button>
     </div>
-  </nav>
+    <img src="icons/icon128.png" alt="LURA" style="height:50px;">
+</nav>
 
   <div class="dash-layout">
     <aside class="sidebar">
@@ -23,9 +24,9 @@
       <div class="sidebar-email" id="sidebarEmail"></div>
       <nav class="sidebar-nav">
         <a href="#overview" class="sidebar-link active" onclick="showSection('overview')">📊 סקירה כללית</a>
-        <a href="#scanner"  class="sidebar-link"        onclick="showSection('scanner')">🔍 סריקת קישור</a>
-        <a href="#alerts"   class="sidebar-link"        onclick="showSection('alerts')">🔔 התראות</a>
-        <a href="#guardian" class="sidebar-link"        onclick="showSection('guardian')">👁️ מצב הורה</a>
+        <a href="#scanner"  class="sidebar-link"        onclick="showSection('scanner')"> סריקת קישור</a>
+        <a href="#alerts"   class="sidebar-link"        onclick="showSection('alerts')"> התראות</a>
+        <a href="#guardian" class="sidebar-link"        onclick="showSection('guardian')"> מצב הורה</a>
       </nav>
     </aside>
 
@@ -51,7 +52,7 @@
           <div class="stat-card green">
             <div class="stat-icon">📡</div>
             <div class="stat-val" id="statStatus">—</div>
-            <div class="stat-lbl">סטטוס היום</div>
+            <div class="stat-lbl">אחוז זיהוי</div>
           </div>
         </div>
         <div class="risk-card">
@@ -92,7 +93,7 @@
         </div>
       </section>
 
-      <section id="sec-guardian" class="dash-section" style="display:none">
+            <section id="sec-guardian" class="dash-section" style="display:none">
         <h2 class="section-title">👁️ מצב הורה</h2>
         <div class="guardian-box">
           <p>חבר כתובת מייל של ילד כדי לנטר את הפעילות שלו ולקבל התראות בזמן אמת.</p>
@@ -100,7 +101,10 @@
             <label>מייל הילד</label>
             <input type="email" id="childEmail" placeholder="child@example.com" dir="ltr">
           </div>
-          <button class="btn-primary" style="margin-top:12px;" onclick="connectGuardian()">🔗 חבר</button>
+          <div style="display:flex;gap:8px;margin-top:12px;">
+            <button class="btn-primary" onclick="connectGuardian()">🔗 חבר</button>
+            <button class="btn-primary" style="background:#ef4444;" onclick="disconnectGuardian()">✂️ נתק שיוך</button>
+          </div>
           <div id="guardianResult" style="margin-top:16px;"></div>
           <div id="guardianData" style="margin-top:24px;"></div>
         </div>

@@ -12,6 +12,14 @@ from detector import detector
 from utils import get_name_from_email
 from config import ALERT_THRESHOLD, RECENT_EMAILS_WINDOW
 from email_service import send_guardian_phishing_alert
+from config import (
+    ALERT_THRESHOLD,
+    RECENT_EMAILS_WINDOW,
+    PHISHING_THRESHOLD,
+    HIGH_RISK_THRESHOLD,
+    MEDIUM_RISK_THRESHOLD,
+    LOW_RISK_THRESHOLD,
+)
 
 router = APIRouter(tags=["scan"])
 
@@ -27,9 +35,24 @@ def get_risk_score(sender: str, subject: str, content: str) -> dict:
     if bert_model is not None:
         try:
             bert_score = bert_model.predict_score(sender, subject, content)
-            ensemble_score = round(0.7 * bert_score + 0.3 * heuristic_result["risk_score"], 2)
+            ensemble_score = round(0.3 * bert_score + 0.7 * heuristic_result["risk_score"], 2)
             heuristic_result["risk_score"] = min(ensemble_score, 100.0)
             heuristic_result["indicators"].append("✨ BERT ניתוח סמנטי")
+
+            risk_score = heuristic_result["risk_score"]
+            heuristic_result["is_phishing"] = risk_score >= PHISHING_THRESHOLD
+            if risk_score >= HIGH_RISK_THRESHOLD:
+                heuristic_result["risk_level"] = "סכנה גבוהה"
+                heuristic_result["recommendation"] = "⛔ אל תלחץ על שום קישור! מחק את המייל מיד."
+            elif risk_score >= MEDIUM_RISK_THRESHOLD:
+                heuristic_result["risk_level"] = "חשוד"
+                heuristic_result["recommendation"] = "⚠️ היזהר מאוד. בדוק את המקור לפני כל פעולה."
+            elif risk_score >= LOW_RISK_THRESHOLD:
+                heuristic_result["risk_level"] = "זהירות"
+                heuristic_result["recommendation"] = "🔍 המייל מכיל אלמנטים חשודים. היה ערני."
+            else:
+                heuristic_result["risk_level"] = "בטוח"
+                heuristic_result["recommendation"] = "✅ המייל נראה תקין."
         except Exception:
             pass
 
@@ -150,5 +173,5 @@ def _get_risk_level(score: float) -> str:
 def _get_recommendation(score: float) -> str:
     if score >= 80: return "⛔ אל תלחץ על שום קישור! מחק את המייל מיד."
     if score >= 50: return "⚠️ היזהר מאוד. בדוק את המקור לפני כל פעולה."
-    if score >= 30: return "🔍 המייל מכיל אלמנטים חשודים. היה ערני."
-    return "✅ המייל נראה תקין."
+    if score >= 30: return "המייל מכיל אלמנטים חשודים. היה ערני."
+    return " המייל נראה תקין ✅."

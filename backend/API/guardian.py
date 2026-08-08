@@ -19,15 +19,19 @@ async def connect_guardian(
     request: GuardianConnectRequest,
     db: Session = Depends(get_db),
 ):
-    """
-    Link a child user to a guardian (parent).
-    The child must already exist (must have scanned at least one email).
-    The parent account is created automatically if it doesn't exist yet.
-    """
+    # מצא או צור את חשבון הילד
     child = db.query(User).filter(User.email == str(request.child_email)).first()
     if not child:
-        raise HTTPException(status_code=404, detail="משתמש ילד לא נמצא")
+        # צור אוטומטית אם לא קיים – יחוברו הסריקות שיגיעו בעתיד
+        child = User(
+            email=str(request.child_email),
+            name=get_name_from_email(str(request.child_email)),
+        )
+        db.add(child)
+        db.commit()
+        db.refresh(child)
 
+    # מצא או צור את חשבון ההורה
     parent = db.query(User).filter(User.email == str(request.parent_email)).first()
     if not parent:
         parent = User(
@@ -47,10 +51,32 @@ async def connect_guardian(
         "guardian": str(request.parent_email),
     }
 
+@router.post("/disconnect", summary="ניתוק הורה-ילד")
+async def disconnect_guardian(
+    request: GuardianConnectRequest,
+    db: Session = Depends(get_db),
+):
+    """Remove the guardian link from a child account."""
+    child = db.query(User).filter(User.email == str(request.child_email)).first()
+    if not child:
+        raise HTTPException(status_code=404, detail="משתמש ילד לא נמצא")
+
+    parent = db.query(User).filter(User.email == str(request.parent_email)).first()
+    if not parent or child.guardian_id != parent.id:
+        raise HTTPException(status_code=404, detail="חיבור הורה-ילד לא נמצא")
+
+    child.guardian_id = None
+    db.commit()
+
+    return {
+        "message": "מצב הורה נותק בהצלחה",
+        "child": str(request.child_email),
+        "guardian": str(request.parent_email),
+    }
+
 
 @router.get("/{parent_email}", response_model=GuardianData, summary="לוח בקרה להורה")
 async def get_guardian_data(parent_email: str, db: Session = Depends(get_db)):
-    """Return phishing activity summary for the first child linked to this parent."""
     parent = db.query(User).filter(User.email == parent_email).first()
     if not parent:
         raise HTTPException(status_code=404, detail="הורה לא נמצא")
@@ -59,7 +85,8 @@ async def get_guardian_data(parent_email: str, db: Session = Depends(get_db)):
     if not children:
         raise HTTPException(status_code=404, detail="לא נמצאו ילדים מחוברים")
 
-    child = children[0]  # dashboard shows first linked child
+    # השתמש בילד הראשון (הכי פעיל לפי סריקות)
+    child = max(children, key=lambda c: c.total_scanned)
 
     alerts = (
         db.query(Alert)
@@ -72,8 +99,8 @@ async def get_guardian_data(parent_email: str, db: Session = Depends(get_db)):
     recent_alerts_data = [
         {
             "risk_level": a.risk_level,
-            "message": a.message,
-            "time": a.created_at.strftime("%H:%M"),
+            "message":    a.message,
+            "time":       a.created_at.strftime("%H:%M"),
         }
         for a in alerts
     ]
@@ -82,7 +109,7 @@ async def get_guardian_data(parent_email: str, db: Session = Depends(get_db)):
         db.query(EmailRecord)
         .filter(
             EmailRecord.user_id == child.id,
-            EmailRecord.is_phishing == True,  # noqa: E712
+            EmailRecord.is_phishing == True,
             EmailRecord.scanned_at >= today_start(),
         )
         .count()

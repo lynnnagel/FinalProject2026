@@ -1,6 +1,5 @@
-"""
-Pydantic request/response schemas for the PhishGuard API.
-"""
+"""Pydantic request/response schemas for the LURA API."""
+
 from typing import List, Optional
 from pydantic import BaseModel, EmailStr
 

@@ -1,5 +1,5 @@
 """
-PhishGuard BERT Classifier
+LURA BERT Classifier
 ==========================
 Fine-tuned bert-base-multilingual-cased for binary phishing classification.
 Supports Hebrew + English via mBERT's multilingual tokeniser.

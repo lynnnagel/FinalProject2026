@@ -1,5 +1,5 @@
 """
-PhishGuard – Email Notification Service
+LURA – Email Notification Service
 ========================================
 שולח מיילי התראה למפקח (הורה / אבא / אימא / סבא) כאשר מזוהה מייל פישינג
 עבור המשתמש המנוטר.
@@ -8,11 +8,13 @@ PhishGuard – Email Notification Service
     הגדר את משתני הסביבה הבאים (ראה .env.example):
         SMTP_HOST        - שרת SMTP  (ברירת מחדל: smtp.gmail.com)
         SMTP_PORT        - פורט SMTP  (ברירת מחדל: 587)
-        SMTP_USER        - כתובת Gmail ממנה נשלח (למשל phishguard@gmail.com)
+        SMTP_USER        - כתובת Gmail ממנה נשלח
         SMTP_PASSWORD    - App Password של Gmail (לא הסיסמה הרגילה!)
-        EMAIL_FROM_NAME  - שם השולח (ברירת מחדל: PhishGuard)
+        EMAIL_FROM_NAME  - שם השולח (ברירת מחדל: LURA)
         EMAIL_ENABLED    - "true" להפעלה, "false" לכיבוי (ברירת מחדל: false)
 """
+
+
 from __future__ import annotations
 
 import logging
@@ -20,6 +22,8 @@ import smtplib
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.mime.image import MIMEImage
+
 
 from config import (
     EMAIL_ENABLED,
@@ -130,8 +134,6 @@ def _risk_color(risk_score: float) -> str:
 
 
 def _risk_emoji(risk_score: float) -> str:
-    if risk_score >= 80:
-        return "🚨"
     if risk_score >= 50:
         return "⚡"
     return "⚠️"
@@ -147,17 +149,18 @@ def _build_message(
     phishing_subject: str,
     risk_level: str,
 ) -> MIMEMultipart:
-    emoji = _risk_emoji(risk_score)
     subject_line = (
-        f"{emoji} PhishGuard: {monitored_name} קיבל מייל פישינג "
+        f"LURA: {monitored_name} קיבל מייל פישינג "
         f"({risk_score:.0f}% סיכון)"
     )
 
-    msg = MIMEMultipart("alternative")
+    msg = MIMEMultipart("related")
     msg["Subject"] = subject_line
     msg["From"] = f"{EMAIL_FROM_NAME} <{SMTP_USER}>"
     msg["To"] = to_email
     msg["X-Priority"] = "1" if risk_score >= 80 else "3"
+
+    alt_part = MIMEMultipart("alternative")
 
     plain = _build_plain_text(
         monitored_name=monitored_name,
@@ -176,8 +179,18 @@ def _build_message(
         risk_level=risk_level,
     )
 
-    msg.attach(MIMEText(plain, "plain", "utf-8"))
-    msg.attach(MIMEText(html, "html", "utf-8"))
+    alt_part.attach(MIMEText(plain, "plain", "utf-8"))
+    alt_part.attach(MIMEText(html, "html", "utf-8"))
+    msg.attach(alt_part)
+
+    icon_path = Path(__file__).parent.parent / "frontend" / "icons" / "icon128.png"
+    if icon_path.exists():
+        with open(icon_path, "rb") as f:
+            img = MIMEImage(f.read())
+            img.add_header("Content-ID", "<lura_icon>")
+            img.add_header("Content-Disposition", "inline")
+            msg.attach(img)
+
     return msg
 
 
@@ -192,10 +205,10 @@ def _build_plain_text(
 ) -> str:
     now = datetime.now().strftime("%d/%m/%Y %H:%M")
     return (
-        f"🛡️ PhishGuard – התראת פישינג\n"
+        f"🛡️ LURA – התראת פישינג\n"
         f"{'=' * 40}\n\n"
         f"שלום,\n\n"
-        f"PhishGuard זיהה מייל פישינג שנשלח ל-{monitored_name} ({monitored_email}).\n\n"
+        f"LURA זיהה מייל פישינג שנשלח ל-{monitored_name} ({monitored_email}).\n\n"
         f"פרטי האיום:\n"
         f"  ציון סיכון : {risk_score:.0f}%\n"
         f"  רמת סיכון  : {risk_level}\n"
@@ -205,7 +218,7 @@ def _build_plain_text(
         f"מומלץ לפנות ל-{monitored_name} ולוודא שלא לחץ על קישורים במייל זה\n"
         f"ולא מסר פרטים אישיים.\n\n"
         f"{'─' * 40}\n"
-        f"PhishGuard – מערכת הגנה מפישינג\n"
+        f"LURA – מערכת הגנה מפישינג\n"
         f"הודעה זו נשלחה אוטומטית כי אתה מוגדר כמשגיח על {monitored_name}."
     )
 
@@ -230,7 +243,7 @@ def _build_html(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>התראת PhishGuard</title>
+  <title>התראת LURA</title>
 </head>
 <body style="margin:0;padding:0;background:#0f172a;font-family:'Segoe UI',Arial,sans-serif;direction:rtl;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a;padding:40px 20px;">
@@ -244,8 +257,8 @@ def _build_html(
         <tr>
           <td style="background:linear-gradient(135deg,#1e293b 0%,#0f172a 100%);
                      padding:32px;text-align:center;border-bottom:3px solid {color};">
-            <div style="font-size:52px;margin-bottom:8px;">🛡️</div>
-            <h1 style="color:#fff;margin:0;font-size:26px;font-weight:800;">PhishGuard</h1>
+            <img src="cid:icon128.png" alt="LURA" style="width:48px;height:48px;margin-bottom:8px;">
+            <h1 style="color:#fff;margin:0;font-size:26px;font-weight:800;">LURA</h1>
             <p style="color:#94a3b8;margin:6px 0 0;font-size:13px;">מערכת הגנה מפישינג</p>
           </td>
         </tr>
@@ -254,7 +267,7 @@ def _build_html(
         <tr>
           <td style="background:{color};padding:14px 32px;text-align:center;">
             <p style="margin:0;color:#fff;font-size:18px;font-weight:700;">
-              {emoji}&nbsp; זוהה מייל פישינג!
+              &nbsp; זוהה מייל פישינג!
             </p>
           </td>
         </tr>
@@ -265,7 +278,7 @@ def _build_html(
 
             <p style="color:#e2e8f0;font-size:16px;margin:0 0 8px;">שלום,</p>
             <p style="color:#e2e8f0;font-size:15px;margin:0 0 28px;line-height:1.7;">
-              PhishGuard זיהה מייל פישינג שנשלח ל
+              LURA זיהה מייל פישינג שנשלח ל
               <strong style="color:#60a5fa;">{monitored_name}</strong>
               <span style="color:#64748b;font-size:13px;"> ({monitored_email})</span>.
               להלן פרטי האיום:
@@ -326,7 +339,7 @@ def _build_html(
 
             <hr style="border:none;border-top:1px solid #334155;margin:0 0 20px;">
             <p style="color:#475569;font-size:12px;text-align:center;margin:0;line-height:1.6;">
-              הודעה זו נשלחה אוטומטית ממערכת PhishGuard<br>
+              הודעה זו נשלחה אוטומטית ממערכת LURA<br>
               אתה מקבל הודעה זו כי הגדרת מעקב על חשבון
               <strong style="color:#64748b;">{monitored_name}</strong>
             </p>

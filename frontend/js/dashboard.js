@@ -41,7 +41,8 @@
         document.getElementById('statScanned').textContent = d.total_scanned;
         document.getElementById('statBlocked').textContent = d.phishing_blocked;
         document.getElementById('statAlerts').textContent  = d.recent_alerts;
-        document.getElementById('statStatus').textContent  = d.daily_active ? 'פעיל' : 'לא פעיל';
+        const detectionRate = d.total_scanned > 0 ? Math.round((d.phishing_blocked / d.total_scanned) * 100) : 0;
+        document.getElementById('statStatus').textContent = detectionRate + '%';
 
         const score = Math.round(d.risk_score || 0);
         const color = riskColor(score);
@@ -142,4 +143,29 @@
       }
     }
 
+    async function disconnectGuardian() {
+      const childEmail = document.getElementById('childEmail').value.trim();
+      if (!childEmail) {
+        document.getElementById('guardianResult').innerHTML =
+          '<div class="form-error">נא להזין כתובת מייל של הילד</div>';
+        return;
+      }
+      const resultEl = document.getElementById('guardianResult');
+      try {
+        const r = await fetch(`${API}/guardian/disconnect`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ child_email: childEmail, parent_email: userEmail }),
+        });
+        const data = await r.json();
+        if (r.ok) {
+          resultEl.innerHTML = `<div class="form-success">✅ השיוך של ${childEmail} הוסר בהצלחה</div>`;
+          document.getElementById('guardianData').innerHTML = '';
+        } else {
+          resultEl.innerHTML = `<div class="form-error">${data.detail}</div>`;
+        }
+      } catch {
+        resultEl.innerHTML = '<div class="form-error">שגיאת חיבור לשרת</div>';
+      }
+    }
     loadDashboard();

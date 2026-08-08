@@ -1,5 +1,5 @@
 """
-Integration tests for PhishGuard API endpoints.
+Integration tests for LURA API endpoints.
 
 Run from backend/:
     pytest tests/ -v

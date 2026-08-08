@@ -1,5 +1,5 @@
 """
-PhishGuard BERT Training Pipeline
+LURA BERT Training Pipeline
 ===================================
 Fine-tunes bert-base-multilingual-cased on a combined phishing dataset.
 
@@ -134,6 +134,35 @@ def load_dataset(data_dir: str) -> Tuple[List[str], List[int]]:
 
 
 # ---------------------------------------------------------------------------
+# Split loading – prefers prepare_data.py output (train/val/test.csv),
+# falls back to combining + splitting the raw source CSVs.
+# ---------------------------------------------------------------------------
+def load_split_dataset(data_dir: str):
+    processed = ["train.csv", "val.csv", "test.csv"]
+    if all(os.path.exists(os.path.join(data_dir, f)) for f in processed):
+        splits = {}
+        for fname in processed:
+            df = pd.read_csv(os.path.join(data_dir, fname))
+            df = df.dropna(subset=["text", "label"])
+            splits[fname] = (df["text"].astype(str).tolist(), df["label"].astype(int).tolist())
+            logger.info("Loaded %d samples from %s", len(df), fname)
+
+        train_texts, train_labels = splits["train.csv"]
+        val_texts, val_labels = splits["val.csv"]
+        test_texts, test_labels = splits["test.csv"]
+        return train_texts, train_labels, val_texts, val_labels, test_texts, test_labels
+
+    texts, labels = load_dataset(data_dir)
+    train_texts, tmp_texts, train_labels, tmp_labels = train_test_split(
+        texts, labels, test_size=0.30, stratify=labels, random_state=42
+    )
+    val_texts, test_texts, val_labels, test_labels = train_test_split(
+        tmp_texts, tmp_labels, test_size=0.50, stratify=tmp_labels, random_state=42
+    )
+    return train_texts, train_labels, val_texts, val_labels, test_texts, test_labels
+
+
+# ---------------------------------------------------------------------------
 # Class-weight helper (handles 71 % / 29 % imbalance)
 # ---------------------------------------------------------------------------
 def compute_class_weights(labels: List[int]) -> torch.Tensor:
@@ -170,14 +199,8 @@ def evaluate(model, loader, criterion) -> Tuple[float, float, float]:
 # Training
 # ---------------------------------------------------------------------------
 def train(args: argparse.Namespace):
-    # 1. Load & split data (chronological sort → later emails go to test set)
-    texts, labels = load_dataset(args.data_dir)
-    train_texts, tmp_texts, train_labels, tmp_labels = train_test_split(
-        texts, labels, test_size=0.30, stratify=labels, random_state=42
-    )
-    val_texts, test_texts, val_labels, test_labels = train_test_split(
-        tmp_texts, tmp_labels, test_size=0.50, stratify=tmp_labels, random_state=42
-    )
+    # 1. Load train/val/test splits (prefers prepare_data.py output)
+    train_texts, train_labels, val_texts, val_labels, test_texts, test_labels = load_split_dataset(args.data_dir)
     logger.info(
         "Split – Train: %d | Val: %d | Test: %d",
         len(train_texts), len(val_texts), len(test_texts),
@@ -189,9 +212,9 @@ def train(args: argparse.Namespace):
     tokenizer = model.tokenizer
 
     # 3. Datasets & loaders
-    train_ds = EmailDataset(train_texts, train_labels, tokenizer)
-    val_ds = EmailDataset(val_texts, val_labels, tokenizer)
-    test_ds = EmailDataset(test_texts, test_labels, tokenizer)
+    train_ds = EmailDataset(train_texts, train_labels, tokenizer, max_length=args.max_length)
+    val_ds = EmailDataset(val_texts, val_labels, tokenizer, max_length=args.max_length)
+    test_ds = EmailDataset(test_texts, test_labels, tokenizer, max_length=args.max_length)
 
     train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True)
     val_loader = DataLoader(val_ds, batch_size=args.batch_size)
@@ -312,11 +335,16 @@ def train(args: argparse.Namespace):
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Train PhishGuard BERT phishing classifier"
+        description="LURA BERT Training Pipeline"
     )
     parser.add_argument(
-        "--data_dir", default="ML/data",
-        help="Directory containing emails.csv, phishtank.csv, enron_legitimate.csv",
+        "--data_dir", default="ML/data/processed",
+        help=(
+            "Directory containing train.csv/val.csv/test.csv (output of "
+            "prepare_data.py). Falls back to combining + splitting "
+            "emails.csv/phishtank.csv/enron_legitimate.csv if those are "
+            "not found."
+        ),
     )
     parser.add_argument(
         "--output_dir", default="ML/checkpoints",
@@ -325,6 +353,7 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=3)
     parser.add_argument("--batch_size", type=int, default=16)
     parser.add_argument("--learning_rate", type=float, default=2e-5)
+    parser.add_argument("--max_length", type=int, default=256)
 
     args = parser.parse_args()
     logger.info("Training on device: %s", DEVICE)

@@ -1,6 +1,6 @@
-/* PhishGuard Extension Styles */
+/* LURA Extension Styles */
 
-.phishguard-indicator {
+.lura-indicator {
   margin: 0 8px;
   display: inline-flex;
   z-index: 100;
@@ -8,60 +8,52 @@
   transition: transform 0.2s ease;
 }
 
-.phishguard-indicator:hover {
+.lura-indicator:hover {
   transform: scale(1.05);
 }
 
 /* Modal Styles */
-.phishguard-modal-overlay {
+.lura-modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 999999;
-  animation: phishguard-modal-fadein 0.3s ease;
+  animation: lura-modal-fadein 0.3s ease;
   direction: rtl;
 }
 
-@keyframes phishguard-modal-fadein {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+@keyframes lura-modal-fadein {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
-.phishguard-modal-content {
-  background: white;
+.lura-modal-content {
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(20px);
   border-radius: 16px;
   max-width: 500px;
   width: 90%;
   max-height: 90vh;
   overflow-y: auto;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-  animation: phishguard-modal-slidein 0.3s ease;
+  box-shadow: 0 24px 64px rgba(124, 77, 255, 0.15);
+  border: 1px solid rgba(124, 77, 255, 0.12);
+  animation: lura-modal-slidein 0.3s ease;
 }
 
-@keyframes phishguard-modal-slidein {
-  from {
-    opacity: 0;
-    transform: translateY(-30px) scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+@keyframes lura-modal-slidein {
+  from { opacity: 0; transform: translateY(-30px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-.phishguard-modal-header {
-  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+.lura-modal-header {
+  background: linear-gradient(135deg, #42A5F5, #7C4DFF);
   color: white;
   padding: 20px;
   border-radius: 16px 16px 0 0;
@@ -70,13 +62,13 @@
   justify-content: space-between;
 }
 
-.phishguard-modal-header h2 {
+.lura-modal-header h2 {
   margin: 0;
   font-size: 22px;
   font-weight: 700;
 }
 
-.phishguard-close {
+.lura-close {
   background: rgba(255, 255, 255, 0.2);
   border: none;
   color: white;
@@ -88,13 +80,11 @@
   transition: background 0.2s;
 }
 
-.phishguard-close:hover {
+.lura-close:hover {
   background: rgba(255, 255, 255, 0.3);
 }
 
-.phishguard-modal-body {
-  padding: 24px;
-}
+.lura-modal-body { padding: 24px; }
 
 .risk-score-display {
   display: flex;
@@ -110,7 +100,7 @@
   align-items: center;
   justify-content: center;
   position: relative;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 8px 24px rgba(124, 77, 255, 0.12);
 }
 
 .risk-score-inner {
@@ -127,7 +117,7 @@
 .risk-score-number {
   font-size: 42px;
   font-weight: 800;
-  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  background: linear-gradient(135deg, #42A5F5, #7C4DFF);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -141,24 +131,23 @@
 }
 
 .risk-level {
-  background: linear-gradient(135deg, #f3f4f6, #e5e7eb);
+  background: rgba(124, 77, 255, 0.05);
   padding: 16px;
   border-radius: 12px;
   margin-bottom: 16px;
   font-size: 15px;
   text-align: center;
+  border: 1px solid rgba(124, 77, 255, 0.1);
 }
 
-.risk-level strong {
-  color: #374151;
-}
+.risk-level strong { color: #374151; }
 
 .indicators {
-  background: #f8fafc;
+  background: rgba(124, 77, 255, 0.03);
   padding: 16px;
   border-radius: 12px;
   margin-bottom: 16px;
-  border: 2px solid #e5e7eb;
+  border: 1px solid rgba(124, 77, 255, 0.1);
 }
 
 .indicators strong {
@@ -182,8 +171,8 @@
 }
 
 .indicators li:before {
-  content: "•";
-  color: #3b82f6;
+  content: "\2022";
+  color: #7C4DFF;
   font-weight: bold;
   display: inline-block;
   width: 1em;
@@ -205,7 +194,7 @@
 
 .recommendation.info {
   background: linear-gradient(135deg, #dbeafe, #bfdbfe);
-  border: 2px solid #3b82f6;
+  border: 2px solid #42A5F5;
 }
 
 .recommendation strong {
@@ -233,14 +222,14 @@
   border: 2px solid #86efac;
 }
 
-.phishguard-modal-footer {
+.lura-modal-footer {
   padding: 16px 24px;
-  border-top: 2px solid #f3f4f6;
+  border-top: 1px solid rgba(124, 77, 255, 0.08);
   display: flex;
   justify-content: center;
 }
 
-.phishguard-btn {
+.lura-btn {
   padding: 12px 32px;
   border: none;
   border-radius: 10px;
@@ -250,32 +239,18 @@
   transition: all 0.2s;
 }
 
-.phishguard-btn-primary {
-  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+.lura-btn-primary {
+  background: linear-gradient(135deg, #42A5F5, #7C4DFF);
   color: white;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+  box-shadow: 0 4px 12px rgba(124, 77, 255, 0.3);
 }
 
-.phishguard-btn-primary:hover {
-  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.5);
+.lura-btn-primary:hover {
+  box-shadow: 0 6px 16px rgba(124, 77, 255, 0.45);
   transform: translateY(-2px);
 }
 
-/* Scrollbar Styling */
-.phishguard-modal-content::-webkit-scrollbar {
-  width: 8px;
-}
-
-.phishguard-modal-content::-webkit-scrollbar-track {
-  background: #f3f4f6;
-  border-radius: 10px;
-}
-
-.phishguard-modal-content::-webkit-scrollbar-thumb {
-  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-  border-radius: 10px;
-}
-
-.phishguard-modal-content::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(135deg, #2563eb, #7c3aed);
-}
+.lura-modal-content::-webkit-scrollbar { width: 8px; }
+.lura-modal-content::-webkit-scrollbar-track { background: #f3f4f6; border-radius: 10px; }
+.lura-modal-content::-webkit-scrollbar-thumb { background: linear-gradient(135deg, #42A5F5, #7C4DFF); border-radius: 10px; }
+.lura-modal-content::-webkit-scrollbar-thumb:hover { background: linear-gradient(135deg, #1E88E5, #651FFF); }

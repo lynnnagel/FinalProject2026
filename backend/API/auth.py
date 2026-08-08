@@ -22,7 +22,7 @@ from utils import get_name_from_email
 router = APIRouter(prefix="/auth", tags=["auth"])
 security = HTTPBearer(auto_error=False)
 
-SECRET_KEY = os.getenv("JWT_SECRET", "phishguard-dev-secret-change-in-production")
+SECRET_KEY = os.getenv("SECRET_KEY", "lura-dev-secret-change-in-production")
 ALGORITHM  = "HS256"
 
 
