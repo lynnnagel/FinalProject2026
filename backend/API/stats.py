@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from API.auth import get_current_user
 from database import get_db
 from models import User, Alert, EmailRecord
 from schemas import UserStats, AlertSummary
@@ -8,7 +9,14 @@ from utils import today_start
 router = APIRouter(tags=["stats"])
 
 @router.get("/stats/{user_email}", response_model=UserStats)
-async def get_user_stats(user_email: str, db: Session = Depends(get_db)):
+async def get_user_stats(
+    user_email: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    # סטטיסטיקות הן נתונים אישיים – רק בעל החשבון רשאי לראות אותן
+    if user_email != current_user.email:
+        raise HTTPException(status_code=403, detail="אין הרשאה")
     user = db.query(User).filter(User.email == user_email).first()
     if not user:
         raise HTTPException(status_code=404, detail="משתמש לא נמצא")

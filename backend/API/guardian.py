@@ -5,6 +5,7 @@ GET  /guardian/{parent_email}  –  Return monitoring dashboard for a parent.
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from API.auth import get_current_user
 from database import get_db
 from models import User, Alert, EmailRecord
 from schemas import GuardianConnectRequest, GuardianData
@@ -14,15 +15,26 @@ from config import ALERT_HISTORY_LIMIT
 router = APIRouter(prefix="/guardian", tags=["guardian"])
 
 
-@router.post("/connect", summary="חיבור הורה-ילד")
+@router.post("/connect", summary="חיבור מפקח-מנוטר")
 async def connect_guardian(
     request: GuardianConnectRequest,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    # מצא או צור את חשבון הילד
+    """
+    מקשר חשבון מנוטר למפקח.
+
+    המפקח נקבע תמיד לפי הטוקן ולא לפי שדה בבקשה — אחרת כל אחד היה יכול
+    להגדיר את עצמו כמפקח על תיבה זרה ולקבל את תוכן ההתראות שלה.
+    """
+    parent = current_user
+
+    if str(request.child_email) == parent.email:
+        raise HTTPException(status_code=400, detail="לא ניתן להגדיר מפקח על עצמך")
+
+    # מצא או צור את חשבון המנוטר – סריקות עתידיות ישויכו אליו
     child = db.query(User).filter(User.email == str(request.child_email)).first()
     if not child:
-        # צור אוטומטית אם לא קיים – יחוברו הסריקות שיגיעו בעתיד
         child = User(
             email=str(request.child_email),
             name=get_name_from_email(str(request.child_email)),
@@ -31,52 +43,47 @@ async def connect_guardian(
         db.commit()
         db.refresh(child)
 
-    # מצא או צור את חשבון ההורה
-    parent = db.query(User).filter(User.email == str(request.parent_email)).first()
-    if not parent:
-        parent = User(
-            email=str(request.parent_email),
-            name=get_name_from_email(str(request.parent_email)),
-        )
-        db.add(parent)
-        db.commit()
-        db.refresh(parent)
-
     child.guardian_id = parent.id
     db.commit()
 
     return {
-        "message": "מצב הורה הופעל בהצלחה",
+        "message": "מצב מפקח הופעל בהצלחה",
         "child": str(request.child_email),
-        "guardian": str(request.parent_email),
+        "guardian": parent.email,
     }
 
-@router.post("/disconnect", summary="ניתוק הורה-ילד")
+
+@router.post("/disconnect", summary="ניתוק מפקח-מנוטר")
 async def disconnect_guardian(
     request: GuardianConnectRequest,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Remove the guardian link from a child account."""
+    """מסיר את הקישור. אפשרי רק למפקח שמוגדר בפועל על אותו חשבון."""
     child = db.query(User).filter(User.email == str(request.child_email)).first()
-    if not child:
-        raise HTTPException(status_code=404, detail="משתמש ילד לא נמצא")
-
-    parent = db.query(User).filter(User.email == str(request.parent_email)).first()
-    if not parent or child.guardian_id != parent.id:
-        raise HTTPException(status_code=404, detail="חיבור הורה-ילד לא נמצא")
+    if not child or child.guardian_id != current_user.id:
+        raise HTTPException(status_code=404, detail="חיבור מפקח לא נמצא")
 
     child.guardian_id = None
     db.commit()
 
     return {
-        "message": "מצב הורה נותק בהצלחה",
+        "message": "מצב מפקח נותק בהצלחה",
         "child": str(request.child_email),
-        "guardian": str(request.parent_email),
+        "guardian": current_user.email,
     }
 
 
-@router.get("/{parent_email}", response_model=GuardianData, summary="לוח בקרה להורה")
-async def get_guardian_data(parent_email: str, db: Session = Depends(get_db)):
+@router.get("/{parent_email}", response_model=GuardianData, summary="לוח בקרה למפקח")
+async def get_guardian_data(
+    parent_email: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if parent_email != current_user.email:
+        raise HTTPException(
+            status_code=403, detail="אין הרשאה לצפות בנתונים של משתמש אחר"
+        )
     parent = db.query(User).filter(User.email == parent_email).first()
     if not parent:
         raise HTTPException(status_code=404, detail="הורה לא נמצא")

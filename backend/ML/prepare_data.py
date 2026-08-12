@@ -101,10 +101,43 @@ def load_hebrew(path: str) -> pd.DataFrame:
     df = df[[text_col, label_col]].dropna()
     df.columns = ["text", "label"]
     df["label"] = pd.to_numeric(df["label"], errors="coerce").fillna(0).astype(int).clip(0, 1)
-    # Oversample Hebrew x5 so the model actually learns the language
-    df = pd.concat([df] * 5, ignore_index=True)
-    logger.info("Hebrew: %d samples after 5x oversample", len(df))
+    # ההכפלה נעשית אחרי החלוקה, על סט האימון בלבד (ראה oversample_hebrew).
+    # כשהיא נעשתה כאן, חמשת העותקים של כל מייל התפזרו בין train/val/test,
+    # כך שכמעט כל מייל עברי בסט הבדיקה הופיע גם באימון — והדיוק המדווח
+    # היה מנופח.
+    logger.info("Hebrew: %d samples", len(df))
     return df
+
+
+HEBREW_CHARS = r"[֐-׿]"
+
+
+def oversample_hebrew(df: pd.DataFrame, factor: int = 5) -> pd.DataFrame:
+    """
+    מכפיל את הדוגמאות בעברית פי *factor* — על סט האימון בלבד.
+
+    הדאטה העברי קטן ביחס לאנגלי, ובלי הכפלה המודל כמעט לא לומד את
+    השפה. ההכפלה בטוחה כאן כי היא קורית אחרי החלוקה: העותקים נשארים
+    כולם ב-train ולא מגיעים לסטי ההערכה.
+    """
+    if factor <= 1:
+        return df
+
+    is_hebrew = df["text"].str.contains(HEBREW_CHARS, na=False, regex=True)
+    hebrew = df[is_hebrew]
+    if hebrew.empty:
+        logger.warning("לא נמצאו דוגמאות בעברית בסט האימון")
+        return df
+
+    extra = pd.concat([hebrew] * (factor - 1), ignore_index=True)
+    out = pd.concat([df, extra], ignore_index=True)
+    out = out.sample(frac=1, random_state=42).reset_index(drop=True)
+
+    logger.info(
+        "Hebrew oversample x%d on train only: %d → %d rows (%d Hebrew originals)",
+        factor, len(df), len(out), len(hebrew),
+    )
+    return out
 
 
 def prepare(args: argparse.Namespace):
@@ -146,12 +179,34 @@ def prepare(args: argparse.Namespace):
     else:
         logger.warning("Hebrew dataset not found - run: python ML/create_hebrew_dataset.py")
 
+    # מיילים בעברית שנוצרו בתרגום מכונה (ML/augment_hebrew.py).
+    # אופציונלי — אם הקובץ לא קיים פשוט מדלגים.
+    translated_path = os.path.join(args.data_dir, "hebrew_translated.csv")
+    if os.path.exists(translated_path):
+        df = pd.read_csv(translated_path).dropna(subset=["text", "label"])
+        df["label"] = df["label"].astype(int).clip(0, 1)
+        frames.append(df[["text", "label"]])
+        logger.info("Hebrew (translated): %d samples (legitimate=%d, phishing=%d)",
+                    len(df), int((df["label"] == 0).sum()), int(df["label"].sum()))
+    else:
+        logger.info("No translated Hebrew file — run ML/augment_hebrew.py to add one")
+
     if not frames:
         raise FileNotFoundError(f"No CSV files found in {args.data_dir}")
 
     combined = pd.concat(frames, ignore_index=True)
     combined["text"] = combined["text"].apply(clean_text)
     combined = combined[combined["text"].str.len() > 10].reset_index(drop=True)
+
+    # ── הסרת כפילויות — חייבת לקרות לפני החלוקה ────────────────────────
+    # מייל שמופיע פעמיים ומתפצל בין train ל-test גורם למודל להיבחן על
+    # טקסט שהוא כבר שינן, וכל מדד שיתקבל יהיה גבוה מהאמת.
+    before = len(combined)
+    combined = combined.drop_duplicates(subset="text").reset_index(drop=True)
+    removed = before - len(combined)
+    if removed:
+        logger.info("Removed %d duplicate emails (%.1f%%)", removed, removed / before * 100)
+
     combined = combined.sample(frac=1, random_state=42).reset_index(drop=True)
 
     phishing_pct = combined["label"].mean() * 100
@@ -163,10 +218,21 @@ def prepare(args: argparse.Namespace):
     train, tmp = train_test_split(combined, test_size=0.30, stratify=combined["label"], random_state=42)
     val, test = train_test_split(tmp, test_size=0.50, stratify=tmp["label"], random_state=42)
 
+    # ── הכפלת העברית — אחרי החלוקה, ורק על סט האימון ───────────────────
+    train = oversample_hebrew(train, factor=args.hebrew_factor)
+
     os.makedirs(args.output_dir, exist_ok=True)
     train.to_csv(os.path.join(args.output_dir, "train.csv"), index=False)
     val.to_csv(os.path.join(args.output_dir, "val.csv"), index=False)
     test.to_csv(os.path.join(args.output_dir, "test.csv"), index=False)
+
+    # אימות: אחרי התיקון החפיפה חייבת להיות אפס
+    leak_val = len(set(train["text"]) & set(val["text"]))
+    leak_test = len(set(train["text"]) & set(test["text"]))
+    if leak_val or leak_test:
+        logger.error("דליפה! train∩val=%d, train∩test=%d", leak_val, leak_test)
+    else:
+        logger.info("אימות: אין חפיפה בין סטי האימון, הוולידציה והבדיקה ✓")
 
     logger.info("Saved: train=%d | val=%d | test=%d", len(train), len(val), len(test))
     logger.info("Output: %s", args.output_dir)
@@ -178,4 +244,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_dir", default="ML/data")
     parser.add_argument("--output_dir", default="ML/data/processed")
+    parser.add_argument(
+        "--hebrew_factor", type=int, default=5,
+        help="פי כמה להכפיל את הדוגמאות בעברית בסט האימון (1 = ללא הכפלה)",
+    )
     prepare(parser.parse_args())

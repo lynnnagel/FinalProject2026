@@ -1,7 +1,7 @@
 """Pydantic request/response schemas for the LURA API."""
 
 from typing import List, Optional
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 
 # ---------------------------------------------------------------------------
@@ -62,7 +62,7 @@ class GuardianData(BaseModel):
 
 class RegisterRequest(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(min_length=8)
     name: Optional[str] = None
 
 
@@ -70,12 +70,19 @@ class LoginRequest(BaseModel):
     email: EmailStr
     password: str
 
+
 class ForgotPasswordRequest(BaseModel):
+    """בקשה לשליחת קישור איפוס — לא מכילה סיסמה."""
     email: EmailStr
 
+
 class ResetPasswordRequest(BaseModel):
+    """
+    איפוס בפועל. מזוהה על ידי האסימון שנשלח למייל בלבד —
+    אין כאן שדה email, כדי שלא ניתן יהיה לאפס סיסמה של חשבון זר.
+    """
     token: str
-    new_password: str
+    new_password: str = Field(min_length=8)
 
 class TokenResponse(BaseModel):
     token: str

@@ -20,14 +20,13 @@ from __future__ import annotations
 import logging
 import smtplib
 from datetime import datetime
-from pathlib import Path
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
-
-
+from pathlib import Path
 
 from config import (
+    APP_BASE_URL,
     EMAIL_ENABLED,
     EMAIL_FROM_NAME,
     SMTP_HOST,
@@ -35,6 +34,10 @@ from config import (
     SMTP_PORT,
     SMTP_USER,
 )
+
+# האייקון שמוטמע בגוף המייל. הקבצים יושבים תחת extension/icons/.
+ICON_PATH = Path(__file__).parent.parent / "extension" / "icons" / "icon128.png"
+ICON_CID = "lura_icon"
 
 logger = logging.getLogger(__name__)
 
@@ -135,10 +138,16 @@ def _risk_color(risk_score: float) -> str:
     return "#eab308"      # צהוב
 
 
-def _risk_emoji(risk_score: float) -> str:
-    if risk_score >= 50:
-        return "⚡"
-    return "⚠️"
+def _attach_icon(msg: MIMEMultipart) -> None:
+    """מצרף את אייקון LURA כתמונה מוטמעת (cid), לשימוש בתגית <img>."""
+    if not ICON_PATH.exists():
+        logger.warning("[Email] אייקון לא נמצא: %s", ICON_PATH)
+        return
+    with open(ICON_PATH, "rb") as f:
+        img = MIMEImage(f.read())
+    img.add_header("Content-ID", f"<{ICON_CID}>")
+    img.add_header("Content-Disposition", "inline")
+    msg.attach(img)
 
 
 def _build_message(
@@ -185,15 +194,7 @@ def _build_message(
     alt_part.attach(MIMEText(html, "html", "utf-8"))
     msg.attach(alt_part)
 
-    icon_path = Path(__file__).parent.parent / "extension" / "icons" / "icon128.png"
-    if icon_path.exists():
-        with open(icon_path, "rb") as f:
-            img = MIMEImage(f.read())
-            img.add_header("Content-ID", "<lura_icon>")
-            img.add_header("Content-Disposition", "inline")
-            msg.attach(img)
-    else:
-        logger.warning("[Email] אייקון לא נמצא: %s", icon_path)
+    _attach_icon(msg)
 
     return msg
 
@@ -209,7 +210,7 @@ def _build_plain_text(
 ) -> str:
     now = datetime.now().strftime("%d/%m/%Y %H:%M")
     return (
-        f"🛡️ LURA – התראת פישינג\n"
+        f"LURA – התראת פישינג\n"
         f"{'=' * 40}\n\n"
         f"שלום,\n\n"
         f"LURA זיהה מייל פישינג שנשלח ל-{monitored_name} ({monitored_email}).\n\n"
@@ -237,7 +238,6 @@ def _build_html(
     risk_level: str,
 ) -> str:
     color = _risk_color(risk_score)
-    emoji = _risk_emoji(risk_score)
     now = datetime.now().strftime("%d/%m/%Y %H:%M")
     subject_display = phishing_subject or "(ללא נושא)"
 
@@ -278,7 +278,7 @@ def _build_html(
 
         <!-- BODY -->
         <tr>
-          <td style="background:#1e293b;padding:32px;">
+          <td style="background:#1e293b;padding:32px;text-align:right;direction:rtl;">
 
             <p style="color:#e2e8f0;font-size:16px;margin:0 0 8px;">שלום,</p>
             <p style="color:#e2e8f0;font-size:15px;margin:0 0 28px;line-height:1.7;">
@@ -306,19 +306,19 @@ def _build_html(
             <table width="100%" cellpadding="0" cellspacing="0"
                    style="border-radius:10px;overflow:hidden;margin-bottom:24px;">
               <tr>
-                <td style="background:#0f172a;padding:13px 18px;border-bottom:1px solid #1e293b;">
+                <td style="background:#0f172a;padding:13px 18px;border-bottom:1px solid #1e293b;text-align:right;direction:rtl;">
                   <span style="color:#94a3b8;font-size:12px;display:block;margin-bottom:3px;">שולח חשוד</span>
                   <span style="color:#f87171;font-weight:700;font-size:14px;word-break:break-all;">{phishing_sender}</span>
                 </td>
               </tr>
               <tr>
-                <td style="background:#0f172a;padding:13px 18px;border-bottom:1px solid #1e293b;">
+                <td style="background:#0f172a;padding:13px 18px;border-bottom:1px solid #1e293b;text-align:right;direction:rtl;">
                   <span style="color:#94a3b8;font-size:12px;display:block;margin-bottom:3px;">נושא המייל</span>
                   <span style="color:#e2e8f0;font-size:14px;">{subject_display}</span>
                 </td>
               </tr>
               <tr>
-                <td style="background:#0f172a;padding:13px 18px;">
+                <td style="background:#0f172a;padding:13px 18px;text-align:right;direction:rtl;">
                   <span style="color:#94a3b8;font-size:12px;display:block;margin-bottom:3px;">זמן זיהוי</span>
                   <span style="color:#e2e8f0;font-size:14px;">{now}</span>
                 </td>
@@ -329,8 +329,8 @@ def _build_html(
             <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
               <tr>
                 <td style="background:#172554;border-right:4px solid #3b82f6;
-                           border-radius:0 10px 10px 0;padding:16px 20px;">
-                  <p style="color:#93c5fd;margin:0 0 6px;font-size:14px;font-weight:700;">💡 מה לעשות עכשיו?</p>
+                           border-radius:0 10px 10px 0;padding:16px 20px;text-align:right;direction:rtl;">
+                  <p style="color:#93c5fd;margin:0 0 6px;font-size:14px;font-weight:700;">מה לעשות עכשיו?</p>
                   <p style="color:#dbeafe;margin:0;font-size:14px;line-height:1.7;">
                     פנה ל-<strong>{monitored_name}</strong> ווודא שהם:<br>
                     • לא לחצו על קישורים במייל זה<br>
@@ -359,44 +359,149 @@ def _build_html(
 </html>
 """
 
+# ---------------------------------------------------------------------------
+# Password reset
+# ---------------------------------------------------------------------------
+
 def send_password_reset(*, to_email: str, name: str, token: str) -> bool:
-    """שליחת קישור איפוס סיסמה."""
-    if not EMAIL_ENABLED or not SMTP_USER or not SMTP_PASSWORD:
-        logger.warning("[Email] שליחת מיילים מושבתת")
+    """
+    שולח קישור חד-פעמי לאיפוס סיסמה.
+
+    האסימון נוצר ב-API/auth.py ותוקפו קצר (ראה RESET_TOKEN_TTL_MINUTES).
+    הקישור הוא הדרך היחידה לאפס סיסמה — אין נתיב שמקבל כתובת מייל בלבד.
+    """
+    if not EMAIL_ENABLED:
+        logger.info("[Email] מצב כבוי – היה נשלח קישור איפוס ל-%s", to_email)
         return False
 
-    link = f"http://localhost:8000/app/forgot_password.html?token={token}"
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = "LURA — איפוס סיסמה"
-    msg["From"]    = f"{EMAIL_FROM_NAME} <{SMTP_USER}>"
-    msg["To"]      = to_email
+    if not SMTP_USER or not SMTP_PASSWORD:
+        logger.warning("[Email] פרטי SMTP לא מוגדרים – דלג על קישור איפוס")
+        return False
 
-    msg.attach(MIMEText(
-        f"שלום {name},\n\nלאיפוס הסיסמה שלך: {link}\n"
-        f"הקישור תקף ל-30 דקות.\n\nאם לא ביקשת זאת — התעלם מההודעה.",
-        "plain", "utf-8"))
-    msg.attach(MIMEText(f"""
-      <div dir="rtl" style="font-family:Arial,sans-serif;max-width:520px;margin:auto;
-                            background:#0f172a;color:#e2e8f0;padding:32px;border-radius:14px">
-        <h2 style="margin:0 0 6px;text-align:center">LURA</h2>
-        <p style="color:#94a3b8;text-align:center;margin:0 0 24px;font-size:13px">איפוס סיסמה</p>
-        <p>שלום {name},</p>
-        <p>קיבלנו בקשה לאיפוס הסיסמה שלך.</p>
-        <p style="text-align:center;margin:26px 0">
-          <a href="{link}" style="background:#7C4DFF;color:#fff;padding:12px 28px;
-             border-radius:8px;text-decoration:none;font-weight:600">אפס סיסמה</a>
-        </p>
-        <p style="color:#64748b;font-size:12px">הקישור תקף ל-30 דקות.
-           אם לא ביקשת זאת — אפשר להתעלם מההודעה.</p>
-      </div>""", "html", "utf-8"))
+    link = f"{APP_BASE_URL}/app/forgot_password.html?token={token}"
+
+    msg = MIMEMultipart("related")
+    msg["Subject"] = "LURA – איפוס סיסמה"
+    msg["From"] = f"{EMAIL_FROM_NAME} <{SMTP_USER}>"
+    msg["To"] = to_email
+
+    alt_part = MIMEMultipart("alternative")
+    alt_part.attach(MIMEText(_reset_plain_text(name, link), "plain", "utf-8"))
+    alt_part.attach(MIMEText(_reset_html(name, link), "html", "utf-8"))
+    msg.attach(alt_part)
+
+    _attach_icon(msg)
 
     try:
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
-            server.ehlo(); server.starttls()
+            server.ehlo()
+            server.starttls()
             server.login(SMTP_USER, SMTP_PASSWORD)
             server.sendmail(SMTP_USER, to_email, msg.as_string())
-        logger.info("[Email] קישור איפוס נשלח ל-%s", to_email)
+        logger.info("[Email] קישור איפוס סיסמה נשלח ל-%s", to_email)
         return True
+
+    except smtplib.SMTPAuthenticationError:
+        logger.error("[Email] שגיאת אימות SMTP – בדוק SMTP_USER ו-SMTP_PASSWORD")
+    except smtplib.SMTPException as exc:
+        logger.error("[Email] שגיאת SMTP בשליחת איפוס: %s", exc)
+    except OSError as exc:
+        logger.error("[Email] שגיאת רשת בשליחת איפוס: %s", exc)
     except Exception as exc:
-        logger.error("[Email] שגיאה בשליחת איפוס: %s", exc)
-        return False
+        logger.error("[Email] שגיאה לא צפויה בשליחת איפוס: %s", exc)
+
+    return False
+
+
+def _reset_plain_text(name: str, link: str) -> str:
+    return (
+        f"LURA – איפוס סיסמה\n"
+        f"{'=' * 40}\n\n"
+        f"שלום {name},\n\n"
+        f"קיבלנו בקשה לאיפוס הסיסמה של החשבון שלך.\n"
+        f"לאיפוס, היכנס לקישור הבא:\n\n"
+        f"{link}\n\n"
+        f"הקישור תקף ל-30 דקות ומיועד לשימוש חד-פעמי.\n\n"
+        f"אם לא ביקשת לאפס את הסיסמה — אפשר להתעלם מהודעה זו,\n"
+        f"הסיסמה הנוכחית שלך תישאר בתוקף.\n\n"
+        f"{'─' * 40}\n"
+        f"LURA – מערכת הגנה מפישינג"
+    )
+
+
+def _reset_html(name: str, link: str) -> str:
+    return f"""\
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>איפוס סיסמה – LURA</title>
+</head>
+<body style="margin:0;padding:0;background:#0f172a;
+             font-family:'Segoe UI',Arial,sans-serif;direction:rtl;">
+<table width="100%" cellpadding="0" cellspacing="0"
+       style="background:#0f172a;padding:40px 20px;">
+  <tr>
+    <td align="center">
+      <table width="560" cellpadding="0" cellspacing="0"
+             style="max-width:560px;width:100%;border-radius:16px;overflow:hidden;
+                    box-shadow:0 25px 50px rgba(0,0,0,0.5);">
+
+        <tr>
+          <td style="background:linear-gradient(135deg,#1e293b 0%,#0f172a 100%);
+                     padding:32px;text-align:center;border-bottom:3px solid #7c4dff;">
+            <img src="cid:{ICON_CID}" alt="LURA"
+                 style="width:48px;height:48px;margin-bottom:8px;">
+            <h1 style="color:#fff;margin:0;font-size:26px;font-weight:800;">LURA</h1>
+            <p style="color:#94a3b8;margin:6px 0 0;font-size:13px;">איפוס סיסמה</p>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="background:#1e293b;padding:32px;text-align:right;direction:rtl;">
+            <p style="color:#e2e8f0;font-size:16px;margin:0 0 8px;">שלום {name},</p>
+            <p style="color:#e2e8f0;font-size:15px;margin:0 0 28px;line-height:1.7;">
+              קיבלנו בקשה לאיפוס הסיסמה של החשבון שלך.
+              לחץ על הכפתור כדי לבחור סיסמה חדשה:
+            </p>
+
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+              <tr>
+                <td align="center">
+                  <a href="{link}"
+                     style="display:inline-block;background:#7c4dff;color:#fff;
+                            padding:14px 34px;border-radius:10px;text-decoration:none;
+                            font-size:15px;font-weight:700;">בחר סיסמה חדשה</a>
+                </td>
+              </tr>
+            </table>
+
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+              <tr>
+                <td style="background:#172554;border-right:4px solid #3b82f6;
+                           border-radius:0 10px 10px 0;padding:16px 20px;
+                           text-align:right;direction:rtl;">
+                  <p style="color:#dbeafe;margin:0;font-size:14px;line-height:1.7;">
+                    הקישור תקף ל-<strong>30 דקות</strong> בלבד.
+                    <br>אם לא ביקשת לאפס את הסיסמה — אפשר להתעלם מהודעה זו,
+                    והסיסמה הנוכחית שלך תישאר בתוקף.
+                  </p>
+                </td>
+              </tr>
+            </table>
+
+            <hr style="border:none;border-top:1px solid #334155;margin:0 0 20px;">
+            <p style="color:#475569;font-size:12px;text-align:center;margin:0;line-height:1.6;">
+              הודעה זו נשלחה אוטומטית ממערכת LURA
+            </p>
+          </td>
+        </tr>
+
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
+</html>
+"""

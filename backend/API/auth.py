@@ -1,10 +1,10 @@
 """
-POST /auth/register  – יצירת משתמש חדש
-POST /auth/login     – התחברות + קבלת JWT
-POST /auth/reset-password – איפוס סיסמה
-GET  /auth/me        – פרטי המשתמש הנוכחי
+POST /auth/register         – יצירת משתמש חדש
+POST /auth/login            – התחברות + קבלת JWT
+POST /auth/forgot-password  – בקשת קישור לאיפוס סיסמה
+POST /auth/reset-password   – איפוס סיסמה באמצעות אסימון חד-פעמי
+GET  /auth/me               – פרטי המשתמש הנוכחי
 """
-import os
 import hashlib
 from datetime import datetime, timedelta
 
@@ -14,17 +14,21 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
+from config import SECRET_KEY, JWT_ALGORITHM, TOKEN_TTL_DAYS, RESET_TOKEN_TTL_MINUTES
 from database import get_db
-from models import User
-from schemas import RegisterRequest, LoginRequest, TokenResponse, UserProfile, ResetPasswordRequest
 from email_service import send_password_reset
+from models import User
+from schemas import (
+    RegisterRequest, LoginRequest, TokenResponse, UserProfile,
+    ForgotPasswordRequest, ResetPasswordRequest,
+)
 from utils import get_name_from_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 security = HTTPBearer(auto_error=False)
 
-SECRET_KEY = os.getenv("SECRET_KEY", "lura-dev-secret-change-in-production")
-ALGORITHM  = "HS256"
+ALGORITHM = JWT_ALGORITHM
+MIN_PASSWORD_LENGTH = 8
 
 
 def hash_password(password: str) -> str:
@@ -44,18 +48,39 @@ def verify_password(plain: str, stored: str) -> bool:
 
 
 def create_token(email: str) -> str:
-    payload = {"sub": email, "exp": datetime.utcnow() + timedelta(days=7)}
+    payload = {
+        "sub": email,
+        "purpose": "auth",
+        "exp": datetime.utcnow() + timedelta(days=TOKEN_TTL_DAYS),
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def create_reset_token(email: str) -> str:
+    """אסימון חד-פעמי קצר-מועד לאיפוס סיסמה."""
+    payload = {
+        "sub": email,
+        "purpose": "reset",
+        "exp": datetime.utcnow() + timedelta(minutes=RESET_TOKEN_TTL_MINUTES),
+    }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
 def decode_token(token: str) -> str:
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return payload["sub"]
     except jwt.ExpiredSignatureError:
         raise HTTPException(401, "הטוקן פג תוקף — התחבר מחדש")
     except jwt.InvalidTokenError:
         raise HTTPException(401, "טוקן לא תקין")
+
+    # אסימון איפוס סיסמה אינו אסימון התחברות — אחרת קישור מהמייל
+    # היה משמש כהזדהות מלאה למערכת.
+    # ("auth" הוא גם ברירת המחדל, לתאימות עם טוקנים שהונפקו לפני השינוי)
+    if payload.get("purpose", "auth") != "auth":
+        raise HTTPException(401, "טוקן לא תקין")
+
+    return payload["sub"]
 
 
 def get_current_user(
@@ -98,23 +123,23 @@ async def login(data: LoginRequest, db: Session = Depends(get_db)):
     return TokenResponse(token=create_token(str(data.email)), email=str(data.email), name=user.name)
 
 
-def create_reset_token(email: str) -> str:
-    payload = {"sub": email, "purpose": "reset",
-               "exp": datetime.utcnow() + timedelta(minutes=30)}
-    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
-
-
-@router.post("/forgot-password", summary="בקשת איפוס סיסמה")
+@router.post("/forgot-password", summary="בקשת קישור לאיפוס סיסמה")
 async def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """
+    שולח קישור איפוס למייל. התשובה זהה בין אם הכתובת רשומה ובין אם לא,
+    כדי לא לחשוף אילו כתובות קיימות במערכת (user enumeration).
+    """
     user = db.query(User).filter(User.email == str(data.email)).first()
     if user:
-        send_password_reset(to_email=user.email, name=user.name,
-                            token=create_reset_token(user.email))
-    # תמיד אותה תשובה — לא מגלים אילו כתובות רשומות במערכת
-    return {"message": "אם הכתובת רשומה, נשלח אליה קישור לאיפוס סיסמה"}
+        send_password_reset(
+            to_email=user.email,
+            name=user.name,
+            token=create_reset_token(user.email),
+        )
+    return {"message": "אם הכתובת רשומה במערכת, נשלח אליה קישור לאיפוס סיסמה"}
 
 
-@router.post("/reset-password", summary="איפוס סיסמה עם אסימון")
+@router.post("/reset-password", summary="איפוס סיסמה באמצעות אסימון")
 async def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
     try:
         payload = jwt.decode(data.token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -126,8 +151,10 @@ async def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_d
     if payload.get("purpose") != "reset":
         raise HTTPException(400, "קישור לא תקין")
 
-    if len(data.new_password) < 8:
-        raise HTTPException(400, "הסיסמה חייבת להכיל לפחות 8 תווים")
+    if len(data.new_password) < MIN_PASSWORD_LENGTH:
+        raise HTTPException(
+            400, f"הסיסמה חייבת להכיל לפחות {MIN_PASSWORD_LENGTH} תווים"
+        )
 
     user = db.query(User).filter(User.email == payload["sub"]).first()
     if not user:

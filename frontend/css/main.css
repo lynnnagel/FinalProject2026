@@ -2,6 +2,7 @@
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
+  /* ── פלטת המותג — ללא שינוי ── */
   --blue:   #42A5F5;
   --purple: #7C4DFF;
   --pink:   #E040FB;

@@ -1,5 +1,5 @@
 """
-PhishGuard – Central configuration.
+LURA – Central configuration.
 All tuneable constants live here so they can be changed in one place.
 """
 import os
@@ -7,6 +7,27 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent / ".env")
+
+# ---------------------------------------------------------------------------
+# Security
+# SECRET_KEY signs the JWTs. It has no default on purpose: a hard-coded
+# fallback in a public repository lets anyone forge a token for any user.
+# Generate one with:  python -c "import secrets; print(secrets.token_hex(32))"
+# ---------------------------------------------------------------------------
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError(
+        "SECRET_KEY חסר.\n"
+        "צור מפתח:  python -c \"import secrets; print(secrets.token_hex(32))\"\n"
+        "והוסף אותו ל-backend/.env בשורה:  SECRET_KEY=<המפתח שנוצר>"
+    )
+
+JWT_ALGORITHM = "HS256"
+TOKEN_TTL_DAYS = 7            # תוקף טוקן התחברות
+RESET_TOKEN_TTL_MINUTES = 30  # תוקף קישור איפוס סיסמה
+
+# כתובת הבסיס שממנה נבנים קישורים שנשלחים במייל
+APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:8000")
 
 # ---------------------------------------------------------------------------
 # Database

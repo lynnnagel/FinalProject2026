@@ -61,6 +61,39 @@ def client(reset_db):
         yield c
 
 
+# ---------------------------------------------------------------------------
+# Authentication helpers
+#
+# /stats ו-/guardian דורשים טוקן. הפיקסצ'רים כאן רושמים משתמש
+# ומחזירים את כותרת ההזדהות שלו.
+# ---------------------------------------------------------------------------
+@pytest.fixture
+def make_user(client):
+    def _make(email: str, password: str = "testpass123", name: str | None = None):
+        r = client.post(
+            "/auth/register",
+            json={"email": email, "password": password, "name": name},
+        )
+        if r.status_code == 400:          # המשתמש כבר קיים – התחבר במקום
+            r = client.post("/auth/login", json={"email": email, "password": password})
+        assert r.status_code == 200, r.text
+        return {"Authorization": f"Bearer {r.json()['token']}"}
+
+    return _make
+
+
+@pytest.fixture
+def auth_headers(make_user):
+    """המשתמש הראשי בבדיקות — test@example.com."""
+    return make_user("test@example.com")
+
+
+@pytest.fixture
+def parent_headers(make_user):
+    """משתמש המשמש כמפקח — parent@example.com."""
+    return make_user("parent@example.com")
+
+
 @pytest.fixture
 def phishing_email():
     """A clear phishing email that should score ≥ 70."""

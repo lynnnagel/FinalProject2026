@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
 
+from config import CORS_ORIGIN_REGEX
 from database import init_db
 from API.scan import router as scan_router
 from API.stats import router as stats_router
@@ -26,9 +27,11 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+# מקורות מותרים: תוספי דפדפן ו-localhost בלבד (ראה CORS_ORIGIN_REGEX ב-config.py).
+# בעבר עמד כאן allow_origins=["*"], שהתעלם מההגדרה ואיפשר לכל אתר לקרוא ל-API.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex=CORS_ORIGIN_REGEX,
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],

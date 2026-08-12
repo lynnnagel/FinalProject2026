@@ -1,6 +1,21 @@
     const API = 'http://localhost:8000';
     let userEmail = '';
 
+    // כל ערך שמגיע מהשרת עובר בריחה לפני שהוא נכנס ל-innerHTML
+    function esc(value) {
+      return String(value ?? '').replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+      }[ch]));
+    }
+
+    // נתיבי /stats ו-/guardian דורשים הזדהות — הטוקן נשלח בכל קריאה
+    function authHeaders() {
+      return {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('pg_token')}`,
+      };
+    }
+
     function logout() {
       localStorage.clear();
       window.location.href = 'login.html';
@@ -34,7 +49,7 @@
       document.getElementById('sidebarInitial').textContent = name.charAt(0).toUpperCase();
 
       try {
-        const r = await fetch(`${API}/stats/${userEmail}`);
+        const r = await fetch(`${API}/stats/${userEmail}`, { headers: authHeaders() });
         if (r.status === 404) return; // no scans yet
         const d = await r.json();
 
@@ -64,21 +79,21 @@
             <div class="alert-item">
               <div class="alert-dot ${a.risk_level.includes('גבוה') ? 'high' : 'medium'}"></div>
               <div>
-                <div class="alert-msg">${a.message}</div>
+                <div class="alert-msg">${esc(a.message)}</div>
                 <div class="alert-time">${a.created_at ? new Date(a.created_at).toLocaleTimeString('he-IL') : ''}</div>
               </div>
             </div>`).join('');
         }
 
         // Try guardian data
-        const gr = await fetch(`${API}/guardian/${userEmail}`);
+        const gr = await fetch(`${API}/guardian/${userEmail}`, { headers: authHeaders() });
         if (gr.ok) {
           const gd = await gr.json();
           document.getElementById('guardianData').innerHTML = `
             <div class="guardian-child-card">
-              <h4>👦 ${gd.child_name} (${gd.child_email})</h4>
+              <h4>${esc(gd.child_name)} (${esc(gd.child_email)})</h4>
               <div class="guardian-stats-row">
-                <span>פישינג היום: <b>${gd.phishing_blocked_today}</b></span>
+                <span>פישינג היום: <b>${esc(gd.phishing_blocked_today)}</b></span>
                 <span>מדד סיכון: <b style="color:${riskColor(gd.risk_score)}">${Math.round(gd.risk_score)}</b></span>
               </div>
             </div>`;
@@ -98,7 +113,7 @@
       try {
         const r = await fetch(`${API}/scan-url`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders(),
           body: JSON.stringify({ url }),
         });
         const data = await r.json();
@@ -107,14 +122,14 @@
         resultEl.innerHTML = `
           <div class="result-card" style="border-color:${color};margin-top:16px;">
             <div class="result-header">
-              <div class="result-level" style="color:${color}">${data.risk_level}</div>
+              <div class="result-level" style="color:${color}">${esc(data.risk_level)}</div>
               <div class="result-score" style="background:${color}">${score}%</div>
             </div>
             <div class="result-indicators">
-              ${data.indicators.map(i => `<span class="indicator-tag">⚡ ${i}</span>`).join('')}
+              ${data.indicators.map(i => `<span class="indicator-tag">${esc(i)}</span>`).join('')}
             </div>
             <div class="result-recommendation" style="border-color:${color};background:${color}15">
-              💡 ${data.recommendation}
+              ${esc(data.recommendation)}
             </div>
           </div>`;
       } catch {
@@ -129,14 +144,14 @@
       try {
         const r = await fetch(`${API}/guardian/connect`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders(),
           body: JSON.stringify({ child_email: childEmail, parent_email: userEmail }),
         });
         const data = await r.json();
         if (r.ok) {
-          resultEl.innerHTML = `<div class="form-success">✅ מצב הורה הופעל עבור ${childEmail}</div>`;
+          resultEl.innerHTML = `<div class="form-success">✅ מצב הורה הופעל עבור ${esc(childEmail)}</div>`;
         } else {
-          resultEl.innerHTML = `<div class="form-error">${data.detail}</div>`;
+          resultEl.innerHTML = `<div class="form-error">${esc(data.detail)}</div>`;
         }
       } catch {
         resultEl.innerHTML = '<div class="form-error">שגיאת חיבור לשרת</div>';
@@ -154,15 +169,15 @@
       try {
         const r = await fetch(`${API}/guardian/disconnect`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders(),
           body: JSON.stringify({ child_email: childEmail, parent_email: userEmail }),
         });
         const data = await r.json();
         if (r.ok) {
-          resultEl.innerHTML = `<div class="form-success">✅ השיוך של ${childEmail} הוסר בהצלחה</div>`;
+          resultEl.innerHTML = `<div class="form-success">✅ השיוך של ${esc(childEmail)} הוסר בהצלחה</div>`;
           document.getElementById('guardianData').innerHTML = '';
         } else {
-          resultEl.innerHTML = `<div class="form-error">${data.detail}</div>`;
+          resultEl.innerHTML = `<div class="form-error">${esc(data.detail)}</div>`;
         }
       } catch {
         resultEl.innerHTML = '<div class="form-error">שגיאת חיבור לשרת</div>';

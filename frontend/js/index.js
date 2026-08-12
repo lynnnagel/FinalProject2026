@@ -1,11 +1,21 @@
 const API = 'http://localhost:8000';
 
+// ── Escaping ──────────────────────────────────────────────
+// כל ערך שמגיע מהשרת עובר דרך כאן לפני שהוא נכנס ל-innerHTML.
+// data.url הוא קלט של המשתמש שהשרת מחזיר כמו שהוא, ובלי בריחה
+// הדבקת "<img src=x onerror=...>" בשדה הסריקה הייתה מריצה סקריפט.
+function esc(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[ch]));
+}
+
 // ── Nav state ─────────────────────────────────────────────
 function initNav() {
   const token = localStorage.getItem('pg_token');
   if (token) {
-    document.getElementById('navLogin').style.display    = 'none';
-    document.getElementById('navLogout').style.display   = 'block';
+    document.getElementById('navLogin').style.display     = 'none';
+    document.getElementById('navLogout').style.display    = 'block';
     document.getElementById('navDashboard').style.display = 'block';
   }
 }
@@ -21,7 +31,6 @@ function goGuardian() {
   if (token) {
     window.location.href = 'dashboard.html#guardian';
   } else {
-    // נחזור למצב מפקח מיד אחרי ההתחברות
     localStorage.setItem('pg_after_login', 'dashboard.html#guardian');
     window.location.href = 'login.html';
   }
@@ -64,7 +73,7 @@ async function scanURL() {
     renderResult(data, resultEl);
   } catch {
     resultEl.innerHTML =
-      `<div class="result-error">לא ניתן להתחבר לשרת. ודא שהשרת פועל.</div>`;
+      '<div class="result-error">לא ניתן להתחבר לשרת. ודא שהשרת פועל.</div>';
     resultEl.style.display = 'block';
   }
 
@@ -83,21 +92,21 @@ function renderResult(data, el) {
   const score = data.risk_score ?? 0;
   const cls   = riskClass(score);
   const tags  = (data.indicators || [])
-    .map(i => `<span class="indicator-tag">${i}</span>`)
+    .map(i => `<span class="indicator-tag">${esc(i)}</span>`)
     .join('');
 
   el.innerHTML = `
     <div class="result-card ${cls}">
       <div class="result-header">
         <div class="result-meta">
-          <div class="result-level">${data.risk_level || ''}</div>
-          <div class="result-url">${data.url || ''}</div>
+          <div class="result-level">${esc(data.risk_level)}</div>
+          <div class="result-url">${esc(data.url)}</div>
         </div>
-        <div class="result-score">${score}%</div>
+        <div class="result-score">${esc(score)}%</div>
       </div>
       ${tags ? `<div class="result-indicators">${tags}</div>` : ''}
       ${data.recommendation
-        ? `<div class="result-recommendation">${data.recommendation}</div>`
+        ? `<div class="result-recommendation">${esc(data.recommendation)}</div>`
         : ''}
     </div>`;
   el.style.display = 'block';
