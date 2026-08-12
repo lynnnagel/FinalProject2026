@@ -20,9 +20,11 @@ from __future__ import annotations
 import logging
 import smtplib
 from datetime import datetime
+from pathlib import Path
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
+
 
 
 from config import (
@@ -183,13 +185,15 @@ def _build_message(
     alt_part.attach(MIMEText(html, "html", "utf-8"))
     msg.attach(alt_part)
 
-    icon_path = Path(__file__).parent.parent / "frontend" / "icons" / "icon128.png"
+    icon_path = Path(__file__).parent.parent / "extension" / "icons" / "icon128.png"
     if icon_path.exists():
         with open(icon_path, "rb") as f:
             img = MIMEImage(f.read())
             img.add_header("Content-ID", "<lura_icon>")
             img.add_header("Content-Disposition", "inline")
             msg.attach(img)
+    else:
+        logger.warning("[Email] אייקון לא נמצא: %s", icon_path)
 
     return msg
 
@@ -257,7 +261,7 @@ def _build_html(
         <tr>
           <td style="background:linear-gradient(135deg,#1e293b 0%,#0f172a 100%);
                      padding:32px;text-align:center;border-bottom:3px solid {color};">
-            <img src="cid:icon128.png" alt="LURA" style="width:48px;height:48px;margin-bottom:8px;">
+            <img src="cid:lura_icon" alt="LURA" style="width:48px;height:48px;margin-bottom:8px;">
             <h1 style="color:#fff;margin:0;font-size:26px;font-weight:800;">LURA</h1>
             <p style="color:#94a3b8;margin:6px 0 0;font-size:13px;">מערכת הגנה מפישינג</p>
           </td>
@@ -354,3 +358,45 @@ def _build_html(
 </body>
 </html>
 """
+
+def send_password_reset(*, to_email: str, name: str, token: str) -> bool:
+    """שליחת קישור איפוס סיסמה."""
+    if not EMAIL_ENABLED or not SMTP_USER or not SMTP_PASSWORD:
+        logger.warning("[Email] שליחת מיילים מושבתת")
+        return False
+
+    link = f"http://localhost:8000/app/forgot_password.html?token={token}"
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = "LURA — איפוס סיסמה"
+    msg["From"]    = f"{EMAIL_FROM_NAME} <{SMTP_USER}>"
+    msg["To"]      = to_email
+
+    msg.attach(MIMEText(
+        f"שלום {name},\n\nלאיפוס הסיסמה שלך: {link}\n"
+        f"הקישור תקף ל-30 דקות.\n\nאם לא ביקשת זאת — התעלם מההודעה.",
+        "plain", "utf-8"))
+    msg.attach(MIMEText(f"""
+      <div dir="rtl" style="font-family:Arial,sans-serif;max-width:520px;margin:auto;
+                            background:#0f172a;color:#e2e8f0;padding:32px;border-radius:14px">
+        <h2 style="margin:0 0 6px;text-align:center">LURA</h2>
+        <p style="color:#94a3b8;text-align:center;margin:0 0 24px;font-size:13px">איפוס סיסמה</p>
+        <p>שלום {name},</p>
+        <p>קיבלנו בקשה לאיפוס הסיסמה שלך.</p>
+        <p style="text-align:center;margin:26px 0">
+          <a href="{link}" style="background:#7C4DFF;color:#fff;padding:12px 28px;
+             border-radius:8px;text-decoration:none;font-weight:600">אפס סיסמה</a>
+        </p>
+        <p style="color:#64748b;font-size:12px">הקישור תקף ל-30 דקות.
+           אם לא ביקשת זאת — אפשר להתעלם מההודעה.</p>
+      </div>""", "html", "utf-8"))
+
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
+            server.ehlo(); server.starttls()
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.sendmail(SMTP_USER, to_email, msg.as_string())
+        logger.info("[Email] קישור איפוס נשלח ל-%s", to_email)
+        return True
+    except Exception as exc:
+        logger.error("[Email] שגיאה בשליחת איפוס: %s", exc)
+        return False

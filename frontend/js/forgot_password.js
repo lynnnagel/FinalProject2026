@@ -1,6 +1,7 @@
 
     const API = 'http://localhost:8000';
 
+
     async function handleReset(e) {
       e.preventDefault();
       const errEl = document.getElementById('resetError');
@@ -50,3 +51,14 @@
         btn.disabled = false;
       }
     }
+
+    await fetch(`${API}/auth/forgot-password`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ email })
+});
+
+const token = new URLSearchParams(location.search).get('token');
+await fetch(`${API}/auth/reset-password`, {
+  method: 'POST', headers: {'Content-Type':'application/json'},
+  body: JSON.stringify({ token, new_password: newPassword })
+});

@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import User
 from schemas import RegisterRequest, LoginRequest, TokenResponse, UserProfile, ResetPasswordRequest
+from email_service import send_password_reset
 from utils import get_name_from_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -97,13 +98,41 @@ async def login(data: LoginRequest, db: Session = Depends(get_db)):
     return TokenResponse(token=create_token(str(data.email)), email=str(data.email), name=user.name)
 
 
-@router.post("/reset-password")
-async def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
+def create_reset_token(email: str) -> str:
+    payload = {"sub": email, "purpose": "reset",
+               "exp": datetime.utcnow() + timedelta(minutes=30)}
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+
+@router.post("/forgot-password", summary="בקשת איפוס סיסמה")
+async def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == str(data.email)).first()
+    if user:
+        send_password_reset(to_email=user.email, name=user.name,
+                            token=create_reset_token(user.email))
+    # תמיד אותה תשובה — לא מגלים אילו כתובות רשומות במערכת
+    return {"message": "אם הכתובת רשומה, נשלח אליה קישור לאיפוס סיסמה"}
+
+
+@router.post("/reset-password", summary="איפוס סיסמה עם אסימון")
+async def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
+    try:
+        payload = jwt.decode(data.token, SECRET_KEY, algorithms=[ALGORITHM])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(400, "הקישור פג תוקף — בקש קישור חדש")
+    except jwt.InvalidTokenError:
+        raise HTTPException(400, "קישור לא תקין")
+
+    if payload.get("purpose") != "reset":
+        raise HTTPException(400, "קישור לא תקין")
+
+    if len(data.new_password) < 8:
+        raise HTTPException(400, "הסיסמה חייבת להכיל לפחות 8 תווים")
+
+    user = db.query(User).filter(User.email == payload["sub"]).first()
     if not user:
-        raise HTTPException(404, "כתובת המייל לא נמצאה")
-    if len(data.new_password) < 6:
-        raise HTTPException(400, "הסיסמה חייבת להכיל לפחות 6 תווים")
+        raise HTTPException(404, "משתמש לא נמצא")
+
     user.password_hash = hash_password(data.new_password)
     db.commit()
     return {"message": "הסיסמה עודכנה בהצלחה"}

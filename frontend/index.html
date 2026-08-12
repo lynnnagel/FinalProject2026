@@ -4,31 +4,141 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LURA — Don't Take The Bait</title>
+  <link rel="icon" href="icons/icon128.png">
   <link rel="stylesheet" href="css/main.css">
-    <link rel="icon" href="icons/icon128.png">
 </head>
 <body>
-  <nav class="navbar">
-        <div class="nav-brand"><img src="icons/icon128.png" alt="LURA" style="height:24px;vertical-align:middle;margin-left:6px;">LURA</div>
-    <div class="nav-links">
-      <a href="index.html" class="active">בית</a>
-      <a href="dashboard.html" id="navDashboard" style="display:none">לוח בקרה</a>
-      <a href="login.html" id="navLogin">התחברות</a>
-      <button class="btn-logout" id="navLogout" style="display:none" onclick="logout()">יציאה</button>
-    </div>
-  </nav>
 
+<nav class="navbar">
+  <div class="nav-brand">
+    <img src="icons/icon128.png" alt="LURA" class="brand-mark">
+    <span class="brand-word">LURA</span>
+  </div>
+  <div class="nav-links">
+    <a href="index.html" class="active">בית</a>
+    <a href="dashboard.html" id="navDashboard" style="display:none">לוח בקרה</a>
+    <a href="login.html" id="navLogin" class="nav-cta">התחברות</a>
+    <button class="btn-logout" id="navLogout" style="display:none" onclick="logout()">יציאה</button>
+  </div>
+</nav>
+
+<!-- ═══════════ HERO ═══════════ -->
+<div class="hero-wrap">
   <section class="hero">
+    <div class="hero-visual">
+      <div class="float-card fc-1">
+        <span class="fc-dot fc-danger">
+          <svg viewBox="0 0 24 24"><path d="M12 8v5M12 16.5v.2"/>
+            <path d="M10.3 3.9L2.6 17.4A2 2 0 004.3 20.4h15.4a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>
+        </span>
+        <span><b class="fc-t">פישינג נחסם</b><span class="fc-s">bank-secure.net</span></span>
+      </div>
+      <div class="float-card fc-2">
+        <span class="fc-dot fc-safe"><svg viewBox="0 0 24 24"><path d="M20 6.5L9.5 17 4.5 12"/></svg></span>
+        <span><b class="fc-t">התראה נשלחה למפקח</b><span class="fc-s">לפני 2 שניות</span></span>
+      </div>
+
+      <div class="stage">
+        <div class="hero-scan" role="img"
+             aria-label="LURA סורקת את תיבת הדואר, מסמנת כל מייל בציון סיכון, וחוסמת את קרס הפישינג במגן">
+          <svg viewBox="0 0 360 340" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="beam" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stop-color="#42A5F5" stop-opacity="0"/>
+                <stop offset="35%" stop-color="#42A5F5" stop-opacity=".85"/>
+                <stop offset="60%" stop-color="#7C4DFF" stop-opacity=".95"/>
+                <stop offset="85%" stop-color="#E040FB" stop-opacity=".7"/>
+                <stop offset="100%" stop-color="#E040FB" stop-opacity="0"/>
+              </linearGradient>
+              <linearGradient id="trail" x1="0" y1="1" x2="0" y2="0">
+                <stop offset="0%" stop-color="#7C4DFF" stop-opacity=".16"/>
+                <stop offset="100%" stop-color="#7C4DFF" stop-opacity="0"/>
+              </linearGradient>
+              <filter id="glow" x="-70%" y="-70%" width="240%" height="240%">
+                <feGaussianBlur stdDeviation="4" result="b"/>
+                <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+              </filter>
+              <filter id="soft" x="-60%" y="-60%" width="220%" height="220%">
+                <feGaussianBlur stdDeviation="7"/>
+              </filter>
+            </defs>
+
+            <g class="lura-panel">
+              <rect x="40" y="45" width="280" height="250" rx="14" fill="#fff"/>
+              <rect x="40" y="45" width="280" height="250" rx="14" fill="none" stroke="#E4DAFF" stroke-width="1.5"/>
+              <line x1="40" y1="84" x2="320" y2="84" stroke="#EDE9F7" stroke-width="1.5"/>
+              <circle cx="62" cy="65" r="3.6" fill="#D9DCE5"/>
+              <circle cx="76" cy="65" r="3.6" fill="#D9DCE5"/>
+              <circle cx="90" cy="65" r="3.6" fill="#D9DCE5"/>
+              <g>
+                <rect x="128" y="112" width="170" height="8" rx="4" fill="#14142B" opacity=".13"/>
+                <rect x="128" y="127" width="120" height="6" rx="3" fill="#14142B" opacity=".07"/>
+                <rect x="128" y="177" width="150" height="8" rx="4" fill="#14142B" opacity=".13"/>
+                <rect x="128" y="192" width="105" height="6" rx="3" fill="#14142B" opacity=".07"/>
+                <rect x="128" y="242" width="165" height="8" rx="4" fill="#14142B" opacity=".13"/>
+                <rect x="128" y="257" width="128" height="6" rx="3" fill="#14142B" opacity=".07"/>
+              </g>
+              <g transform="translate(87,123)"><circle class="lura-alarm" cx="0" cy="0" r="19" fill="#DC2626"/></g>
+              <g class="lura-badge lura-badge-1">
+                <rect x="60" y="110" width="54" height="25" rx="6" fill="#DC2626"/>
+                <text x="87" y="127.5" text-anchor="middle" font-family="Rubik,sans-serif"
+                      font-size="12.5" font-weight="600" fill="#fff">92%</text></g>
+              <g class="lura-badge lura-badge-2">
+                <rect x="60" y="175" width="54" height="25" rx="6" fill="#059669"/>
+                <text x="87" y="192.5" text-anchor="middle" font-family="Rubik,sans-serif"
+                      font-size="12.5" font-weight="600" fill="#fff">4%</text></g>
+              <g class="lura-badge lura-badge-3">
+                <rect x="60" y="240" width="54" height="25" rx="6" fill="#D97706"/>
+                <text x="87" y="257.5" text-anchor="middle" font-family="Rubik,sans-serif"
+                      font-size="12.5" font-weight="600" fill="#fff">67%</text></g>
+              <g class="lura-beam">
+                <rect x="45" y="72" width="270" height="28" fill="url(#trail)"/>
+                <rect x="45" y="100" width="270" height="2.5" rx="1.25" fill="url(#beam)" filter="url(#glow)"/></g>
+            </g>
+
+            <g transform="translate(232,96)"><g class="lura-hook"><g class="lura-hook-sway">
+              <line x1="0" y1="-195" x2="0" y2="-47" stroke="#8E8EA8" stroke-width="1.4"
+                    stroke-linecap="round" opacity=".5"/>
+              <circle cx="0" cy="-42" r="5" fill="none" stroke="#565673" stroke-width="3.2"/>
+              <circle cx="0" cy="-42" r="5" fill="none" stroke="#BCC0CC" stroke-width="1.2"/>
+              <path d="M 0,-37 L 0,4 C 0,15 -6,22 -14,22 C -21,22 -25,16 -25,8 L -25,-7"
+                    fill="none" stroke="#565673" stroke-width="4.6"
+                    stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M 0,-37 L 0,4 C 0,15 -6,22 -14,22 C -21,22 -25,16 -25,8 L -25,-7"
+                    fill="none" stroke="#BCC0CC" stroke-width="1.8"
+                    stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M -25,-7 L -19,-0.5" fill="none" stroke="#565673" stroke-width="3.1" stroke-linecap="round"/>
+              <path d="M -25,-7 L -19,-0.5" fill="none" stroke="#BCC0CC" stroke-width="1.1" stroke-linecap="round"/>
+              <g class="lura-bait">
+                <circle cx="-12" cy="17" r="9" fill="#D97706" opacity=".22"/>
+                <circle cx="-12" cy="17" r="4.8" fill="#D97706"/>
+                <circle cx="-13.5" cy="15.4" r="1.5" fill="#FEF3C7"/></g>
+            </g></g></g>
+
+            <g transform="translate(232,131)">
+              <circle class="lura-ring" cx="0" cy="0" r="22" fill="none" stroke="#7C4DFF" stroke-width="2"/>
+              <circle class="lura-ring lura-ring-2" cx="0" cy="0" r="22" fill="none" stroke="#42A5F5" stroke-width="1.4"/>
+              <g class="lura-shield">
+                <ellipse cx="0" cy="2" rx="24" ry="26" fill="#7C4DFF" opacity=".2" filter="url(#soft)"/>
+                <path d="M 0,-19 L 15,-13 L 15,4 C 15,14 0,21 0,21 C 0,21 -15,14 -15,4 L -15,-13 Z" fill="#7C4DFF"/>
+                <path d="M -6.5,0.5 L -2,6 L 7,-6.5" fill="none" stroke="#fff" stroke-width="2.6"
+                      stroke-linecap="round" stroke-linejoin="round"/></g>
+            </g>
+          </svg>
+        </div>
+      </div>
+    </div>
+
     <div class="hero-content">
-      <div class="hero-badge">✨ מערכת זיהוי פישינג בזמן אמת ✨ </div>
+      <div class="hero-badge"><span class="hero-badge-dot"></span>זיהוי פישינג בזמן אמת</div>
       <h1>הגן על עצמך<br><span class="gradient-text">מפני פישינג</span></h1>
       <p class="hero-sub">
         LURA סורקת את תיבת הדוא"ל שלך בזמן אמת ומתריעה לפני שתלחץ על קישור מסוכן.
-        8 שכבות הגנה, תמיכה בעברית ואנגלית, מצב הורה מובנה.
+        תמיכה בעברית ואנגלית, מצב מפקח מובנה, והתקנה בלחיצה אחת.
       </p>
       <div class="hero-actions">
-        <a href="#scanner" class="btn-primary"> נסה סריקת קישור</a>
-        <a href="login.html" class="btn-secondary"> התחל עכשיו</a>
+        <a href="#install" class="btn-primary">התקן את התוסף</a>
+        <a href="#scanner" class="btn-secondary">נסה סריקת קישור</a>
       </div>
       <div class="hero-stats">
         <div class="hero-stat"><span id="totalScanned">—</span><small>מיילים נסרקו</small></div>
@@ -36,184 +146,296 @@
         <div class="hero-stat"><span>&lt;2s</span><small>זמן תגובה</small></div>
       </div>
     </div>
-    <div class="hero-visual">
-            <div class="hero-scan" role="img"
-     aria-label="LURA סורקת את תיבת הדואר, מסמנת כל מייל בציון סיכון, וחוסמת את קרס הפישינג במגן">
-  <svg viewBox="0 0 360 340" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <linearGradient id="luraBeam" x1="0" y1="0" x2="1" y2="0">
-        <stop offset="0%"   stop-color="#42A5F5" stop-opacity="0"/>
-        <stop offset="50%"  stop-color="#7C4DFF" stop-opacity=".95"/>
-        <stop offset="100%" stop-color="#E040FB" stop-opacity="0"/>
-      </linearGradient>
-      <linearGradient id="luraTrail" x1="0" y1="1" x2="0" y2="0">
-        <stop offset="0%"   stop-color="#7C4DFF" stop-opacity=".22"/>
-        <stop offset="100%" stop-color="#7C4DFF" stop-opacity="0"/>
-      </linearGradient>
-      <linearGradient id="luraFrame" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%"   stop-color="#42A5F5"/>
-        <stop offset="50%"  stop-color="#7C4DFF"/>
-        <stop offset="100%" stop-color="#E040FB"/>
-      </linearGradient>
-      <linearGradient id="luraShield" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%"   stop-color="#5B8DEF"/>
-        <stop offset="100%" stop-color="#7C4DFF"/>
-      </linearGradient>
-      <filter id="luraGlow" x="-70%" y="-70%" width="240%" height="240%">
-        <feGaussianBlur stdDeviation="5" result="b"/>
-        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-      </filter>
-      <filter id="luraSoft" x="-60%" y="-60%" width="220%" height="220%">
-        <feGaussianBlur stdDeviation="7"/>
-      </filter>
-    </defs>
-
-    <circle cx="180" cy="170" r="155" fill="url(#luraFrame)" opacity=".10"/>
-    <circle cx="180" cy="170" r="112" fill="url(#luraFrame)" opacity=".07"/>
-
-    <g class="lura-panel">
-      <rect x="40" y="45" width="280" height="250" rx="18" fill="#fff" opacity=".94"/>
-      <rect x="40" y="45" width="280" height="250" rx="18" fill="none"
-            stroke="url(#luraFrame)" stroke-width="2" opacity=".55"/>
-
-      <circle cx="64" cy="70" r="4.5" fill="#E040FB" opacity=".75"/>
-      <circle cx="80" cy="70" r="4.5" fill="#7C4DFF" opacity=".75"/>
-      <circle cx="96" cy="70" r="4.5" fill="#42A5F5" opacity=".75"/>
-      <line x1="40" y1="88" x2="320" y2="88" stroke="#7C4DFF" stroke-width="1" opacity=".18"/>
-
-      <g>
-        <rect x="128" y="112" width="170" height="9" rx="4.5" fill="#7C4DFF" opacity=".22"/>
-        <rect x="128" y="128" width="120" height="7" rx="3.5" fill="#7C4DFF" opacity=".13"/>
-        <rect x="128" y="177" width="150" height="9" rx="4.5" fill="#7C4DFF" opacity=".22"/>
-        <rect x="128" y="193" width="105" height="7" rx="3.5" fill="#7C4DFF" opacity=".13"/>
-        <rect x="128" y="242" width="165" height="9" rx="4.5" fill="#7C4DFF" opacity=".22"/>
-        <rect x="128" y="258" width="128" height="7" rx="3.5" fill="#7C4DFF" opacity=".13"/>
-      </g>
-
-      <g transform="translate(87,123)">
-        <circle class="lura-alarm" cx="0" cy="0" r="20" fill="#dc2626"/>
-      </g>
-
-      <g class="lura-badge lura-badge-1">
-        <rect x="60" y="110" width="54" height="26" rx="13" fill="#dc2626"/>
-        <text x="87" y="128" text-anchor="middle" font-family="Segoe UI,Arial,sans-serif"
-              font-size="13" font-weight="700" fill="#fff">92%</text>
-      </g>
-      <g class="lura-badge lura-badge-2">
-        <rect x="60" y="175" width="54" height="26" rx="13" fill="#10b981"/>
-        <text x="87" y="193" text-anchor="middle" font-family="Segoe UI,Arial,sans-serif"
-              font-size="13" font-weight="700" fill="#fff">4%</text>
-      </g>
-      <g class="lura-badge lura-badge-3">
-        <rect x="60" y="240" width="54" height="26" rx="13" fill="#f59e0b"/>
-        <text x="87" y="258" text-anchor="middle" font-family="Segoe UI,Arial,sans-serif"
-              font-size="13" font-weight="700" fill="#fff">67%</text>
-      </g>
-
-      <g class="lura-beam">
-        <rect x="46" y="72" width="268" height="28" fill="url(#luraTrail)"/>
-        <rect x="46" y="100" width="268" height="3" rx="1.5"
-              fill="url(#luraBeam)" filter="url(#luraGlow)"/>
-      </g>
-    </g>
-
-    <!-- PHISHING HOOK -->
-    <g transform="translate(232,96)">
-      <g class="lura-hook">
-        <g class="lura-hook-sway">
-          <line x1="0" y1="-195" x2="0" y2="-47" stroke="#7c8899"
-                stroke-width="1.6" stroke-linecap="round" opacity=".55"/>
-
-          <circle cx="0" cy="-42" r="5" fill="none" stroke="#475569" stroke-width="3.4"/>
-          <circle cx="0" cy="-42" r="5" fill="none" stroke="#a8b3c2" stroke-width="1.3"/>
-
-          <path d="M 0,-37 L 0,4 C 0,15 -6,22 -14,22 C -21,22 -25,16 -25,8 L -25,-7"
-                fill="none" stroke="#475569" stroke-width="4.8"
-                stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M 0,-37 L 0,4 C 0,15 -6,22 -14,22 C -21,22 -25,16 -25,8 L -25,-7"
-                fill="none" stroke="#a8b3c2" stroke-width="1.9"
-                stroke-linecap="round" stroke-linejoin="round"/>
-
-          <path d="M -25,-7 L -19,-0.5" fill="none" stroke="#475569"
-                stroke-width="3.2" stroke-linecap="round"/>
-          <path d="M -25,-7 L -19,-0.5" fill="none" stroke="#a8b3c2"
-                stroke-width="1.2" stroke-linecap="round"/>
-
-          <g class="lura-bait">
-            <circle cx="-12" cy="17" r="9.5" fill="#f59e0b" opacity=".28"/>
-            <circle cx="-12" cy="17" r="5" fill="#fbbf24"/>
-            <circle cx="-13.6" cy="15.3" r="1.6" fill="#fffbeb"/>
-          </g>
-        </g>
-      </g>
-    </g>
-
-    <!-- SHIELD BLOCK -->
-    <g transform="translate(232,131)">
-      <circle class="lura-ring" cx="0" cy="0" r="22" fill="none"
-              stroke="#7C4DFF" stroke-width="2.4"/>
-      <circle class="lura-ring lura-ring-2" cx="0" cy="0" r="22" fill="none"
-              stroke="#42A5F5" stroke-width="1.8"/>
-      <g class="lura-shield">
-        <ellipse cx="0" cy="2" rx="25" ry="27" fill="#7C4DFF" opacity=".3" filter="url(#luraSoft)"/>
-        <path d="M 0,-19 L 15,-13 L 15,4 C 15,14 0,21 0,21 C 0,21 -15,14 -15,4 L -15,-13 Z"
-              fill="url(#luraShield)"/>
-        <path d="M -6.5,0.5 L -2,6 L 7,-6.5" fill="none" stroke="#fff"
-              stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
-      </g>
-    </g>
-  </svg>
+  </section>
 </div>
-    </div>
-  </section>
 
-  <section class="scanner-section" id="scanner">
-    <div class="container">
-      <h2> סרוק קישור עכשיו</h2>
-      <p class="section-sub">הדבק כתובת URL וקבל ניתוח סיכון מיידי</p>
-      <div class="scanner-box">
-        <div class="scanner-input-wrap">
-          <input type="text" id="urlInput" class="url-input"
-            placeholder="הדבק כתובת URL כאן..." dir="ltr">
-          <button class="btn-scan" id="scanBtn" onclick="scanURL()">נתח</button>
+<!-- ═══════════ URL SCANNER ═══════════ -->
+<section class="scanner-section" id="scanner">
+  <div class="container">
+    <div class="sec-head">
+      <div class="sec-tag">בדיקה מהירה</div>
+      <h2>סרוק קישור עכשיו</h2>
+      <p>הדבק כתובת URL וקבל ניתוח סיכון מיידי — בלי להתקין כלום.</p>
+    </div>
+    <div class="scanner-box">
+      <div class="scanner-input-wrap">
+        <input type="text" id="urlInput" class="url-input"
+               placeholder="הדבק כתובת URL כאן..." dir="ltr">
+        <button class="btn-scan" id="scanBtn" onclick="scanURL()">נתח</button>
+      </div>
+      <div id="scanResult" class="scan-result" style="display:none"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ GMAIL DEMO ═══════════ -->
+<section class="sec rv">
+  <div class="container">
+    <div class="sec-head">
+      <div class="sec-tag">הדגמה</div>
+      <h2>ככה זה נראה בתיבה שלך</h2>
+      <p>כל מייל מקבל סימון צבעוני על השורה. לחיצה עליו פותחת הסבר מלא — למה המייל סומן ומה מומלץ לעשות.</p>
+    </div>
+    <div class="demo">
+      <div class="mail-app">
+        <div class="mail-top"><i></i><i></i><i></i><span>תיבת דואר נכנס</span></div>
+        <div class="mrow sel"><span class="mbadge b-danger">92%</span>
+          <span class="mfrom">בנק הפועלים</span>
+          <span class="msub">חשבונך יינעל תוך 24 שעות — אמת את פרטיך מיד</span>
+          <span class="mtime">09:14</span></div>
+        <div class="mrow"><span class="mbadge b-safe">4%</span>
+          <span class="mfrom">Netflix</span>
+          <span class="msub">החשבונית החודשית שלך מוכנה לצפייה</span>
+          <span class="mtime">08:02</span></div>
+        <div class="mrow"><span class="mbadge b-warn">67%</span>
+          <span class="mfrom">לקוח לא מוכר</span>
+          <span class="msub">הצעת עבודה דחופה — לחץ כאן לפרטים</span>
+          <span class="mtime">אתמול</span></div>
+        <div class="mrow"><span class="mbadge b-safe">7%</span>
+          <span class="mfrom">GitHub</span>
+          <span class="msub">Security alert for your repository</span>
+          <span class="mtime">אתמול</span></div>
+        <div class="mrow"><span class="mbadge b-caution">38%</span>
+          <span class="mfrom">חברת שילוח</span>
+          <span class="msub">החבילה שלך ממתינה — עדכן כתובת</span>
+          <span class="mtime">ג׳</span></div>
+      </div>
+
+      <div class="analysis">
+        <div class="an-top">
+          <div class="an-score"><b>92%</b><span>סכנה גבוהה</span></div>
+          <small>no-reply@bank-hapoalim-secure.net</small>
         </div>
-        <div id="scanResult" class="scan-result" style="display:none"></div>
+        <div class="an-body">
+          <div class="an-lbl">למה סימנו את המייל</div>
+          <div class="ind"><svg viewBox="0 0 24 24"><path d="M12 8v5M12 16.4v.2"/>
+            <circle cx="12" cy="12" r="9"/></svg>הדומיין אינו של הבנק</div>
+          <div class="ind"><svg viewBox="0 0 24 24"><path d="M12 8v5M12 16.4v.2"/>
+            <circle cx="12" cy="12" r="9"/></svg>ניסוח שיוצר לחץ זמן</div>
+          <div class="ind"><svg viewBox="0 0 24 24"><path d="M12 8v5M12 16.4v.2"/>
+            <circle cx="12" cy="12" r="9"/></svg>בקשה לאימות פרטים אישיים</div>
+          <div class="ind"><svg viewBox="0 0 24 24"><path d="M12 8v5M12 16.4v.2"/>
+            <circle cx="12" cy="12" r="9"/></svg>התחזות לארגון רשמי</div>
+          <div class="ind"><svg viewBox="0 0 24 24"><path d="M12 8v5M12 16.4v.2"/>
+            <circle cx="12" cy="12" r="9"/></svg>קישור שאינו מוביל לאתר הבנק</div>
+        </div>
       </div>
     </div>
-  </section>
+  </div>
+</section>
 
-  <section class="features-section">
-    <div class="container">
+<!-- ═══════════ FEATURES ═══════════ -->
+<section class="sec rv nopad-top">
+  <div class="container">
+    <div class="sec-head">
+      <div class="sec-tag">היכולות</div>
       <h2>מה מציע LURA?</h2>
-      <div class="features-grid">
-        <div class="feature-card">
-          <div class="feature-icon">🔌</div>
-          <h3>תוסף Gmail חכם</h3>
-          <p>מותקן ישירות בדפדפן. סורק כל מייל ומציג ציון סיכון ישירות על השורה.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">🤖</div>
-          <h3>ניתוח AI + היוריסטיקה</h3>
-          <p>8 בדיקות חכמות: מילות מפתח, דומיינים מזויפים, IP חשוף, קיצורי קישורים ועוד.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">👁️</div>
-          <h3>מצב הורה</h3>
-          <p>חבר את חשבון הילד שלך וקבל התראות בזמן אמת כשמתגלה מייל מסוכן.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">📊</div>
-          <h3>לוח בקרה אישי</h3>
-          <p>עקוב אחר כל הסריקות, ההתראות ומדד הסיכון האישי שלך.</p>
-        </div>
+      <p>ארבעה רכיבים שעובדים יחד כדי לשמור על תיבת הדואר שלך.</p>
+    </div>
+    <div class="grid4">
+      <div class="card"><div class="card-icon"><svg viewBox="0 0 24 24">
+        <path d="M10 3.5a1.8 1.8 0 013.6 0V5h2.6a1 1 0 011 1v2.6h1.3a1.8 1.8 0 010 3.6H17.2V15a1 1 0 01-1 1h-2.6v1.4a1.8 1.8 0 01-3.6 0V16H7.4a1 1 0 01-1-1v-2.7H5.1a1.8 1.8 0 010-3.6h1.3V6a1 1 0 011-1H10V3.5z"/>
+      </svg></div>
+        <h3>תוסף Gmail חכם</h3>
+        <p>מותקן ישירות בדפדפן. סורק כל מייל ומציג ציון סיכון על השורה.</p></div>
+
+      <div class="card"><div class="card-icon"><svg viewBox="0 0 24 24">
+        <rect x="7" y="7" width="10" height="10" rx="2"/>
+        <path d="M10 2.8v2.4M14 2.8v2.4M10 18.8v2.4M14 18.8v2.4M2.8 10h2.4M2.8 14h2.4M18.8 10h2.4M18.8 14h2.4"/>
+        <path d="M10.6 11.4l1.4 1.4 2.4-2.6"/></svg></div>
+        <h3>זיהוי חכם בשתי שכבות</h3>
+        <p>שילוב של חוקי אבטחה מוכחים ובינה מלאכותית שמבינה כוונה, לא רק מילים.</p></div>
+
+      <div class="card"><div class="card-icon"><svg viewBox="0 0 24 24">
+        <path d="M2.4 12S5.8 5.8 12 5.8 21.6 12 21.6 12 18.2 18.2 12 18.2 2.4 12 2.4 12z"/>
+        <circle cx="12" cy="12" r="3.1"/></svg></div>
+        <h3>מצב מפקח</h3>
+        <p>קבל התראה למייל כשמישהו שאתה שומר עליו מקבל מייל מסוכן.</p></div>
+
+      <div class="card"><div class="card-icon"><svg viewBox="0 0 24 24">
+        <path d="M3.4 20.6h17.2"/>
+        <path d="M6.6 20.6v-6.2M11.2 20.6V8.4M15.8 20.6v-9M20.4 20.6V4.6" stroke-width="2.1"/></svg></div>
+        <h3>לוח בקרה אישי</h3>
+        <p>עקוב אחר כל הסריקות, ההתראות ומדד הסיכון האישי שלך.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ HOW IT WORKS (dark) ═══════════ -->
+<section class="engine">
+  <div class="engine-in">
+    <div class="sec-tag">איך זה עובד</div>
+    <h2>שלושה שלבים, בלי שתעשה כלום</h2>
+    <p class="lead">LURA רצה ברקע ומטפלת בכל מייל שנכנס. אתה רק רואה את התוצאה.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-ico"><svg viewBox="0 0 24 24">
+          <path d="M20.5 6.5l-8.5 6-8.5-6"/><rect x="3.5" y="5" width="17" height="14" rx="2.5"/></svg></div>
+        <h4>מייל נכנס</h4>
+        <p>ברגע שמייל מגיע לתיבה, LURA קוראת את השולח, הנושא והתוכן — הכל במחשב שלך.</p></div>
+      <div class="step">
+        <div class="step-ico"><svg viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="7"/><path d="M16.2 16.2L21 21"/></svg></div>
+        <h4>סריקה בשתי שכבות</h4>
+        <p>חוקי אבטחה בודקים סימנים מוכרים, ובמקביל מודל שפה מזהה ניסיונות מניפולציה.</p></div>
+      <div class="step">
+        <div class="step-ico"><svg viewBox="0 0 24 24">
+          <path d="M12 2.6l7.5 3.2v5.9c0 4.5-3.1 8.2-7.5 9.1-4.4-.9-7.5-4.6-7.5-9.1V5.8L12 2.6z"/>
+          <path d="M9.2 12l2.1 2.1 4-4.3"/></svg></div>
+        <h4>סימון והתראה</h4>
+        <p>המייל מקבל צבע לפי רמת הסיכון. אם הוגדר מפקח — נשלחת אליו התראה אוטומטית.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ WHAT IT CATCHES ═══════════ -->
+<section class="sec rv">
+  <div class="container">
+    <div class="sec-head">
+      <div class="sec-tag">מה LURA תופסת</div>
+      <h2>שמונה סוגי הונאה</h2>
+      <p>אלה הטריקים הנפוצים ביותר שתוקפים משתמשים בהם — LURA מזהה את כולם.</p>
+    </div>
+    <div class="catch">
+      <div class="ct"><span class="ct-ic"><svg viewBox="0 0 24 24">
+        <circle cx="11" cy="11" r="7"/><path d="M16.2 16.2L21 21"/></svg></span>
+        <div><h4>ניסוחים חשודים</h4><p>מעל 50 ביטויים בעברית ובאנגלית</p></div></div>
+      <div class="ct"><span class="ct-ic"><svg viewBox="0 0 24 24">
+        <path d="M12 2.6l7.5 3.2v5.9c0 4.5-3.1 8.2-7.5 9.1-4.4-.9-7.5-4.6-7.5-9.1V5.8L12 2.6z"/>
+        <path d="M12 9v4M12 16v.2"/></svg></span>
+        <div><h4>התחזות לארגון</h4><p>בנק, ביטוח או חברה מוכרת</p></div></div>
+      <div class="ct"><span class="ct-ic"><svg viewBox="0 0 24 24">
+        <path d="M20.5 6.5l-8.5 6-8.5-6"/><rect x="3.5" y="5" width="17" height="14" rx="2.5"/></svg></span>
+        <div><h4>שולח מזויף</h4><p>כתובת שמחקה שם אמיתי</p></div></div>
+      <div class="ct"><span class="ct-ic"><svg viewBox="0 0 24 24">
+        <path d="M9.5 14.5l5-5"/><path d="M11.5 6.5l1.5-1.5a3.6 3.6 0 015 5L16.5 11.5"/>
+        <path d="M12.5 17.5L11 19a3.6 3.6 0 01-5-5l1.5-1.5"/></svg></span>
+        <div><h4>קישורים מוסתרים</h4><p>כתובת IP או קיצור URL</p></div></div>
+      <div class="ct"><span class="ct-ic"><svg viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/></svg></span>
+        <div><h4>לחץ זמן</h4><p>"מיידי", "החשבון יינעל"</p></div></div>
+      <div class="ct"><span class="ct-ic"><svg viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="9"/><path d="M3.2 12h17.6"/>
+        <path d="M12 3.2a14 14 0 000 17.6 14 14 0 000-17.6z"/></svg></span>
+        <div><h4>דומיין לא תקני</h4><p>סיומת חריגה או שם מטעה</p></div></div>
+      <div class="ct"><span class="ct-ic"><svg viewBox="0 0 24 24">
+        <path d="M9.5 14.5l5-5"/><path d="M11.5 6.5l1.5-1.5a3.6 3.6 0 015 5L16.5 11.5"/>
+        <path d="M12.5 17.5L11 19a3.6 3.6 0 01-5-5l1.5-1.5"/></svg></span>
+        <div><h4>ריבוי קישורים</h4><p>מייל עמוס בהפניות חיצוניות</p></div></div>
+      <div class="ct"><span class="ct-ic"><svg viewBox="0 0 24 24">
+        <rect x="4.5" y="10.5" width="15" height="9.5" rx="2"/>
+        <path d="M8 10.5V7.5a4 4 0 018 0v3"/></svg></span>
+        <div><h4>בקשת פרטים רגישים</h4><p>סיסמאות או פרטי אשראי</p></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ GUARDIAN ═══════════ -->
+<section class="guard rv" id="guardian">
+  <div class="guard-in">
+    <div>
+      <div class="sec-tag">מצב מפקח</div>
+      <h2 class="guard-h2">שמור על מי שחשוב לך</h2>
+      <p class="guard-p">
+        הורים, סבים וילדים הם היעד המועדף על תוקפים. מצב מפקח מאפשר לך
+        לקבל התראה למייל בכל פעם שמישהו שאתה שומר עליו מקבל מייל מסוכן.
+      </p>
+      <ul class="gsteps">
+        <li class="gstep"><span class="gnum">1</span>
+          <span><b>התקנה חד-פעמית</b><span>מתקינים את התוסף על החשבון שרוצים להגן עליו.</span></span></li>
+        <li class="gstep"><span class="gnum">2</span>
+          <span><b>מזינים כתובת מפקח</b><span>כתובת המייל שאליה יישלחו ההתראות.</span></span></li>
+        <li class="gstep"><span class="gnum">3</span>
+          <span><b>וזהו</b><span>המפקח לא צריך להתקין דבר — ההתראות מגיעות למייל שלו.</span></span></li>
+      </ul>
+      <button class="btn-primary" onclick="goGuardian()">הפעל מצב מפקח</button>
+    </div>
+
+    <div class="alert-mock">
+      <div class="am-top"><div class="am-brand">LURA</div><small>מערכת הגנה מפישינג</small></div>
+      <div class="am-alert">זוהה מייל פישינג</div>
+      <div class="am-body">
+        <div class="am-score"><b>92%</b><small>ציון סיכון · סכנה גבוהה</small></div>
+        <div class="am-row"><span>שולח חשוד</span><b>no-reply@bank-secure.net</b></div>
+        <div class="am-row"><span>נושא המייל</span><b>חשבונך יינעל תוך 24 שעות</b></div>
+        <div class="am-row"><span>זמן זיהוי</span><b>08/08/2026 09:14</b></div>
       </div>
     </div>
-  </section>
+  </div>
+</section>
 
-  <footer class="footer">
-        <p><img src="icons/icon128.png" alt="LURA" style="height:16px;vertical-align:middle;margin-left:4px;">LURA v1.0.0 — פרויקט גמר 2026</p>
-  </footer>
+<!-- ═══════════ INSTALL ═══════════ -->
+<section class="sec rv" id="install">
+  <div class="container">
+    <div class="sec-head">
+      <div class="sec-tag">התקנה</div>
+      <h2>שלוש דקות, ואתה מוגן</h2>
+      <p>התוסף עדיין לא פורסם בחנות Chrome, אז ההתקנה נעשית ידנית. זה פשוט מכפי שזה נשמע.</p>
+    </div>
+    <div class="install-grid">
+      <div class="istep">
+        <div class="inum">1</div>
+        <h4>הורד את קבצי התוסף</h4>
+        <p>הורד את תיקיית <code>extension/</code> מהמאגר וחלץ אותה למקום קבוע במחשב.</p>
+        <a class="ilink" href="https://github.com/lynnnagel/FinalProject2026" target="_blank" rel="noopener">
+          פתח את המאגר
+          <svg viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M20 4l-8.5 8.5"/>
+            <path d="M18 14.5V19a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 014 19V8a1.5 1.5 0 011.5-1.5H10"/></svg>
+        </a>
+      </div>
+      <div class="istep">
+        <div class="inum">2</div>
+        <h4>פתח את עמוד התוספים</h4>
+        <p>הקלד בשורת הכתובת של Chrome את הכתובת הבאה והפעל את <b>Developer mode</b> בפינה.</p>
+        <code class="ibox">chrome://extensions</code>
+      </div>
+      <div class="istep">
+        <div class="inum">3</div>
+        <h4>טען את התוסף</h4>
+        <p>לחץ על <b>Load unpacked</b> ובחר את התיקייה שחילצת. פתח את Gmail — LURA כבר עובדת.</p>
+        <code class="ibox">Load unpacked → extension/</code>
+      </div>
+    </div>
+  </div>
+</section>
 
-  <script src="js/index.js"></script>
+<!-- ═══════════ RISK SCALE ═══════════ -->
+<section class="sec rv nopad-top">
+  <div class="container">
+    <div class="sec-head">
+      <div class="sec-tag">דרגות סיכון</div>
+      <h2>צבע אחד, ואתה יודע</h2>
+      <p>אין צורך להבין באבטחה. הצבע על השורה אומר לך הכל.</p>
+    </div>
+    <div class="chips">
+      <span class="chip"><i class="i-danger"></i>סכנה גבוהה <small>אל תפתח</small></span>
+      <span class="chip"><i class="i-phish"></i>פישינג <small>מחק את המייל</small></span>
+      <span class="chip"><i class="i-warn"></i>חשוד <small>בדוק את השולח</small></span>
+      <span class="chip"><i class="i-caution"></i>זהירות <small>אל תלחץ על קישורים</small></span>
+      <span class="chip"><i class="i-safe"></i>בטוח <small>אפשר להמשיך</small></span>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ CTA ═══════════ -->
+<section class="cta">
+  <div class="cta-in">
+    <h2>אל תיקח את <span class="gradient-text">הפיתיון</span></h2>
+    <p>התקנה אחת, והתיבה שלך מוגנת. חינם, בעברית, ובלי שתצטרך לעשות כלום.</p>
+    <div class="cta-actions">
+      <a href="#install" class="btn-primary">התקן את התוסף</a>
+      <a href="login.html" class="btn-secondary">כניסה לחשבון</a>
+    </div>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="container">
+    <img src="icons/icon128.png" alt="LURA" class="footer-mark">
+    <span class="brand-word">LURA</span> v1.0.0 — פרויקט גמר 2026
+  </div>
+</footer>
+
+<script src="js/index.js"></script>
 </body>
 </html>
