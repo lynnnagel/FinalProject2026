@@ -24,10 +24,10 @@
       <div class="sidebar-name" id="sidebarName">טוען...</div>
       <div class="sidebar-email" id="sidebarEmail"></div>
       <nav class="sidebar-nav">
-        <a href="#overview" class="sidebar-link active" onclick="showSection('overview')">📊 סקירה כללית</a>
-        <a href="#scanner"  class="sidebar-link"        onclick="showSection('scanner')"> סריקת קישור</a>
-        <a href="#alerts"   class="sidebar-link"        onclick="showSection('alerts')"> התראות</a>
-        <a href="#guardian" class="sidebar-link"        onclick="showSection('guardian')"> מצב הורה</a>
+        <a href="#overview" class="sidebar-link active" onclick="showSection('overview')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3.4 20.6h17.2"/><path d="M6.6 20.6v-6.2M11.2 20.6V8.4M15.8 20.6v-9M20.4 20.6V4.6" stroke-width="2.1"/></svg><span>סקירה כללית</span></a>
+        <a href="#scanner"  class="sidebar-link"        onclick="showSection('scanner')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M16.2 16.2L21 21"/></svg><span>סריקת קישור</span></a>
+        <a href="#alerts"   class="sidebar-link"        onclick="showSection('alerts')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8.6a6 6 0 10-12 0c0 6-2.4 7.4-2.4 7.4h16.8S18 14.6 18 8.6z"/><path d="M13.7 20a2 2 0 01-3.4 0"/></svg><span>התראות</span></a>
+        <a href="#guardian" class="sidebar-link"        onclick="showSection('guardian')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2.4 12S5.8 5.8 12 5.8 21.6 12 21.6 12 18.2 18.2 12 18.2 2.4 12 2.4 12z"/><circle cx="12" cy="12" r="3.1"/></svg><span>מצב מפקח</span></a>
       </nav>
     </aside>
 
@@ -36,22 +36,22 @@
         <h2 class="section-title">סקירה כללית</h2>
         <div class="stats-grid">
           <div class="stat-card blue">
-            <div class="stat-icon">📧</div>
+            <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 6.5l-8.5 6-8.5-6"/><rect x="3.5" y="5" width="17" height="14" rx="2.5"/></svg></div>
             <div class="stat-val" id="statScanned">—</div>
             <div class="stat-lbl">מיילים נסרקו</div>
           </div>
           <div class="stat-card red">
-            <div class="stat-icon">🎣</div>
+            <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4.5h4v9.5a3.5 3.5 0 01-7 0V13"/><circle cx="10" cy="3" r="1.4"/></svg></div>
             <div class="stat-val" id="statBlocked">—</div>
             <div class="stat-lbl">פישינג נחסם</div>
           </div>
           <div class="stat-card yellow">
-            <div class="stat-icon">⚡</div>
+            <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2.6L4.5 13.4h6L11 21.4 19.5 10.6h-6L13 2.6z"/></svg></div>
             <div class="stat-val" id="statAlerts">—</div>
             <div class="stat-lbl">התראות היום</div>
           </div>
           <div class="stat-card green">
-            <div class="stat-icon">📡</div>
+            <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.6l7.5 3.2v5.9c0 4.5-3.1 8.2-7.5 9.1-4.4-.9-7.5-4.6-7.5-9.1V5.8L12 2.6z"/><path d="M9.2 12l2.1 2.1 4-4.3"/></svg></div>
             <div class="stat-val" id="statStatus">—</div>
             <div class="stat-lbl">אחוז זיהוי</div>
           </div>
@@ -77,7 +77,7 @@
       </section>
 
       <section id="sec-scanner" class="dash-section" style="display:none">
-        <h2 class="section-title">🔍 סריקת קישור</h2>
+        <h2 class="section-title">סריקת קישור</h2>
         <div class="scanner-box">
           <div class="scanner-input-wrap">
             <input type="text" id="dashUrlInput" class="url-input" placeholder="הדבק כתובת URL..." dir="ltr">
@@ -88,23 +88,23 @@
       </section>
 
       <section id="sec-alerts" class="dash-section" style="display:none">
-        <h2 class="section-title">🔔 התראות היום</h2>
+        <h2 class="section-title">התראות היום</h2>
         <div id="alertsList" class="alerts-list">
-          <div class="empty-state">⏳ טוען התראות...</div>
+          <div class="empty-state">טוען התראות...</div>
         </div>
       </section>
 
             <section id="sec-guardian" class="dash-section" style="display:none">
-        <h2 class="section-title">👁️ מצב הורה</h2>
+        <h2 class="section-title">מצב מפקח</h2>
         <div class="guardian-box">
-          <p>חבר כתובת מייל של ילד כדי לנטר את הפעילות שלו ולקבל התראות בזמן אמת.</p>
+          <p>הזן את כתובת המייל של מי שברצונך להגן עליו. מרגע החיבור, כל זיהוי פישינג אצלו ישלח אליך התראה למייל.</p>
           <div class="form-group" style="margin-top:16px;">
-            <label>מייל הילד</label>
+            <label>מייל המשויך</label>
             <input type="email" id="childEmail" placeholder="child@example.com" dir="ltr">
           </div>
           <div style="display:flex;gap:8px;margin-top:12px;">
-            <button class="btn-primary" onclick="connectGuardian()">🔗 חבר</button>
-            <button class="btn-primary" style="background:#ef4444;" onclick="disconnectGuardian()">✂️ נתק שיוך</button>
+            <button class="btn-primary" onclick="connectGuardian()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 14.5l5-5"/><path d="M11.5 6.5l1.5-1.5a3.6 3.6 0 015 5L16.5 11.5"/><path d="M12.5 17.5L11 19a3.6 3.6 0 01-5-5l1.5-1.5"/></svg><span>חבר</span></button>
+            <button class="btn-primary" style="background:#ef4444;" onclick="disconnectGuardian()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 7l3-3M20 7l-3-3"/><path d="M11 6.5l1.5-1.5a3.6 3.6 0 015 5L16 11.5"/><path d="M12.5 17.5L11 19a3.6 3.6 0 01-5-5l1.5-1.5"/></svg><span>נתק שיוך</span></button>
           </div>
           <div id="guardianResult" style="margin-top:16px;"></div>
           <div id="guardianData" style="margin-top:24px;"></div>

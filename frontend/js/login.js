@@ -39,7 +39,7 @@ async function handleReset(e) {
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.detail || 'שגיאה באיפוס הסיסמה');
-    okEl.textContent = '✅ הסיסמה עודכנה! מעביר להתחברות...';
+    okEl.textContent = 'הסיסמה עודכנה! מעביר להתחברות...';
     okEl.style.display = 'block';
     setTimeout(() => showTab('login'), 2000);
   } catch (err) {

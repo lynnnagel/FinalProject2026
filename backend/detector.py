@@ -9,7 +9,7 @@ from config import (
     PHISHING_THRESHOLD, HIGH_RISK_THRESHOLD, MEDIUM_RISK_THRESHOLD,
     LOW_RISK_THRESHOLD, MAX_KEYWORD_SCORE, KEYWORD_SCORE_PER_WORD,
     SUSPICIOUS_DOMAIN_SCORE, MULTIPLE_URLS_SCORE, URGENCY_SCORE,
-    INVALID_DOMAIN_SCORE, URL_COUNT_THRESHOLD,
+    INVALID_DOMAIN_SCORE, URL_COUNT_THRESHOLD, BRAND_IMPERSONATION_SCORE,
 )
 
 
@@ -69,10 +69,119 @@ class PhishingDetector:
         "ow.ly", "buff.ly", "rebrand.ly", "cutt.ly", "rb.gy",
     ]
 
+    # -----------------------------------------------------------------------
+    # מותגים והדומיינים הרשמיים שלהם.
+    #
+    # זו הבדיקה החזקה ביותר בזיהוי פישינג: אם המייל מציג את עצמו כבנק
+    # הפועלים אך נשלח מ-bankhapoalim-secure.net, זו התחזות ודאית.
+    #
+    # הבדיקה הקודמת על דומיינים (VALID_DOMAIN_SUFFIXES) בחנה רק את הסיומת,
+    # ולכן bezeq-pay.net ו-netflix-il.info עברו בה בשלום — .net ו-.info הן
+    # סיומות חוקיות לחלוטין. מדידה על 250 מיילי פישינג בעברית הראתה שהיא
+    # לא נדלקה אף פעם.
+    #
+    # המפתח הוא צורת ההופעה של המותג בטקסט; הערך הוא הדומיינים שמהם
+    # הארגון באמת שולח. יש לרשום כל וריאציה שסביר שתופיע במייל.
+    # -----------------------------------------------------------------------
+    BRAND_DOMAINS = {
+        # בנקים וכרטיסי אשראי — ישראל
+        "בנק הפועלים":      ["bankhapoalim.co.il", "poalim.co.il"],
+        "הפועלים":          ["bankhapoalim.co.il", "poalim.co.il"],
+        "בנק לאומי":        ["leumi.co.il", "bankleumi.co.il"],
+        "לאומי":            ["leumi.co.il", "bankleumi.co.il"],
+        "בנק דיסקונט":      ["discountbank.co.il"],
+        "דיסקונט":          ["discountbank.co.il"],
+        "מזרחי טפחות":      ["mizrahi-tefahot.co.il"],
+        "בנק מזרחי":        ["mizrahi-tefahot.co.il"],
+        "ישראכרט":          ["isracard.co.il"],
+        "isracard":         ["isracard.co.il"],
+        "כאל":              ["cal-online.co.il"],
+        "cal":              ["cal-online.co.il"],
+        # תקשורת
+        "פרטנר":            ["partner.co.il"],
+        "partner":          ["partner.co.il"],
+        "סלקום":            ["cellcom.co.il"],
+        "cellcom":          ["cellcom.co.il"],
+        "בזק":              ["bezeq.co.il", "bezeqint.net"],
+        "bezeq":            ["bezeq.co.il", "bezeqint.net"],
+        "hot":              ["hot.net.il"],
+        "גולן טלקום":       ["golantelecom.co.il"],
+        # משלוחים
+        "דואר ישראל":       ["israelpost.co.il"],
+        "israel post":      ["israelpost.co.il"],
+        "dhl":              ["dhl.com", "dhl.co.il"],
+        "fedex":            ["fedex.com"],
+        "ups":              ["ups.com"],
+        # מסחר
+        "ksp":              ["ksp.co.il"],
+        "terminal x":       ["terminalx.com"],
+        "איקאה":            ["ikea.co.il", "ikea.com"],
+        "ikea":             ["ikea.co.il", "ikea.com"],
+        "רמי לוי":          ["rami-levy.co.il"],
+        "שופרסל":           ["shufersal.co.il"],
+        "zap":              ["zap.co.il"],
+        # ממשלה
+        "רשות המסים":       ["gov.il", "taxes.gov.il"],
+        "ביטוח לאומי":      ["btl.gov.il", "gov.il"],
+        "משרד התחבורה":     ["gov.il"],
+        "חברת החשמל":       ["iec.co.il"],
+        # בינלאומי
+        "paypal":           ["paypal.com"],
+        "netflix":          ["netflix.com"],
+        "spotify":          ["spotify.com"],
+        "microsoft":        ["microsoft.com", "outlook.com", "live.com"],
+        "google":           ["google.com", "accounts.google.com", "gmail.com"],
+        "apple":            ["apple.com", "icloud.com"],
+        "amazon":           ["amazon.com", "amazon.co.uk"],
+        "facebook":         ["facebook.com", "facebookmail.com"],
+        "instagram":        ["instagram.com", "mail.instagram.com"],
+        "whatsapp":         ["whatsapp.com"],
+        "linkedin":         ["linkedin.com"],
+        "ebay":             ["ebay.com"],
+        "dropbox":          ["dropbox.com"],
+    }
+
     _URL_RE = re.compile(
         r"https?://(?:[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%])+"
     )
     _IP_IN_URL = re.compile(r"https?://\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}")
+    _SENDER_DOMAIN_RE = re.compile(r"@([A-Za-z0-9.\-]+)")
+
+    # -----------------------------------------------------------------------
+    def _sender_domain(self, sender: str) -> str:
+        """הדומיין מתוך כתובת השולח, באותיות קטנות. מחרוזת ריקה אם אין."""
+        match = self._SENDER_DOMAIN_RE.search(sender or "")
+        return match.group(1).lower().rstrip(".") if match else ""
+
+    def _domain_matches(self, domain: str, official: str) -> bool:
+        """
+        האם הדומיין הוא הדומיין הרשמי או תת-דומיין שלו.
+
+        mail.netflix.com  מול  netflix.com   → כן
+        netflix-il.info   מול  netflix.com   → לא
+        """
+        return domain == official or domain.endswith("." + official)
+
+    def _check_brand_impersonation(self, sender: str, subject: str,
+                                   content: str) -> tuple[str, str] | None:
+        """
+        מחזיר (מותג, דומיין השולח) אם המייל מתחזה למותג מוכר, אחרת None.
+
+        המותג מזוהה בנושא ובגוף — שם התוקף שותל אותו כדי לבנות אמון.
+        אם השולח הוא בכל זאת הדומיין הרשמי, אין התחזות.
+        """
+        domain = self._sender_domain(sender)
+        if not domain:
+            return None
+
+        haystack = f"{subject} {content}".lower()
+        for brand, official_domains in self.BRAND_DOMAINS.items():
+            if brand not in haystack:
+                continue
+            if any(self._domain_matches(domain, off) for off in official_domains):
+                return None          # נשלח מהדומיין הרשמי — תקין
+            return brand, domain
+        return None
 
     def analyze_email(self, sender: str, subject: str, content: str) -> dict:
         start = datetime.now()
@@ -111,6 +220,17 @@ class PhishingDetector:
         ):
             risk_score += INVALID_DOMAIN_SCORE
             indicators.append("דומיין לא תקני")
+
+        # בדיקה 9: התחזות למותג מוכר
+        # המייל מציג את עצמו כארגון מוכר אך נשלח מדומיין שאינו שלו.
+        # זהו הסיגנל החזק ביותר, ולכן הניקוד הגבוה ביותר.
+        impersonation = self._check_brand_impersonation(sender, subject, content)
+        if impersonation:
+            brand, domain = impersonation
+            risk_score += BRAND_IMPERSONATION_SCORE
+            indicators.append(
+                f'המייל מתיימר להיות מ"{brand}" אך נשלח מהדומיין {domain}'
+            )
 
         # בדיקה 6: כתובת IP ישירה בקישור
         if self._IP_IN_URL.search(content):

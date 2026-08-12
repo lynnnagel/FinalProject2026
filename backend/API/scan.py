@@ -2,6 +2,8 @@
 POST /scan – Analyse an email and return a risk assessment.
 Ensemble: BERT (when available) + Heuristics weighted average.
 """
+import logging
+
 from fastapi import APIRouter, BackgroundTasks, Depends
 from sqlalchemy.orm import Session
 
@@ -10,7 +12,6 @@ from models import User, EmailRecord, Alert
 from schemas import EmailInput, RiskAnalysis
 from detector import detector
 from utils import get_name_from_email
-from config import ALERT_THRESHOLD, RECENT_EMAILS_WINDOW
 from email_service import send_guardian_phishing_alert
 from config import (
     ALERT_THRESHOLD,
@@ -19,44 +20,68 @@ from config import (
     HIGH_RISK_THRESHOLD,
     MEDIUM_RISK_THRESHOLD,
     LOW_RISK_THRESHOLD,
+    BERT_WEIGHT,
+    HEURISTIC_WEIGHT,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["scan"])
 
+# המודל נטען ברקע (ראה ML/bert_model.py). get_model מחזיר None עד שהוא
+# מוכן, ואז הסריקה רצה על מנוע החוקים בלבד — לכן הייבוא כאן זול ולא חוסם.
 try:
-    from ML.bert_model import bert_model
+    from ML.bert_model import get_model as get_bert_model
+except ImportError as exc:
+    # torch/transformers לא מותקנים — מצב לגיטימי, לא תקלה
+    logger.warning("BERT לא זמין (%s) — מצב חוקים בלבד", exc)
+
+    def get_bert_model():
+        return None
 except Exception:
-    bert_model = None
+    logger.exception("BERT: שגיאה בלתי צפויה בייבוא — מצב חוקים בלבד")
+
+    def get_bert_model():
+        return None
+
+
+def _apply_thresholds(result: dict) -> dict:
+    """קובע רמת סיכון והמלצה לפי הציון הסופי."""
+    score = result["risk_score"]
+    result["is_phishing"] = score >= PHISHING_THRESHOLD
+
+    if score >= HIGH_RISK_THRESHOLD:
+        result["risk_level"] = "סכנה גבוהה"
+        result["recommendation"] = "אל תלחץ על שום קישור. מחק את המייל מיד."
+    elif score >= MEDIUM_RISK_THRESHOLD:
+        result["risk_level"] = "חשוד"
+        result["recommendation"] = "היזהר מאוד. בדוק את המקור לפני כל פעולה."
+    elif score >= LOW_RISK_THRESHOLD:
+        result["risk_level"] = "זהירות"
+        result["recommendation"] = "המייל מכיל אלמנטים חשודים. היה ערני."
+    else:
+        result["risk_level"] = "בטוח"
+        result["recommendation"] = "המייל נראה תקין."
+    return result
 
 
 def get_risk_score(sender: str, subject: str, content: str) -> dict:
-    heuristic_result = detector.analyze_email(sender, subject, content)
+    result = detector.analyze_email(sender, subject, content)
 
-    if bert_model is not None:
-        try:
-            bert_score = bert_model.predict_score(sender, subject, content)
-            ensemble_score = round(0.3 * bert_score + 0.7 * heuristic_result["risk_score"], 2)
-            heuristic_result["risk_score"] = min(ensemble_score, 100.0)
-            heuristic_result["indicators"].append("✨ BERT ניתוח סמנטי")
+    model = get_bert_model()
+    if model is None:
+        return result          # fallback: חוקים בלבד
 
-            risk_score = heuristic_result["risk_score"]
-            heuristic_result["is_phishing"] = risk_score >= PHISHING_THRESHOLD
-            if risk_score >= HIGH_RISK_THRESHOLD:
-                heuristic_result["risk_level"] = "סכנה גבוהה"
-                heuristic_result["recommendation"] = "⛔ אל תלחץ על שום קישור! מחק את המייל מיד."
-            elif risk_score >= MEDIUM_RISK_THRESHOLD:
-                heuristic_result["risk_level"] = "חשוד"
-                heuristic_result["recommendation"] = "⚠️ היזהר מאוד. בדוק את המקור לפני כל פעולה."
-            elif risk_score >= LOW_RISK_THRESHOLD:
-                heuristic_result["risk_level"] = "זהירות"
-                heuristic_result["recommendation"] = "🔍 המייל מכיל אלמנטים חשודים. היה ערני."
-            else:
-                heuristic_result["risk_level"] = "בטוח"
-                heuristic_result["recommendation"] = "✅ המייל נראה תקין."
-        except Exception:
-            pass
+    try:
+        bert_score = model.predict_score(sender, subject, content)
+    except Exception:
+        logger.exception("BERT prediction failed — falling back to heuristics")
+        return result
 
-    return heuristic_result
+    ensemble = BERT_WEIGHT * bert_score + HEURISTIC_WEIGHT * result["risk_score"]
+    result["risk_score"] = min(round(ensemble, 2), 100.0)
+    result["indicators"].append("ניתוח סמנטי (BERT)")
+    return _apply_thresholds(result)
 
 
 @router.post("/scan", response_model=RiskAnalysis, summary="סריקת מייל לזיהוי פישינג")

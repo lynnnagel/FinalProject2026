@@ -4,6 +4,7 @@ Run with: uvicorn server:app --host localhost --port 8000 --reload
 """
 import logging
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -49,6 +50,42 @@ app.include_router(url_scan_router)
 frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend")
 if os.path.exists(frontend_path):
     app.mount("/app", StaticFiles(directory=frontend_path, html=True), name="frontend")
+
+
+@app.on_event("startup")
+async def _start_bert_load():
+    """
+    מתחיל את טעינת מודל BERT בשרשור רקע.
+
+    ה-checkpoint שוקל ~678 MB. כשהוא נטען בזמן ה-import, uvicorn חוסם
+    עשרות שניות והאתר לא עולה. כאן הטעינה רצה במקביל: השרת עונה מיד,
+    וסריקות שמגיעות לפני שהמודל מוכן רצות על מנוע החוקים בלבד.
+    """
+    try:
+        from ML.bert_model import start_background_load
+        start_background_load()
+        logger.info("BERT: טעינה ברקע החלה — השרת זמין כבר עכשיו")
+    except ImportError as exc:
+        logger.warning("BERT לא זמין (%s) — מצב חוקים בלבד", exc)
+    except Exception:
+        logger.exception("BERT: לא ניתן להתחיל טעינה — מצב חוקים בלבד")
+
+
+@app.get("/health/model", tags=["health"])
+async def model_health():
+    """מצב טעינת המודל: not_started / loading / ready / failed."""
+    try:
+        from ML.bert_model import load_state, MAX_LENGTH, DEFAULT_CHECKPOINT
+        return {
+            "state": load_state(),
+            "checkpoint": DEFAULT_CHECKPOINT,
+            "checkpoint_exists": os.path.exists(DEFAULT_CHECKPOINT),
+            "max_length": MAX_LENGTH,
+            "mode": "ensemble" if load_state() == "ready" else "heuristics-only",
+        }
+    except Exception as exc:
+        return {"state": "unavailable", "error": str(exc), "mode": "heuristics-only"}
+
 
 @app.get("/", tags=["health"])
 async def root():

@@ -30,10 +30,22 @@ logger = logging.getLogger(__name__)
 
 
 def clean_text(text: str) -> str:
+    """
+    ניקוי טקסט לפני אימון.
+
+    הערה חשובה: בעבר עמד כאן  re.sub(r"http\\S+", " URL ", text)  שהחליף
+    כל קישור במילה "URL". זה מחק את אחד הסיגנלים החזקים ביותר לזיהוי
+    פישינג — 'paypal-verify.tk' ו-'netflix.com' הפכו שניהם לאותה מחרוזת,
+    והמודל לא יכול היה ללמוד להבדיל ביניהם. נשארו לו בעיקר מילות דחיפות,
+    שקיימות גם במיילים שיווקיים לגיטימיים, ולכן הוא סימן כמעט הכל כפישינג.
+
+    כעת הקישור נשמר, אך נחתך ל-80 תווים כדי שנתיבים ארוכים לא יבלעו את
+    תקציב הטוקנים על חשבון גוף המייל.
+    """
     if not isinstance(text, str):
         return ""
     text = re.sub(r"<[^>]+>", " ", text)
-    text = re.sub(r"http\S+", " URL ", text)
+    text = re.sub(r"(https?://\S{1,80})\S*", r"\1", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text[:1000]
 
@@ -179,17 +191,26 @@ def prepare(args: argparse.Namespace):
     else:
         logger.warning("Hebrew dataset not found - run: python ML/create_hebrew_dataset.py")
 
-    # מיילים בעברית שנוצרו בתרגום מכונה (ML/augment_hebrew.py).
-    # אופציונלי — אם הקובץ לא קיים פשוט מדלגים.
-    translated_path = os.path.join(args.data_dir, "hebrew_translated.csv")
-    if os.path.exists(translated_path):
-        df = pd.read_csv(translated_path).dropna(subset=["text", "label"])
+    # מקורות עבריים נוספים, שניהם אופציונליים:
+    #   hebrew_generated.csv  – ML/generate_hebrew.py (מחולל קומבינטורי)
+    #   hebrew_translated.csv – ML/augment_hebrew.py  (תרגום מכונה)
+    for fname, source in (("hebrew_generated.csv", "generated"),
+                          ("hebrew_translated.csv", "translated")):
+        path = os.path.join(args.data_dir, fname)
+        if not os.path.exists(path):
+            continue
+        df = pd.read_csv(path).dropna(subset=["text", "label"])
         df["label"] = df["label"].astype(int).clip(0, 1)
         frames.append(df[["text", "label"]])
-        logger.info("Hebrew (translated): %d samples (legitimate=%d, phishing=%d)",
-                    len(df), int((df["label"] == 0).sum()), int(df["label"].sum()))
-    else:
-        logger.info("No translated Hebrew file — run ML/augment_hebrew.py to add one")
+        logger.info("Hebrew (%s): %d samples (legitimate=%d, phishing=%d)",
+                    source, len(df), int((df["label"] == 0).sum()), int(df["label"].sum()))
+
+    if not any(os.path.exists(os.path.join(args.data_dir, f))
+               for f in ("hebrew_generated.csv", "hebrew_translated.csv")):
+        logger.warning(
+            "אין מקור עברי מורחב. המאגר יכיל ~300 מיילים בעברית בלבד (0.2%%). "
+            "להרחבה:  python ML/generate_hebrew.py --n 3000"
+        )
 
     if not frames:
         raise FileNotFoundError(f"No CSV files found in {args.data_dir}")

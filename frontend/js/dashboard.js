@@ -73,7 +73,7 @@
         const list = d.recent_alerts_list || [];
         const alertsEl = document.getElementById('alertsList');
         if (list.length === 0) {
-          alertsEl.innerHTML = '<div class="empty-state">✅ אין התראות היום</div>';
+          alertsEl.innerHTML = '<div class="empty-state">אין התראות היום</div>';
         } else {
           alertsEl.innerHTML = list.map(a => `
             <div class="alert-item">
@@ -108,7 +108,7 @@
       const url = document.getElementById('dashUrlInput').value.trim();
       if (!url) return;
       const resultEl = document.getElementById('dashScanResult');
-      resultEl.innerHTML = '<div class="empty-state">⏳ סורק...</div>';
+      resultEl.innerHTML = '<div class="empty-state">סורק...</div>';
       resultEl.style.display = 'block';
       try {
         const r = await fetch(`${API}/scan-url`, {
@@ -149,7 +149,7 @@
         });
         const data = await r.json();
         if (r.ok) {
-          resultEl.innerHTML = `<div class="form-success">✅ מצב הורה הופעל עבור ${esc(childEmail)}</div>`;
+          resultEl.innerHTML = `<div class="form-success">מצב מפקח הופעל עבור ${esc(childEmail)}</div>`;
         } else {
           resultEl.innerHTML = `<div class="form-error">${esc(data.detail)}</div>`;
         }
@@ -174,7 +174,7 @@
         });
         const data = await r.json();
         if (r.ok) {
-          resultEl.innerHTML = `<div class="form-success">✅ השיוך של ${esc(childEmail)} הוסר בהצלחה</div>`;
+          resultEl.innerHTML = `<div class="form-success">השיוך של ${esc(childEmail)} הוסר בהצלחה</div>`;
           document.getElementById('guardianData').innerHTML = '';
         } else {
           resultEl.innerHTML = `<div class="form-error">${esc(data.detail)}</div>`;

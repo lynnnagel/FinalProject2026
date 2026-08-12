@@ -55,6 +55,18 @@ MEDIUM_RISK_THRESHOLD = 50    # >= 50 → "חשוד"
 LOW_RISK_THRESHOLD = 30       # >= 30 → "זהירות"
 
 # ---------------------------------------------------------------------------
+# Ensemble weights  (final_score = BERT_WEIGHT * bert + HEURISTIC_WEIGHT * rules)
+#
+# הערכים האלה נבחרו ידנית בתחילת הפרויקט. כדי לכייל אותם על נתונים
+# אמיתיים במקום לנחש, הריצי:
+#     python ML/calibrate.py
+# הסקריפט סורק את כל הצירופים על סט הוולידציה וממליץ על הערכים
+# שממקסמים את ה-F1, יחד עם סף ההחלטה.
+# ---------------------------------------------------------------------------
+BERT_WEIGHT = float(os.getenv("BERT_WEIGHT", "0.3"))
+HEURISTIC_WEIGHT = float(os.getenv("HEURISTIC_WEIGHT", "0.7"))
+
+# ---------------------------------------------------------------------------
 # Heuristic scoring weights
 # ---------------------------------------------------------------------------
 MAX_KEYWORD_SCORE = 40        # Cap for keyword contribution
@@ -63,6 +75,7 @@ SUSPICIOUS_DOMAIN_SCORE = 25  # Suspicious sender patterns
 MULTIPLE_URLS_SCORE = 20      # More than URL_COUNT_THRESHOLD links
 URGENCY_SCORE = 15            # Artificial-urgency words
 INVALID_DOMAIN_SCORE = 20     # Sender domain not in whitelist
+BRAND_IMPERSONATION_SCORE = 45  # מותג מוכר בטקסט, שולח מדומיין אחר
 URL_COUNT_THRESHOLD = 2       # Number of URLs above which we penalise
 
 # ---------------------------------------------------------------------------
