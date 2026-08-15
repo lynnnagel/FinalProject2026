@@ -201,9 +201,14 @@ def prepare(args: argparse.Namespace):
             continue
         df = pd.read_csv(path).dropna(subset=["text", "label"])
         df["label"] = df["label"].astype(int).clip(0, 1)
-        frames.append(df[["text", "label"]])
-        logger.info("Hebrew (%s): %d samples (legitimate=%d, phishing=%d)",
-                    source, len(df), int((df["label"] == 0).sum()), int(df["label"].sum()))
+        # sender ו-subject נשמרים כשהם קיימים. שלוש מבדיקות מנוע החוקים
+        # קוראות את כתובת השולח, ובלעדיה אי אפשר לכייל את האנסמבל —
+        # calibrate.py היה מודד מנוע משותק וממליץ להעביר את כל המשקל ל-BERT.
+        keep = [c for c in ("sender", "subject", "text", "label") if c in df.columns]
+        frames.append(df[keep])
+        logger.info("Hebrew (%s): %d samples (legitimate=%d, phishing=%d)%s",
+                    source, len(df), int((df["label"] == 0).sum()), int(df["label"].sum()),
+                    "  [עם שולח ונושא]" if "sender" in df.columns else "")
 
     if not any(os.path.exists(os.path.join(args.data_dir, f))
                for f in ("hebrew_generated.csv", "hebrew_translated.csv")):
@@ -218,6 +223,20 @@ def prepare(args: argparse.Namespace):
     combined = pd.concat(frames, ignore_index=True)
     combined["text"] = combined["text"].apply(clean_text)
     combined = combined[combined["text"].str.len() > 10].reset_index(drop=True)
+
+    # רוב המקורות מספקים גוף מייל אחד בלבד. השדות מולאו כדי ששלוש
+    # בדיקות מנוע החוקים שקוראות את השולח לא ייפלו על עמודה חסרה.
+    for col in ("sender", "subject"):
+        if col not in combined.columns:
+            combined[col] = ""
+        combined[col] = combined[col].fillna("").astype(str)
+
+    with_sender = int((combined["sender"] != "").sum())
+    logger.info(
+        "שורות עם שולח ונושא: %d מתוך %d (%.1f%%) — רק הן מאפשרות "
+        "להעריך את מנוע החוקים במלואו",
+        with_sender, len(combined), with_sender / len(combined) * 100,
+    )
 
     # ── הסרת כפילויות — חייבת לקרות לפני החלוקה ────────────────────────
     # מייל שמופיע פעמיים ומתפצל בין train ל-test גורם למודל להיבחן על

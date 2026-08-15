@@ -155,6 +155,13 @@ def main() -> None:
                     help="מה למקסם (fnr = למזער פספוסים)")
     ap.add_argument("--no-bert", action="store_true", help="לכייל רק את הסף")
     ap.add_argument("--split", default="val", choices=["val", "test"])
+    ap.add_argument(
+        "--with-sender-only", action="store_true",
+        help="לכייל רק על שורות שיש בהן כתובת שולח. "
+             "בייצור התוסף תמיד שולח שולח ונושא, אבל רוב הקורפוסים "
+             "מכילים גוף מייל בלבד — ובלעדיהם שלוש מבדיקות מנוע החוקים "
+             "אינן פועלות והכיול מטה את המשקל ל-BERT.",
+    )
     args = ap.parse_args()
 
     if args.split == "test":
@@ -162,6 +169,24 @@ def main() -> None:
 
     print(f"טוען {args.split}.csv ...")
     df = load_split(args.data_dir, args.split)
+
+    has_sender = df["sender"].str.strip() != ""
+    if args.with_sender_only:
+        if not has_sender.any():
+            sys.exit(
+                "אין שורות עם כתובת שולח.\n"
+                "הריצי  python ML/generate_hebrew.py --n 3000  ואחריו\n"
+                "        python ML/prepare_data.py"
+            )
+        df = df[has_sender].reset_index(drop=True)
+        print(f"  סוננו {int(has_sender.sum())} שורות עם שולח "
+              f"(מתוך {len(has_sender)})")
+    elif has_sender.any() and has_sender.mean() < 0.5:
+        print(f"  ⚠  רק {has_sender.mean()*100:.1f}% מהשורות מכילות כתובת שולח.")
+        print(f"     שלוש מבדיקות מנוע החוקים קוראות אותה, ולכן הכיול כאן")
+        print(f"     ימדוד מנוע חלקי וייטה להעדיף את BERT.")
+        print(f"     להשוואה על נתונים מלאים:  --with-sender-only\n")
+
     y = df["label"].tolist()
     pos = sum(y)
     print(f"  {len(df)} דוגמאות | פישינג: {pos} ({pos/len(y)*100:.0f}%) | "
