@@ -39,11 +39,17 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./lura.db")
 # Allow Chrome / Firefox extensions and localhost (dev).
 # In production, replace with explicit extension IDs.
 # ---------------------------------------------------------------------------
+# סקריפט התוכן של התוסף רץ בתוך הדף של Gmail, ולכן ה-Origin של
+# בקשותיו הוא https://mail.google.com ולא chrome-extension://.
+# בלי הרשומה הזאת בקשת ה-preflight (OPTIONS /scan) נדחית ב-400,
+# ה-POST לעולם אינו נשלח, והתוסף אינו מסמן דבר.
 CORS_ORIGIN_REGEX = (
     r"chrome-extension://.*"
     r"|moz-extension://.*"
-    r"|http://localhost.*"
-    r"|http://127\.0\.0\.1.*"
+    r"|https://mail\.google\.com"
+    r"|https://.*\.mail\.google\.com"
+    r"|http://localhost(:\d+)?"
+    r"|http://127\.0\.0\.1(:\d+)?"
 )
 
 # ---------------------------------------------------------------------------

@@ -153,6 +153,72 @@ PHISH = {
     ],
 }
 
+# ---------------------------------------------------------------------------
+# מקרי גבול
+#
+# בגרסה הראשונה ההבחנה בין המחלקות הייתה מושלמת: לגיטימי תמיד https
+# לדומיין רשמי בלי מילות דחיפות, פישינג תמיד http לדומיין עם מקף ועם
+# דחיפות. מודל שלומד מזה לומד חוק אחד — "מקף בדומיין ⇐ פישינג" — ולא
+# לזהות פישינג. הכיול על דאטה כזה נתן F1 מושלם וסף נמוך מדי, שסימן
+# חשבונית Netflix אמיתית כאיום.
+#
+# שתי הקבוצות כאן שוברות את ההפרדה: מיילים לגיטימיים שנראים חשודים,
+# ומיילי פישינג שנראים תמימים.
+# ---------------------------------------------------------------------------
+
+# לגיטימיים עם סימנים שנראים מחשידים — דחיפות אמיתית, בקשות אימות
+# תקינות, תת-דומיינים, ושפה פיננסית שמופיעה גם בהונאות.
+HARD_LEGIT = {
+    "retail": [
+        "המבצע מסתיים היום | {brand}\nשלום {name},\nנותרו {hours} שעות לסיום המבצע. הנחה של 30% על כל האתר.\nלצפייה: {real}\nמוזמנ/ת להצטרף למועדון הלקוחות.",
+        "אימות כתובת מייל | {brand}\nשלום {name},\nכדי להשלים את ההרשמה נדרש לאמת את כתובת המייל.\nלאימות: {real}\nאם לא נרשמת אצלנו, אפשר להתעלם מהודעה זו.",
+        "עגלת הקניות ממתינה | {brand}\n{name} שלום,\nהשארת פריטים בסך {amount} ₪ בעגלה. המלאי מוגבל.\nלהשלמת ההזמנה: {real}",
+    ],
+    "bank": [
+        "נדרשת פעולה בחשבונך | {brand}\nשלום {name},\nלצורך עמידה בדרישות רגולציה נדרש לעדכן את פרטי הזיהוי עד {date}.\nניתן לבצע זאת באזור האישי או בסניף.\n{real}\nלא נבקש ממך פרטים בטלפון או במייל.",
+        "כרטיסך עומד לפוג | {brand}\n{name} שלום,\nהכרטיס שמסתיים ב-{last4} יפוג בחודש {month}.\nכרטיס חדש יישלח לכתובתך אוטומטית. לעדכון כתובת: {real}",
+        "התראת חיוב חריג | {brand}\nשלום {name},\nזוהה חיוב בסך {amount} ₪ החורג מדפוס ההוצאות הרגיל שלך.\nאם ביצעת את החיוב, אין צורך בפעולה. לצפייה: {real}",
+    ],
+    "streaming": [
+        "אמצעי התשלום שלך יפוג | {brand}\nשלום {name},\nהכרטיס הרשום אצלנו יפוג בסוף {month}.\nלעדכון פרטי תשלום ומניעת הפסקת השירות: {real}",
+        "כניסה מהתקן חדש | {brand}\n{name} שלום,\nזוהתה כניסה לחשבונך מהתקן חדש ב-{date}.\nאם זה היית את/ה — אין צורך בפעולה.\nלניהול התקנים: {real}",
+    ],
+    "telecom": [
+        "החשבון שלך גבוה מהרגיל | {brand}\nשלום {name},\nהחשבון לחודש {month} עומד על {amount} ₪, גבוה מהממוצע שלך.\nלפירוט השיחות והגלישה: {real}",
+        "איפוס סיסמה | {brand}\n{name} שלום,\nהתקבלה בקשה לאיפוס הסיסמה לאזור האישי.\nלאיפוס: {real}\nהקישור תקף לשעה. אם לא ביקשת — התעלם/י.",
+    ],
+    "delivery": [
+        "החבילה מוחזרת לשולח | {brand}\nשלום {name},\nהחבילה {track} ממתינה {count} ימים ולא נאספה.\nהיא תוחזר לשולח בעוד {hours} שעות. לתיאום: {real}",
+    ],
+    "gov": [
+        "מסמך ממתין לחתימתך | {brand}\nשלום {name},\nבתיק {ref} ממתין מסמך לחתימה דיגיטלית עד {date}.\nלכניסה עם כרטיס חכם או אימות דו-שלבי: {real}",
+    ],
+}
+
+# פישינג בניסוח רגוע ומקצועי, בלי מילות דחיפות, ולעיתים מדומיין
+# שנראה סביר לגמרי או מתת-דומיין מטעה.
+HARD_PHISH = {
+    "bank": [
+        "עדכון תנאי שימוש | {brand}\nשלום,\nתנאי השימוש בחשבונך עודכנו. כדי להמשיך לקבל שירות מלא, נא לאשר את התנאים החדשים בקישור הבא.\n{fake}\nתודה על שיתוף הפעולה.",
+        "אישור פרטי חשבון | {brand}\nשלום,\nכחלק מתהליך שגרתי לשמירה על אבטחת המידע, נבקש לאמת את פרטי החשבון.\nלאישור: {fake}\nההליך אורך פחות מדקה.",
+    ],
+    "streaming": [
+        "עדכון אמצעי תשלום | {brand}\nשלום,\nלא הצלחנו לעבד את החיוב האחרון. ניתן לעדכן את פרטי התשלום בקישור:\n{fake}\nהמנוי שלך ימשיך לפעול כרגיל.",
+    ],
+    "retail": [
+        "קבלה על הזמנתך | {brand}\nשלום,\nמצורפת קבלה על הזמנה מספר {ref} בסך {amount} ₪.\nלצפייה בפרטי ההזמנה: {fake}\nתודה על הרכישה.",
+    ],
+    "gov": [
+        "עדכון פרטי קשר | {brand}\nשלום,\nהפרטים הרשומים במערכת אינם מעודכנים. לעדכון ניתן להיכנס לקישור:\n{fake}\nהעדכון אינו כרוך בתשלום.",
+    ],
+    "telecom": [
+        "סיכום חשבון | {brand}\nשלום,\nסיכום החשבון לחודש {month} זמין לצפייה.\nלצפייה בפירוט המלא: {fake}",
+    ],
+    "delivery": [
+        "עדכון סטטוס משלוח | {brand}\nשלום,\nהמשלוח {track} עודכן. ניתן לעקוב אחר הסטטוס בקישור:\n{fake}",
+    ],
+}
+
 URGENCY = [
     "יש לפעול באופן מיידי.",
     "הפעולה דחופה ואינה ניתנת לדחייה.",
@@ -194,11 +260,35 @@ FAKE_MAILBOXES = ["no-reply", "security", "alert", "verify", "service-il",
                   "account-security", "support"]
 FREE_PROVIDERS = ["gmail.com", "outlook.com", "hotmail.com", "walla.co.il"]
 
+# תת-דומיינים לגיטימיים. ארגון אמיתי שולח גם מ-mail.brand.co.il, ובדיקת
+# ההתחזות חייבת לקבל אותם — אחרת כל מייל שירותי יסומן כאיום.
+LEGIT_SUBDOMAINS = ["mail", "news", "info", "no-reply", "service", "notify"]
 
-def rnd_sender(brand: tuple, legit: bool, rng: random.Random) -> str:
+# תבניות שנראות סבירות לעין לא מנוסה. השם הרשמי מופיע כתחילית של דומיין
+# זר — טריק נפוץ שנועד להיראות נכון בקריאה מהירה.
+def deceptive_domain(real_domain: str, rng: random.Random) -> str:
+    style = rng.randint(0, 2)
+    if style == 0:
+        return f"{real_domain}.{rng.choice(['secure-verify', 'account-il', 'login-portal'])}.com"
+    if style == 1:
+        base = real_domain.split(".")[0]
+        return f"{base}-{rng.choice(['notifications', 'support', 'billing', 'account'])}.com"
+    base = real_domain.split(".")[0]
+    return f"{base}{rng.choice(['-il', 'online', 'service'])}.com"
+
+
+def rnd_sender(brand: tuple, legit: bool, rng: random.Random,
+               hard: bool = False) -> str:
     name, real_domain, fake_domains = brand
     if legit:
+        if hard and rng.random() < 0.5:
+            # תת-דומיין רשמי — נראה חריג אך תקין לחלוטין
+            sub = rng.choice(LEGIT_SUBDOMAINS)
+            return f"{rng.choice(REAL_MAILBOXES)}@{sub}.{real_domain}"
         return f"{rng.choice(REAL_MAILBOXES)}@{real_domain}"
+    if hard:
+        # דומיין שנראה סביר, ותיבה עניינית — בלי "security" או "alert"
+        return f"{rng.choice(REAL_MAILBOXES)}@{deceptive_domain(real_domain, rng)}"
     if rng.random() < 0.22:
         # התחזות דרך ספק דואר חינמי
         slug = re.sub(r"[^a-z]", "", name.lower()) or "service"
@@ -216,13 +306,16 @@ def rnd_link(domain: str, legit: bool, rng: random.Random) -> str:
     return f"{scheme}{domain}/{path}"
 
 
-def fill(template: str, brand: tuple, rng: random.Random) -> str:
+def fill(template: str, brand: tuple, rng: random.Random, hard: bool = False) -> str:
     name, real_domain, fake_domains = brand
     values = {
         "brand":    name,
         "name":     rng.choice(FIRST_NAMES),
         "real":     rnd_link(real_domain, legit=True, rng=rng),
-        "fake":     rnd_link(rng.choice(fake_domains), legit=False, rng=rng),
+        # פישינג "רגוע" מפנה לדומיין מטעה ובהצפנה — בלי http ובלי /verify
+        "fake":     (rnd_link(deceptive_domain(real_domain, rng), legit=True, rng=rng)
+                     if hard else
+                     rnd_link(rng.choice(fake_domains), legit=False, rng=rng)),
         "amount":   f"{rng.randint(50, 9500):,}",
         "amount2":  f"{rng.randint(50, 9500):,}",
         "small":    rng.randint(9, 89),
@@ -254,7 +347,7 @@ def add_noise(text: str, rng: random.Random) -> str:
     return text
 
 
-def generate(n: int, seed: int, noise: bool) -> list[dict]:
+def generate(n: int, seed: int, noise: bool, hard_ratio: float = 0.30) -> list[dict]:
     """
     מפיק שורות עם sender, subject ו-content בנפרד.
 
@@ -273,14 +366,25 @@ def generate(n: int, seed: int, noise: bool) -> list[dict]:
         brand = rng.choice(BRANDS[category])
         is_phish = rng.random() < 0.42          # יחס דומה לשאר המאגר
 
-        pool = PHISH[category] if is_phish else LEGIT[category]
-        text = fill(rng.choice(pool), brand, rng)
-        if noise:
+        # מקרי גבול. בלעדיהם ההפרדה בין המחלקות מושלמת והמודל לומד
+        # חוק שטחי אחד במקום לזהות פישינג.
+        hard_pool = HARD_PHISH if is_phish else HARD_LEGIT
+        hard = rng.random() < hard_ratio and category in hard_pool
+
+        if hard:
+            pool = hard_pool[category]
+        else:
+            pool = PHISH[category] if is_phish else LEGIT[category]
+
+        text = fill(rng.choice(pool), brand, rng, hard=hard)
+        if noise and not hard:
+            # מקרי גבול נשמרים נקיים: שגיאות כתיב היו הופכות אותם
+            # לזיהוי קל ומבטלות את כל מטרתם.
             text = add_noise(text, rng)
 
         # התבניות בנויות כ-"נושא | מותג\nגוף ההודעה"
         subject, _, body = text.partition("\n")
-        sender = rnd_sender(brand, legit=not is_phish, rng=rng)
+        sender = rnd_sender(brand, legit=not is_phish, rng=rng, hard=hard)
 
         key = text[:150]
         if key in seen:
@@ -292,6 +396,7 @@ def generate(n: int, seed: int, noise: bool) -> list[dict]:
             "content": body.strip(),
             "text":    f"{sender} {subject.strip()} {body.strip()}",
             "label":   int(is_phish),
+            "hard":    int(hard),
         })
 
     return rows
@@ -303,10 +408,15 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--output", default="ML/data/hebrew_generated.csv")
     ap.add_argument("--no-noise", action="store_true", help="בלי שגיאות כתיב")
+    ap.add_argument(
+        "--hard-ratio", type=float, default=0.30,
+        help="חלק מקרי הגבול — לגיטימיים שנראים חשודים ופישינג שנראה תמים",
+    )
     ap.add_argument("--preview", action="store_true", help="הדפסה במקום שמירה")
     args = ap.parse_args()
 
-    rows = generate(args.n, args.seed, noise=not args.no_noise)
+    rows = generate(args.n, args.seed, noise=not args.no_noise,
+                    hard_ratio=args.hard_ratio)
 
     if args.preview:
         for r in rows[:8]:
@@ -318,7 +428,7 @@ def main() -> None:
 
     os.makedirs(os.path.dirname(args.output), exist_ok=True)
     with open(args.output, "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=["sender", "subject", "content", "text", "label"])
+        w = csv.DictWriter(f, fieldnames=["sender", "subject", "content", "text", "label", "hard"])
         w.writeheader()
         w.writerows(rows)
 

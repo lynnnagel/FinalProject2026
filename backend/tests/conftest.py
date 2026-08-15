@@ -7,6 +7,15 @@ LURA.db is never touched.
 import os
 import sys
 
+# חייב להיקבע לפני שמייבאים את config — הבדיקות של איפוס הסיסמה
+# קוראות ל-/auth/forgot-password, וכשהדגל דלוק נשלחים מיילים אמיתיים
+# לכתובות הבדיקה (known@example.com וכדומה). התוצאה היא מיילי איפוס
+# והודעות bounce שמגיעים לתיבה האמיתית בכל הרצת pytest.
+#
+# load_dotenv אינו דורס משתני סביבה קיימים, ולכן קביעה כאן גוברת על .env
+os.environ["EMAIL_ENABLED"] = "false"
+os.environ.setdefault("SECRET_KEY", "test-secret-not-used-in-production-0123456789")
+
 # Add backend/ to Python path so imports like 'from models import ...' resolve
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 

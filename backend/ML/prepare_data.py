@@ -124,6 +124,60 @@ def load_hebrew(path: str) -> pd.DataFrame:
 HEBREW_CHARS = r"[֐-׿]"
 
 
+def balance_sources(df: pd.DataFrame, max_single_frac: float) -> pd.DataFrame:
+    """
+    מגביל את משקלם של מקורות חד-מחלקתיים.
+
+    Enron הוא 100% לגיטימי ו-PhishTank 100% פישינג. כשהם מהווים חלק
+    גדול מהמאגר, המודל יכול לקבל דיוק גבוה בקיצור דרך: ללמוד לזהות את
+    סגנון המאגר ולהסיק ממנו את התווית, בלי ללמוד מה מאפיין פישינג.
+    בדיקת leave-one-source-out הראתה שזה בדיוק מה שקרה — הדיוק צנח
+    מ-99.6% ל-65.9% על מקור שלא נראה באימון.
+
+    ההגבלה כאן אינה פותרת את הבעיה לגמרי; היא מקטינה את התגמול על
+    קיצור הדרך ומאלצת את המודל להישען יותר על המקורות שמכילים את שתי
+    המחלקות, שם ההבחנה חייבת להיות מהותית.
+    """
+    if max_single_frac >= 1.0:
+        return df
+
+    is_single = {}
+    for src, g in df.groupby("source"):
+        pct = g["label"].mean()
+        is_single[src] = pct >= 0.97 or pct <= 0.03
+
+    single_sources = [s for s, v in is_single.items() if v]
+    if not single_sources:
+        return df
+
+    mixed_rows = int((~df["source"].isin(single_sources)).sum())
+    if mixed_rows == 0:
+        logger.warning("כל המקורות חד-מחלקתיים — אין על מה לאזן")
+        return df
+
+    # התקציב הכולל למקורות החד-מחלקתיים, מחולק שווה ביניהם
+    budget_total = int(mixed_rows * max_single_frac / (1 - max_single_frac))
+    per_source = max(budget_total // len(single_sources), 100)
+
+    kept = []
+    for src, g in df.groupby("source"):
+        if is_single.get(src) and len(g) > per_source:
+            logger.info("איזון מקורות: %s  %d → %d שורות", src, len(g), per_source)
+            g = g.sample(per_source, random_state=42)
+        kept.append(g)
+
+    out = pd.concat(kept, ignore_index=True)
+    out = out.sample(frac=1, random_state=42).reset_index(drop=True)
+
+    single_after = int(out["source"].isin(single_sources).sum())
+    logger.info(
+        "מקורות חד-מחלקתיים: %.1f%% מהמאגר (היה %.1f%%)",
+        single_after / len(out) * 100,
+        int(df["source"].isin(single_sources).sum()) / len(df) * 100,
+    )
+    return out
+
+
 def oversample_hebrew(df: pd.DataFrame, factor: int = 5) -> pd.DataFrame:
     """
     מכפיל את הדוגמאות בעברית פי *factor* — על סט האימון בלבד.
@@ -158,24 +212,28 @@ def prepare(args: argparse.Namespace):
     kaggle_path = os.path.join(args.data_dir, "emails.csv")
     if os.path.exists(kaggle_path):
         df = load_kaggle(kaggle_path)
+        df["source"] = "kaggle"
         frames.append(df)
         logger.info("Kaggle: %d samples (phishing=%d)", len(df), df["label"].sum())
 
     enron_path = os.path.join(args.data_dir, "enron_legitimate.csv")
     if os.path.exists(enron_path):
         df = load_enron(enron_path)
+        df["source"] = "enron"
         frames.append(df)
         logger.info("Enron: %d legitimate samples", len(df))
 
     phishtank_path = os.path.join(args.data_dir, "phishtank.csv")
     if os.path.exists(phishtank_path):
         df = load_phishtank(phishtank_path)
+        df["source"] = "phishtank"
         frames.append(df)
         logger.info("PhishTank: %d phishing samples", len(df))
 
     spamassassin_path = os.path.join(args.data_dir, "spamassassin.csv")
     if os.path.exists(spamassassin_path):
         df = load_spamassassin(spamassassin_path)
+        df["source"] = "spamassassin"
         frames.append(df)
         logger.info("SpamAssassin: %d samples (ham=%d, spam=%d)",
                     len(df), int((df["label"] == 0).sum()), int((df["label"] == 1).sum()))
@@ -185,6 +243,7 @@ def prepare(args: argparse.Namespace):
     hebrew_path = os.path.join(args.data_dir, "hebrew_emails.csv")
     if os.path.exists(hebrew_path):
         df = load_hebrew(hebrew_path)
+        df["source"] = "hebrew_manual"
         frames.append(df)
         logger.info("Hebrew: %d samples (legitimate=%d, phishing=%d)",
                     len(df), int((df["label"] == 0).sum()), int((df["label"] == 1).sum()))
@@ -204,7 +263,9 @@ def prepare(args: argparse.Namespace):
         # sender ו-subject נשמרים כשהם קיימים. שלוש מבדיקות מנוע החוקים
         # קוראות את כתובת השולח, ובלעדיה אי אפשר לכייל את האנסמבל —
         # calibrate.py היה מודד מנוע משותק וממליץ להעביר את כל המשקל ל-BERT.
-        keep = [c for c in ("sender", "subject", "text", "label") if c in df.columns]
+        df["source"] = f"hebrew_{source}"
+        keep = [c for c in ("sender", "subject", "text", "label", "source")
+                if c in df.columns]
         frames.append(df[keep])
         logger.info("Hebrew (%s): %d samples (legitimate=%d, phishing=%d)%s",
                     source, len(df), int((df["label"] == 0).sum()), int(df["label"].sum()),
@@ -231,6 +292,13 @@ def prepare(args: argparse.Namespace):
             combined[col] = ""
         combined[col] = combined[col].fillna("").astype(str)
 
+    # מקור הקורפוס נשמר כדי שאפשר יהיה לבדוק אם המחלקות ניתנות
+    # להפרדה לפי מקור — מצב שבו המודל לומד "מאיזה מאגר זה הגיע"
+    # במקום "האם זה פישינג". ראה ML/source_check.py.
+    if "source" not in combined.columns:
+        combined["source"] = "unknown"
+    combined["source"] = combined["source"].fillna("unknown").astype(str)
+
     with_sender = int((combined["sender"] != "").sum())
     logger.info(
         "שורות עם שולח ונושא: %d מתוך %d (%.1f%%) — רק הן מאפשרות "
@@ -248,6 +316,8 @@ def prepare(args: argparse.Namespace):
         logger.info("Removed %d duplicate emails (%.1f%%)", removed, removed / before * 100)
 
     combined = combined.sample(frac=1, random_state=42).reset_index(drop=True)
+
+    combined = balance_sources(combined, args.max_single_class_frac)
 
     phishing_pct = combined["label"].mean() * 100
     logger.info(
@@ -287,5 +357,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--hebrew_factor", type=int, default=5,
         help="פי כמה להכפיל את הדוגמאות בעברית בסט האימון (1 = ללא הכפלה)",
+    )
+    parser.add_argument(
+        "--max-single-class-frac", dest="max_single_class_frac",
+        type=float, default=0.15,
+        help="חלקם המרבי של מקורות חד-מחלקתיים (Enron, PhishTank) במאגר. "
+             "ערך נמוך מקטין את התגמול על לימוד המאגר במקום לימוד פישינג. "
+             "1.0 מבטל את האיזון.",
     )
     prepare(parser.parse_args())
