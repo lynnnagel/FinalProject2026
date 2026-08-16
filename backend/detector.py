@@ -10,30 +10,47 @@ from config import (
     LOW_RISK_THRESHOLD, MAX_KEYWORD_SCORE, KEYWORD_SCORE_PER_WORD,
     SUSPICIOUS_DOMAIN_SCORE, MULTIPLE_URLS_SCORE, URGENCY_SCORE,
     INVALID_DOMAIN_SCORE, URL_COUNT_THRESHOLD, BRAND_IMPERSONATION_SCORE,
+    WEAK_KEYWORD_SCORE, MAX_WEAK_KEYWORD_SCORE,
 )
 
 
 class PhishingDetector:
 
-    SUSPICIOUS_KEYWORDS = [
-        # עברית – פיננסי
-        "דחוף", "אימות", "חשבון", "זכית", "פרס", "לחץ כאן", "סיסמה",
-        "בנק", "כרטיס אשראי", "אשראי", "העברה", "מזומן", "הגרלה",
-        "זכייה", "מתנה", "חינם", "בחינם", "מבצע", "אישור", "אימות זהות",
-        "פרטים אישיים", "תעודת זהות", "חסימה", "ביטול", "השעיה",
-        "נחסם", "מוקפא", "רשות המסים", "ביטוח לאומי", "דואר ישראל",
-        "בנק הפועלים", "בנק לאומי", "היום בלבד", "הצעה מוגבלת",
-        "פג תוקף", "מסתיים", "עדכן פרטים", "אמת את חשבונך",
+    # מילים שמופיעות כמעט אך ורק בפישינג. כל אחת מהן היא סימן חזק.
+    STRONG_KEYWORDS = [
+        # עברית — ניסוחים שארגון אמיתי לא ישלח
+        "אמת את חשבונך", "אימות זהות", "החשבון יינעל", "חשבונך ייחסם",
+        "החשבון הושעה", "פעילות חריגה", "לחץ כאן", "עדכן פרטים",
+        "הזן סיסמה", "הזן פרטי אשראי", "תעודת זהות", "זכית",
+        "זכייה", "הגרלה", "פרס", "היום בלבד", "הצעה מוגבלת",
+        "לחץ לאימות", "אישור מיידי", "חשבונך מוקפא",
         # אנגלית
-        "verify", "urgent", "account", "suspended", "prize", "click here",
-        "password", "bank", "credit card", "confirm", "update your",
-        "limited time", "act now", "immediately", "validate",
-        "your account has been", "unusual activity", "security alert",
-        "winner", "congratulations", "free", "gift", "claim",
-        "social security", "irs", "tax refund", "invoice",
-        "payment required", "login", "sign in", "reset password",
-        "verify your identity", "account locked", "suspicious activity",
+        "verify your account", "verify your identity", "account locked",
+        "account suspended", "unusual activity", "security alert",
+        "click here", "update your payment", "confirm your password",
+        "reset password", "act now", "limited time", "congratulations",
+        "you have won", "claim your prize", "suspicious activity",
+        "your account has been", "payment required", "social security",
+        "tax refund", "immediately",
     ]
+
+    # מילים שמופיעות גם במיילים לגיטימיים לחלוטין. מייל אמיתי של בנק
+    # או חברת אשראי מכיל "חשבון", "אשראי" ו"כרטיס אשראי" בהכרח, ולכן
+    # הן שוות פחות ומוגבלות בתקרה נמוכה. מייל אמיתי של כאל סומן בעבר
+    # כפישינג רק בגללן.
+    WEAK_KEYWORDS = [
+        "חשבון", "בנק", "אשראי", "כרטיס אשראי", "העברה", "מזומן",
+        "סיסמה", "אימות", "אישור", "ביטול", "חסימה", "פרטים אישיים",
+        "מבצע", "מתנה", "חינם", "בחינם", "פג תוקף", "מסתיים",
+        "רשות המסים", "ביטוח לאומי", "דואר ישראל", "בנק הפועלים",
+        "בנק לאומי", "השעיה", "נחסם", "מוקפא",
+        "account", "bank", "credit card", "password", "verify",
+        "confirm", "invoice", "login", "sign in", "free", "gift",
+        "prize", "winner", "claim", "urgent", "validate", "update your",
+    ]
+
+    # לתאימות לאחור — קוד או בדיקות שמצפים לרשימה אחת
+    SUSPICIOUS_KEYWORDS = STRONG_KEYWORDS + WEAK_KEYWORDS
 
     URGENCY_WORDS = [
         "דחוף", "urgent", "מיידי", "immediate", "תוקף", "expire",
@@ -87,31 +104,31 @@ class PhishingDetector:
         # בנקים וכרטיסי אשראי — ישראל
         "בנק הפועלים":      ["bankhapoalim.co.il", "poalim.co.il"],
         "הפועלים":          ["bankhapoalim.co.il", "poalim.co.il"],
-        "בנק לאומי":        ["leumi.co.il", "bankleumi.co.il"],
+        "בנק לאומי":        ["leumi.co.il", "bankleumi.co.il", "leumi-card.co.il"],
         "לאומי":            ["leumi.co.il", "bankleumi.co.il"],
         "בנק דיסקונט":      ["discountbank.co.il"],
         "דיסקונט":          ["discountbank.co.il"],
         "מזרחי טפחות":      ["mizrahi-tefahot.co.il"],
         "בנק מזרחי":        ["mizrahi-tefahot.co.il"],
-        "ישראכרט":          ["isracard.co.il"],
-        "isracard":         ["isracard.co.il"],
-        "כאל":              ["cal-online.co.il"],
-        "cal":              ["cal-online.co.il"],
+        "ישראכרט":          ["isracard.co.il", "premium.co.il"],
+        "isracard":         ["isracard.co.il", "premium.co.il"],
+        "כאל":              ["cal-online.co.il", "icc.co.il"],          # icc = Israel Credit Cards
+        "cal-online":       ["cal-online.co.il", "icc.co.il"],
+        "hot mobile":       ["hot.net.il", "hot.co.il"],
+        "זאפ":              ["zap.co.il"],
         # תקשורת
-        "פרטנר":            ["partner.co.il"],
-        "partner":          ["partner.co.il"],
+        "פרטנר":            ["partner.co.il", "orange.co.il"],          # פרטנר היה אורנג'
+        "partner":          ["partner.co.il", "orange.co.il"],
         "סלקום":            ["cellcom.co.il"],
         "cellcom":          ["cellcom.co.il"],
         "בזק":              ["bezeq.co.il", "bezeqint.net"],
         "bezeq":            ["bezeq.co.il", "bezeqint.net"],
-        "hot":              ["hot.net.il"],
         "גולן טלקום":       ["golantelecom.co.il"],
         # משלוחים
         "דואר ישראל":       ["israelpost.co.il"],
         "israel post":      ["israelpost.co.il"],
         "dhl":              ["dhl.com", "dhl.co.il"],
         "fedex":            ["fedex.com"],
-        "ups":              ["ups.com"],
         # מסחר
         "ksp":              ["ksp.co.il"],
         "terminal x":       ["terminalx.com"],
@@ -119,7 +136,6 @@ class PhishingDetector:
         "ikea":             ["ikea.co.il", "ikea.com"],
         "רמי לוי":          ["rami-levy.co.il"],
         "שופרסל":           ["shufersal.co.il"],
-        "zap":              ["zap.co.il"],
         # ממשלה
         "רשות המסים":       ["gov.il", "taxes.gov.il"],
         "ביטוח לאומי":      ["btl.gov.il", "gov.il"],
@@ -162,6 +178,23 @@ class PhishingDetector:
         """
         return domain == official or domain.endswith("." + official)
 
+    @classmethod
+    def _brand_patterns(cls) -> dict:
+        """
+        ביטוי לכל מותג, עם גבולות מילה.
+
+        בלי הגבולות ההתאמה היא של תת-מחרוזת: המפתח "cal" נתפס בתוך
+        call, local ו-calendar, ומייל תמים של Temu סומן כמתחזה לכאל.
+        \b עובד גם על עברית, כי אותיות עבריות הן תווי-מילה — ולכן
+        "כאל" לא ייתפס בתוך "כאלה".
+        """
+        if not hasattr(cls, "_brand_re_cache"):
+            cls._brand_re_cache = {
+                brand: re.compile(r"\b" + re.escape(brand) + r"\b")
+                for brand in cls.BRAND_DOMAINS
+            }
+        return cls._brand_re_cache
+
     def _check_brand_impersonation(self, sender: str, subject: str,
                                    content: str) -> tuple[str, str] | None:
         """
@@ -174,9 +207,14 @@ class PhishingDetector:
         if not domain:
             return None
 
-        haystack = f"{subject} {content}".lower()
+        # רק שורת הנושא. מייל של Malwarebytes שהזכיר "Google Chrome"
+        # בגוף ההודעה סומן כמתחזה לגוגל — אבל הזכרת מותג אינה התחזות
+        # אליו. ניוזלטרים וחברות אבטחה מזכירים מותגים כדבר שבשגרה,
+        # בעוד תוקף שם את השם בנושא כדי לבנות אמון כבר בשורה הראשונה.
+        haystack = (subject or "").lower()
+        patterns = self._brand_patterns()
         for brand, official_domains in self.BRAND_DOMAINS.items():
-            if brand not in haystack:
+            if not patterns[brand].search(haystack):
                 continue
             if any(self._domain_matches(domain, off) for off in official_domains):
                 return None          # נשלח מהדומיין הרשמי — תקין
@@ -190,11 +228,22 @@ class PhishingDetector:
         indicators: list[str] = []
 
         # בדיקה 1: מילות מפתח חשודות
-        keyword_hits = [kw for kw in self.SUSPICIOUS_KEYWORDS if kw.lower() in full_text]
-        if keyword_hits:
-            score = min(len(keyword_hits) * KEYWORD_SCORE_PER_WORD, MAX_KEYWORD_SCORE)
-            risk_score += score
-            indicators.append(f"נמצאו {len(keyword_hits)} מילות מפתח חשודות")
+        strong_hits = [kw for kw in self.STRONG_KEYWORDS if kw.lower() in full_text]
+        weak_hits = [kw for kw in self.WEAK_KEYWORDS if kw.lower() in full_text]
+
+        # מילים חזקות נושאות את מלוא הניקוד. מילים חלשות מוגבלות לתקרה
+        # נמוכה, כי הן מופיעות גם במייל בנקאי לגיטימי — בלי ההפרדה הזאת
+        # כל חשבונית של חברת אשראי נספרה כפישינג.
+        if strong_hits:
+            risk_score += min(len(strong_hits) * KEYWORD_SCORE_PER_WORD, MAX_KEYWORD_SCORE)
+            indicators.append(f"נמצאו {len(strong_hits)} ניסוחים אופייניים לפישינג")
+
+        if weak_hits:
+            risk_score += min(len(weak_hits) * WEAK_KEYWORD_SCORE, MAX_WEAK_KEYWORD_SCORE)
+            if not strong_hits:
+                indicators.append(f"נמצאו {len(weak_hits)} מילים שמופיעות לעיתים בפישינג")
+
+        keyword_hits = strong_hits + weak_hits
 
         # בדיקה 2: תבניות חשודות בשולח
         sender_lower = sender.lower()

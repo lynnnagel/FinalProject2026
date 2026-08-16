@@ -76,7 +76,9 @@ HEURISTIC_WEIGHT = float(os.getenv("HEURISTIC_WEIGHT", "0.7"))
 # Heuristic scoring weights
 # ---------------------------------------------------------------------------
 MAX_KEYWORD_SCORE = 40        # Cap for keyword contribution
-KEYWORD_SCORE_PER_WORD = 15   # Points per suspicious keyword found
+KEYWORD_SCORE_PER_WORD = 15   # ניקוד לכל ניסוח אופייני לפישינג
+WEAK_KEYWORD_SCORE = 4        # מילה שמופיעה גם במייל לגיטימי
+MAX_WEAK_KEYWORD_SCORE = 16   # תקרה נמוכה — לבדן הן לא מספיקות
 SUSPICIOUS_DOMAIN_SCORE = 25  # Suspicious sender patterns
 MULTIPLE_URLS_SCORE = 20      # More than URL_COUNT_THRESHOLD links
 URGENCY_SCORE = 15            # Artificial-urgency words

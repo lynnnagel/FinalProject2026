@@ -25,7 +25,26 @@ class TestKeywords:
     def test_hebrew_keywords_raise_score(self, det):
         r = det.analyze_email("a@b.com", "דחוף אימות", "סיסמה")
         assert r["risk_score"] > 0
-        assert any("מילות מפתח" in ind for ind in r["indicators"])
+        # הניסוח מבחין בין ניסוחים אופייניים לפישינג לבין מילים
+        # שמופיעות גם במייל לגיטימי; הבדיקה מאשרת שאחד מהם דווח
+        assert any("פישינג" in ind for ind in r["indicators"])
+
+    def test_generic_financial_words_do_not_flag_alone(self, det):
+        """
+        מייל אמיתי של חברת אשראי הכיל 'חשבון', 'אשראי' ו'כרטיס אשראי'
+        וקיבל ציון של פישינג. המילים האלה נחלשו כדי שלא יכריעו לבדן.
+        """
+        r = det.analyze_email(
+            "service@icc.co.il",
+            "כאל — חיוב חודשי",
+            "חשבון כרטיס האשראי שלך לחודש יוני: 1,240 ₪.",
+        )
+        assert r["risk_score"] < 30, r["indicators"]
+
+    def test_brand_alternate_domain_not_flagged(self, det):
+        """כאל שולחת מ-icc.co.il, ולא רק מ-cal-online.co.il."""
+        r = det.analyze_email("service@icc.co.il", "כאל — חיוב", "פירוט החיוב החודשי")
+        assert not any("מתיימר" in ind for ind in r["indicators"]), r["indicators"]
 
     def test_english_keywords_raise_score(self, det):
         r = det.analyze_email("a@b.com", "urgent verify account", "password bank")
@@ -156,3 +175,68 @@ class TestClassification:
         r = det.analyze_email("a@b.com", "hello", "how are you")
         assert isinstance(r["indicators"], list)
         assert len(r["indicators"]) >= 1
+
+
+# ---------------------------------------------------------------------------
+# Check 9 – Brand impersonation
+# ---------------------------------------------------------------------------
+class TestBrandImpersonation:
+    def test_lookalike_domain_flagged(self, det):
+        r = det.analyze_email(
+            "no-reply@bankhapoalim-secure.net",
+            "אזהרה | בנק הפועלים",
+            "חשבונך ייחסם. לאימות: http://bankhapoalim-secure.net/verify",
+        )
+        assert any("מתיימר" in i for i in r["indicators"])
+
+    def test_official_domain_not_flagged(self, det):
+        r = det.analyze_email(
+            "noreply@bankhapoalim.co.il", "דוח חשבון", "הדוח שלך מוכן."
+        )
+        assert not any("מתיימר" in i for i in r["indicators"])
+
+    def test_subdomain_of_official_accepted(self, det):
+        r = det.analyze_email(
+            "news@mail.netflix.com", "Netflix update", "Your subscription."
+        )
+        assert not any("מתיימר" in i for i in r["indicators"])
+
+    def test_brand_name_needs_word_boundary(self, det):
+        """
+        המפתח "cal" נתפס בתוך call, local ו-calendar, ומייל תמים של
+        Temu סומן כמתחזה לכאל. ההתאמה חייבת להיות על מילה שלמה.
+        """
+        r = det.analyze_email(
+            "orders@orders.temu.com",
+            "Your order shipped",
+            "We will call you. Local pickup. Check your calendar.",
+        )
+        assert not any("מתיימר" in i for i in r["indicators"]), r["indicators"]
+
+    def test_hebrew_brand_not_matched_inside_word(self, det):
+        """כאל לא אמור להיתפס בתוך 'כאלה'."""
+        r = det.analyze_email(
+            "info@shop.co.il", "מוצרים חדשים", "יש לנו מוצרים כאלה ואחרים בחנות."
+        )
+        assert not any("מתיימר" in i for i in r["indicators"]), r["indicators"]
+
+    def test_brand_mentioned_in_body_is_not_impersonation(self, det):
+        """
+        מייל של Malwarebytes שהזכיר Google Chrome בגוף ההודעה סומן
+        כמתחזה לגוגל. אזכור מותג אינו טענה להיות המותג — הבדיקה
+        מוגבלת לשורת הנושא, שם תוקף שם את השם כדי לבנות אמון.
+        """
+        r = det.analyze_email(
+            "news@e.malwarebytes.com",
+            "Your December security digest",
+            "Protect Chrome and Google Play. Read more at https://www.malwarebytes.com/blog",
+        )
+        assert not any("מתיימר" in i for i in r["indicators"]), r["indicators"]
+
+    def test_brand_in_subject_still_flagged(self, det):
+        r = det.analyze_email(
+            "security@paypaI-verify.tk",
+            "PayPal: verify your account",
+            "Your account has been suspended.",
+        )
+        assert any("מתיימר" in i for i in r["indicators"])
