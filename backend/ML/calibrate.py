@@ -33,6 +33,8 @@ import pandas as pd
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from detector import detector  # noqa: E402
+from scoring import combine   # noqa: E402
+from config import PHISHING_THRESHOLD, RULE_BOOST, TRUST_DAMPING  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -131,19 +133,33 @@ def bert_scores(df: pd.DataFrame) -> List[float]:
 # ---------------------------------------------------------------------------
 # הסריקה
 # ---------------------------------------------------------------------------
-def sweep(y: List[int], h: List[float], b: List[float] | None, metric: str):
-    weights = [0.0] if b is None else [round(w * 0.05, 2) for w in range(21)]
+def sweep(y: List[int], h: List[float], b: List[float] | None,
+          trusted: List[bool], metric: str):
+    """
+    סורק את שני הפרמטרים של scoring.combine ואת סף ההחלטה.
+
+    הנוסחה היא  max(bert·damping + boost·rules, rules)  ולא ממוצע
+    משוקלל. המעבר נעשה אחרי שהממוצע נמדד על סט הבדיקה: הוא הטיל
+    תקרה של BERT_WEIGHT·100 על ציון המודל, ולכן BERT לא יכול היה
+    לחצות את הסף לבדו — 52.8% דיוק מול 99.4% ל-BERT בנפרד.
+    """
+    boosts = [round(x * 0.1, 2) for x in range(0, 11)]          # 0.0 – 1.0
+    dampings = [1.0] if b is None else [round(x * 0.05, 2) for x in range(1, 21)]
     best = None
     grid = []
 
-    for w in weights:
-        combined = h if b is None else [w * bi + (1 - w) * hi for bi, hi in zip(b, h)]
-        for t in range(20, 96):
-            m = metrics(y, [1 if s >= t else 0 for s in combined])
-            score = -m["fnr"] if metric == "fnr" else m[metric]
-            grid.append((score, w, t, m))
-            if best is None or score > best[0]:
-                best = (score, w, t, m)
+    for boost in boosts:
+        for damp in dampings:
+            combined = [
+                min(max((bi * (damp if tr else 1.0)) + boost * hi, hi), 100.0)
+                for bi, hi, tr in zip(b if b is not None else [0.0] * len(h), h, trusted)
+            ]
+            for t in range(20, 96):
+                m = metrics(y, [1 if s >= t else 0 for s in combined])
+                score = -m["fnr"] if metric == "fnr" else m[metric]
+                grid.append((score, boost, damp, t, m))
+                if best is None or score > best[0]:
+                    best = (score, boost, damp, t, m)
 
     return best, grid
 
@@ -200,20 +216,27 @@ def main() -> None:
         print("\nמחשב ציוני BERT (איטי — טוען checkpoint) ...")
         b = bert_scores(df)
 
+    trusted = [detector.is_trusted_sender(sd) for sd in df["sender"].tolist()]
+
     print("\nסורק צירופים ...")
-    best, _ = sweep(y, h, b, args.metric)
-    _, w, t, m = best
+    best, _ = sweep(y, h, b, trusted, args.metric)
+    _, boost, damp, t, m = best
 
     # ההגדרות הנוכחיות, להשוואה
-    cur_w, cur_t = 0.3, 70
-    cur_combined = h if b is None else [cur_w * bi + (1 - cur_w) * hi for bi, hi in zip(b, h)]
-    cur = metrics(y, [1 if s >= cur_t else 0 for s in cur_combined])
+    cur_combined = [
+        combine(bi, hi, sd)
+        for bi, hi, sd in zip(
+            b if b is not None else [0.0] * len(h), h, df["sender"].tolist()
+        )
+    ]
+    cur = metrics(y, [1 if s >= PHISHING_THRESHOLD else 0 for s in cur_combined])
 
     print("\n" + "═" * 72)
     print("  תוצאות")
     print("═" * 72)
-    print(f"  נוכחי   w={cur_w:.2f}  סף={cur_t:<3}  {fmt(cur)}")
-    print(f"  מומלץ   w={w:.2f}  סף={t:<3}  {fmt(m)}")
+    print(f"  נוכחי   boost={RULE_BOOST:.2f} trust={TRUST_DAMPING:.2f} "
+          f"סף={PHISHING_THRESHOLD:<3}  {fmt(cur)}")
+    print(f"  מומלץ   boost={boost:.2f} trust={damp:.2f} סף={t:<3}  {fmt(m)}")
     print("─" * 72)
     d_f1 = (m["f1"] - cur["f1"]) * 100
     d_acc = (m["accuracy"] - cur["accuracy"]) * 100
@@ -227,13 +250,15 @@ def main() -> None:
         return
 
     print("\n  להחלה, הוסיפי ל-backend/.env:\n")
+    print(f"      RULE_BOOST={boost}")
     if b is not None:
-        print(f"      BERT_WEIGHT={w}")
-        print(f"      HEURISTIC_WEIGHT={round(1 - w, 2)}")
+        print(f"      TRUST_DAMPING={damp}")
     print(f"\n  ואת הסף ב-backend/config.py:\n")
     print(f"      PHISHING_THRESHOLD = {t}")
-    print("\n  אחרי השינוי הריצי:  python ML/calibrate.py --split test")
-    print("  כדי לקבל את המספר האמיתי לדוח ולמצגת.\n")
+    print("\n  אחרי השינוי הריצי:")
+    print("      python ML/sanity_check.py     # אימות על דוגמאות קשות")
+    print("      python ML/evaluate.py --split test")
+    print("  כדי לקבל את המספרים לדוח ולמצגת.\n")
 
 
 if __name__ == "__main__":

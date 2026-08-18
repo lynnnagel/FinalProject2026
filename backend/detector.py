@@ -10,7 +10,7 @@ from config import (
     LOW_RISK_THRESHOLD, MAX_KEYWORD_SCORE, KEYWORD_SCORE_PER_WORD,
     SUSPICIOUS_DOMAIN_SCORE, MULTIPLE_URLS_SCORE, URGENCY_SCORE,
     INVALID_DOMAIN_SCORE, URL_COUNT_THRESHOLD, BRAND_IMPERSONATION_SCORE,
-    WEAK_KEYWORD_SCORE, MAX_WEAK_KEYWORD_SCORE,
+    BODY_IMPERSONATION_SCORE, WEAK_KEYWORD_SCORE, MAX_WEAK_KEYWORD_SCORE,
 )
 
 
@@ -155,6 +155,28 @@ class PhishingDetector:
         "linkedin":         ["linkedin.com"],
         "ebay":             ["ebay.com"],
         "dropbox":          ["dropbox.com"],
+
+        # ── ספקי אבטחה, מנויים ומסחר ─────────────────────────────────
+        # הטבלה הזאת משמשת גם לזיהוי התחזות וגם לזיהוי שולח מוכר
+        # (is_trusted_sender). המותגים כאן נוספו בגלל הצד השני:
+        # דואר תפעולי שלהם — חידוש מנוי, אישור הזמנה, התראת אבטחה —
+        # הוא בדיוק סוג הדואר הלגיטימי שכמעט אינו קיים בקורפוסי
+        # האימון, ולכן BERT מסמן אותו כפישינג בביטחון גבוה.
+        "temu":             ["temu.com"],
+        "aliexpress":       ["aliexpress.com"],
+        "booking":          ["booking.com"],
+        "airbnb":           ["airbnb.com"],
+        "wolt":             ["wolt.com"],
+        "malwarebytes":     ["malwarebytes.com"],
+        "norton":           ["norton.com", "nortonlifelock.com"],
+        "mcafee":           ["mcafee.com"],
+        "avast":            ["avast.com"],
+        "kaspersky":        ["kaspersky.com"],
+        "bitdefender":      ["bitdefender.com"],
+        "github":           ["github.com"],
+        "adobe":            ["adobe.com"],
+        "openai":           ["openai.com"],
+        "anthropic":        ["anthropic.com"],
     }
 
     _URL_RE = re.compile(
@@ -196,30 +218,111 @@ class PhishingDetector:
         return cls._brand_re_cache
 
     def _check_brand_impersonation(self, sender: str, subject: str,
-                                   content: str) -> tuple[str, str] | None:
+                                   content: str) -> tuple[str, str, str] | None:
         """
-        מחזיר (מותג, דומיין השולח) אם המייל מתחזה למותג מוכר, אחרת None.
+        מחזיר (מותג, דומיין השולח, מקום ההתאמה) אם המייל מתחזה למותג
+        מוכר, אחרת None. מקום ההתאמה הוא "subject" או "body", והוא
+        קובע את הניקוד — התאמה בגוף חלשה יותר.
 
-        המותג מזוהה בנושא ובגוף — שם התוקף שותל אותו כדי לבנות אמון.
         אם השולח הוא בכל זאת הדומיין הרשמי, אין התחזות.
         """
         domain = self._sender_domain(sender)
         if not domain:
             return None
 
-        # רק שורת הנושא. מייל של Malwarebytes שהזכיר "Google Chrome"
-        # בגוף ההודעה סומן כמתחזה לגוגל — אבל הזכרת מותג אינה התחזות
-        # אליו. ניוזלטרים וחברות אבטחה מזכירים מותגים כדבר שבשגרה,
-        # בעוד תוקף שם את השם בנושא כדי לבנות אמון כבר בשורה הראשונה.
-        haystack = (subject or "").lower()
         patterns = self._brand_patterns()
+        subject_l = (subject or "").lower()
+        body_l = (content or "").lower()
+
+        # ── שלב א: שורת הנושא ────────────────────────────────────────
+        # תוקף שם את שם המותג בנושא כדי לבנות אמון כבר בשורה הראשונה.
+        # זהו הסיגנל החזק, ולכן הוא נבדק ראשון ומקבל את הניקוד המלא.
         for brand, official_domains in self.BRAND_DOMAINS.items():
-            if not patterns[brand].search(haystack):
+            if not patterns[brand].search(subject_l):
                 continue
             if any(self._domain_matches(domain, off) for off in official_domains):
                 return None          # נשלח מהדומיין הרשמי — תקין
-            return brand, domain
+            return brand, domain, "subject"
+
+        # ── שלב ב: גוף ההודעה, בתנאים מחמירים ────────────────────────
+        # בדיקת הגוף בלי תנאים היא זו שסימנה מייל אמיתי של Malwarebytes
+        # שהזכיר "Google Chrome" כמתחזה לגוגל: הזכרת מותג אינה התחזות
+        # אליו, וניוזלטרים מזכירים מותגים כדבר שבשגרה.
+        #
+        # אבל דילוג מוחלט על הגוף פותח פער אמיתי: מייל עם הנושא
+        # "Action required: your mailbox is full", שמזכיר
+        # "Microsoft 365" רק בגוף ומקשר ל-office365-alert.net, קיבל
+        # 19 נקודות בלבד — פחות מכל סף סביר. ההתחזות הייתה שם, פשוט
+        # לא בשורת הנושא.
+        #
+        # שני תנאים מפרידים בין השניים:
+        #   1. יש קישור, ואף קישור אינו מוביל לדומיין הרשמי של המותג.
+        #      ניוזלטר שמזכיר מותג מקשר אליו או לאתר עצמו; מתחזה
+        #      מקשר לדומיין שהוא שולט בו.
+        #   2. השולח עצמו אינו חברה מוכרת. מייל שנשלח באמת
+        #      מ-malwarebytes.com אינו מתחזה לגוגל גם אם הזכיר את
+        #      Google Chrome; זה בדיוק המקרה שיצר את ההתרעה השגויה.
+        #      לעומתו office365-alert.net אינו הדומיין של אף חברה
+        #      בטבלה.
+        urls = self._URL_RE.findall(content or "")
+        if not urls:
+            return None
+
+        if any(
+            self._domain_matches(domain, off)
+            for offs in self.BRAND_DOMAINS.values()
+            for off in offs
+        ):
+            return None          # השולח הוא חברה מוכרת בזכות עצמה
+
+        for brand, official_domains in self.BRAND_DOMAINS.items():
+            if not patterns[brand].search(body_l):
+                continue
+            if any(self._domain_matches(domain, off) for off in official_domains):
+                return None          # נשלח מהדומיין הרשמי — תקין
+            # האם קישור כלשהו מוביל בכל זאת למותג האמיתי?
+            if any(
+                self._domain_matches(url_domain, off)
+                for url in urls
+                for url_domain in [self._url_domain(url)]
+                if url_domain
+                for off in official_domains
+            ):
+                return None          # מקשר למותג האמיתי — לא התחזות
+            return brand, domain, "body"
+
         return None
+
+    def is_trusted_sender(self, sender: str) -> bool:
+        """
+        האם המייל נשלח באמת מדומיין של חברה מוכרת.
+
+        זו ראיה חיובית ללגיטימיות, ולא רק היעדר ראיה להתחזות: תוקף
+        יכול לכתוב מה שירצה בגוף המייל, אבל אינו יכול לשלוח
+        מ-accounts.google.com. שקט של מנוע החוקים אינו אומר דבר —
+        הוא גם שותק על מייל שאין לו שולח כלל.
+
+        משמש להנמכת ציון BERT: המודל אומן על קורפוסים שכמעט אין בהם
+        דואר לגיטימי בענייני חשבון ואבטחה, ולכן הוא מסמן ב-99.99
+        גם הודעת חידוש מנוי מ-malwarebytes.com וגם איפוס סיסמה
+        שהמשתמש עצמו ביקש מ-accounts.google.com.
+        """
+        domain = self._sender_domain(sender)
+        if not domain:
+            return False
+        return any(
+            self._domain_matches(domain, official)
+            for officials in self.BRAND_DOMAINS.values()
+            for official in officials
+        )
+
+    @staticmethod
+    def _url_domain(url: str) -> str:
+        """הדומיין מתוך URL, באותיות קטנות. מחרוזת ריקה אם אין."""
+        rest = url.split("://", 1)[-1]
+        host = rest.split("/", 1)[0].split("?", 1)[0].split("#", 1)[0]
+        host = host.split("@")[-1].split(":", 1)[0]
+        return host.lower().rstrip(".")
 
     def analyze_email(self, sender: str, subject: str, content: str) -> dict:
         start = datetime.now()
@@ -275,8 +378,13 @@ class PhishingDetector:
         # זהו הסיגנל החזק ביותר, ולכן הניקוד הגבוה ביותר.
         impersonation = self._check_brand_impersonation(sender, subject, content)
         if impersonation:
-            brand, domain = impersonation
-            risk_score += BRAND_IMPERSONATION_SCORE
+            brand, domain, where = impersonation
+            # התאמה בגוף ההודעה חלשה יותר מהתאמה בנושא, ולכן מנוקדת
+            # פחות: המותג יכול להופיע שם גם באזכור לגיטימי.
+            risk_score += (
+                BRAND_IMPERSONATION_SCORE if where == "subject"
+                else BODY_IMPERSONATION_SCORE
+            )
             indicators.append(
                 f'המייל מתיימר להיות מ"{brand}" אך נשלח מהדומיין {domain}'
             )

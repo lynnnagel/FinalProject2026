@@ -54,23 +54,61 @@ CORS_ORIGIN_REGEX = (
 
 # ---------------------------------------------------------------------------
 # Phishing detection thresholds (0-100 score)
+#
+# PHISHING_THRESHOLD הוא הערך היחיד שמכיילים. שאר הרמות נגזרות ממנו
+# ואינן נקבעות בנפרד, כי ארבעה מספרים בלתי תלויים נוטים להיפרד זה מזה:
+# כשהסף היה 70 והרמות 30/50/80 הכול היה עקבי, אבל ברגע שהסף יורד ל-35
+# — כפי שהכיול על נתונים אמיתיים מחייב — מייל שמקבל 40 מסומן
+# is_phishing=True ובו בזמן מוצג למשתמש כ"זהירות" בלבד, כי 40 קטן
+# מ-MEDIUM=50. התוסף היה מציג הרגעה על מייל שהמערכת סיווגה כפישינג.
+#
+# הגזירה שומרת על היחסים המקוריים: בסף 70 היא מחזירה 42/70/84,
+# קרוב מאוד ל-30/50/80 שנבחרו ידנית בתחילת הפרויקט.
+#
+# את הערך עצמו קובעים לפי:  python ML/sanity_check.py
 # ---------------------------------------------------------------------------
-PHISHING_THRESHOLD = 70       # >= 70 → classified as phishing
-HIGH_RISK_THRESHOLD = 80      # >= 80 → "סכנה גבוהה"
-MEDIUM_RISK_THRESHOLD = 50    # >= 50 → "חשוד"
-LOW_RISK_THRESHOLD = 30       # >= 30 → "זהירות"
+PHISHING_THRESHOLD = 57       # >= זה → מסווג כפישינג
+
+# "חשוד" מתחיל בדיוק בסף הסיווג — אין תחום שבו מייל הוא פישינג
+# אך אינו חשוד.
+MEDIUM_RISK_THRESHOLD = PHISHING_THRESHOLD
+
+# "זהירות": 60% מהסף — סימנים חלקיים, לא מספיקים לסיווג.
+LOW_RISK_THRESHOLD = round(PHISHING_THRESHOLD * 0.6)
+
+# "סכנה גבוהה": 45% מהדרך מהסף אל 100.
+HIGH_RISK_THRESHOLD = round(PHISHING_THRESHOLD + (100 - PHISHING_THRESHOLD) * 0.45)
+
+# שומר שכיול עתידי לא יערבב את הסדר
+assert 0 < LOW_RISK_THRESHOLD < MEDIUM_RISK_THRESHOLD <= PHISHING_THRESHOLD \
+       < HIGH_RISK_THRESHOLD <= 100, \
+       f"רמות סיכון לא עקביות: {LOW_RISK_THRESHOLD}/{MEDIUM_RISK_THRESHOLD}/" \
+       f"{HIGH_RISK_THRESHOLD} עם סף {PHISHING_THRESHOLD}"
 
 # ---------------------------------------------------------------------------
-# Ensemble weights  (final_score = BERT_WEIGHT * bert + HEURISTIC_WEIGHT * rules)
+# שילוב שני המנועים  (ראה backend/scoring.py לנוסחה ולנימוק)
 #
-# הערכים האלה נבחרו ידנית בתחילת הפרויקט. כדי לכייל אותם על נתונים
-# אמיתיים במקום לנחש, הריצי:
-#     python ML/calibrate.py
-# הסקריפט סורק את כל הצירופים על סט הוולידציה וממליץ על הערכים
-# שממקסמים את ה-F1, יחד עם סף ההחלטה.
+#     score = max( bert·damping + RULE_BOOST·rules ,  rules )
+#
+# הגרסה הקודמת חישבה ממוצע משוקלל, BERT_WEIGHT·bert + HEURISTIC_WEIGHT·rules.
+# היא נזנחה אחרי מדידה: הממוצע הטיל תקרה של BERT_WEIGHT·100 על ציון
+# ה-BERT, כך שהמודל לא יכול היה לחצות את הסף לבדו. על סט הבדיקה זה
+# נתן 52.8% דיוק ו-93.6% פספוסים, לעומת 99.4% ל-BERT לבדו.
 # ---------------------------------------------------------------------------
-BERT_WEIGHT = float(os.getenv("BERT_WEIGHT", "0.3"))
-HEURISTIC_WEIGHT = float(os.getenv("HEURISTIC_WEIGHT", "0.7"))
+
+# כמה ציון החוקים מוסיף על גבי BERT. 0.5 → עד 50 נקודות חיזוק.
+RULE_BOOST = float(os.getenv("RULE_BOOST", "0.5"))
+
+# מכפיל לציון BERT כששולח המייל הוא דומיין של חברה מוכרת. 0.25 → ציון
+# 99.99 יורד ל-25, מתחת לכל סף סביר. מכוון לכשל מתועד של המודל על דואר
+# לגיטימי בענייני חשבון ואבטחה, ודורש ראיה חיובית — דומיין שולח מוכר —
+# ולא רק שקט של מנוע החוקים.
+TRUST_DAMPING = float(os.getenv("TRUST_DAMPING", "0.25"))
+
+# נשמרים לתאימות לאחור עבור ML/calibrate.py, שסורק את הנוסחה הישנה
+# לשם השוואה. הצינור החי אינו משתמש בהם.
+BERT_WEIGHT = float(os.getenv("BERT_WEIGHT", "0.4"))
+HEURISTIC_WEIGHT = float(os.getenv("HEURISTIC_WEIGHT", "0.6"))
 
 # ---------------------------------------------------------------------------
 # Heuristic scoring weights
@@ -83,15 +121,21 @@ SUSPICIOUS_DOMAIN_SCORE = 25  # Suspicious sender patterns
 MULTIPLE_URLS_SCORE = 20      # More than URL_COUNT_THRESHOLD links
 URGENCY_SCORE = 15            # Artificial-urgency words
 INVALID_DOMAIN_SCORE = 20     # Sender domain not in whitelist
-BRAND_IMPERSONATION_SCORE = 45  # מותג מוכר בטקסט, שולח מדומיין אחר
+BRAND_IMPERSONATION_SCORE = 45  # מותג מוכר בנושא, שולח מדומיין אחר
+BODY_IMPERSONATION_SCORE = 30   # המותג רק בגוף — סיגנל חלש יותר
 URL_COUNT_THRESHOLD = 2       # Number of URLs above which we penalise
 
 # ---------------------------------------------------------------------------
 # Database / query limits
 # ---------------------------------------------------------------------------
 RECENT_EMAILS_WINDOW = 10     # Rolling average window for user risk score
-ALERT_THRESHOLD = 70          # Min risk score to create an Alert record
-GUARDIAN_NOTIFY_THRESHOLD = 70
+
+# שני אלה היו 70 — כלומר בדיוק סף הסיווג דאז. הם נגזרים ממנו כדי שלא
+# ייווצר מצב שמייל מסווג כפישינג אך לא נרשמת עליו התראה והמפקח אינו
+# מקבל הודעה. עם סף 35 וערך קבוע 70, מצב מפקח היה מפספס את רוב
+# הזיהויים — כולל התחזות למותג שהחוקים נותנים לה ניקוד בינוני.
+ALERT_THRESHOLD = PHISHING_THRESHOLD           # ניקוד מינימלי לרישום Alert
+GUARDIAN_NOTIFY_THRESHOLD = PHISHING_THRESHOLD  # ניקוד מינימלי להודעה למפקח
 ALERT_HISTORY_LIMIT = 5       # Alerts returned in guardian dashboard
 
 

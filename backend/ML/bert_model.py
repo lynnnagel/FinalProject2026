@@ -34,7 +34,11 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from transformers import (
+    AutoConfig,
+    AutoTokenizer,
+    AutoModelForSequenceClassification,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -88,10 +92,22 @@ def _apply_checkpoint_metadata(checkpoint_path: str) -> None:
         logger.warning("לא ניתן לקרוא %s: %s", meta_path, exc)
         return
 
-    if "BERT_MODEL_NAME" not in os.environ and meta.get("model_name"):
-        if meta["model_name"] != MODEL_NAME:
-            logger.info("מודל הבסיס נלקח מה-checkpoint: %s", meta["model_name"])
-        MODEL_NAME = meta["model_name"]
+    trained_on = meta.get("model_name")
+    if trained_on and "BERT_MODEL_NAME" in os.environ and trained_on != MODEL_NAME:
+        # משתנה הסביבה גובר בכוונה, כדי לאפשר ניסויים. אבל כשהוא סותר
+        # את מה שה-checkpoint אומר, התוצאה היא שגיאת טעינה עם רשימת
+        # מפתחות חסרים שקשה לפענח. עדיף להסביר מראש.
+        logger.error(
+            "סתירה: BERT_MODEL_NAME מוגדר כ-'%s' אך ה-checkpoint אומן על '%s'.\n"
+            "הטעינה תיכשל. הסירי את BERT_MODEL_NAME מ-backend/.env כדי\n"
+            "להשתמש במודל שאיתו אומן, או אמני מחדש עם המודל שבחרת.",
+            MODEL_NAME, trained_on,
+        )
+
+    if "BERT_MODEL_NAME" not in os.environ and trained_on:
+        if trained_on != MODEL_NAME:
+            logger.info("מודל הבסיס נלקח מה-checkpoint: %s", trained_on)
+        MODEL_NAME = trained_on
 
     if "BERT_MAX_LENGTH" not in os.environ and meta.get("max_length"):
         if meta["max_length"] != MAX_LENGTH:
@@ -117,6 +133,7 @@ class PhishingBertClassifier(nn.Module):
         model_name: Optional[str] = None,
         num_labels: int = NUM_LABELS,
         dropout: float = 0.1,
+        pretrained: bool = True,
     ):
         super().__init__()
         # ברירת מחדל נפתרת כאן ולא בחתימה: ערך בחתימה מוקפא בזמן הגדרת
@@ -125,10 +142,20 @@ class PhishingBertClassifier(nn.Module):
         model_name = model_name or MODEL_NAME
 
         # Auto* ולא Bert* — כדי ש-DistilBERT ומודלים אחרים יעבדו גם הם
-        self.bert = AutoModelForSequenceClassification.from_pretrained(
-            model_name,
-            num_labels=num_labels,
-        )
+        if pretrained:
+            # אימון: מתחילים מהמשקלים של המודל המאומן מראש.
+            self.bert = AutoModelForSequenceClassification.from_pretrained(
+                model_name,
+                num_labels=num_labels,
+            )
+        else:
+            # הרצה: אנחנו עומדים לטעון checkpoint שדורס את כל המשקלים.
+            # from_pretrained היה קורא ~700MB מהדיסק (ובריצה ראשונה גם
+            # מוריד אותם מהרשת) רק כדי שנזרוק אותם מיד אחר כך.
+            # from_config בונה את הארכיטקטורה בלבד — מהיר בהרבה,
+            # ובלי גישה לרשת.
+            config = AutoConfig.from_pretrained(model_name, num_labels=num_labels)
+            self.bert = AutoModelForSequenceClassification.from_config(config)
         # Multilingual-MiniLM מצהיר על BertTokenizer ב-config שלו, אך אומן
         # למעשה עם אוצר המילים של XLM-R. AutoTokenizer מכבד את ההצהרה
         # ומחזיר טוקנייזר שגוי, מה שמייצר טוקנים חסרי משמעות ואימון שלא
@@ -196,6 +223,50 @@ class PhishingBertClassifier(nn.Module):
         text = f"{sender} {subject} {content}"
         return round(self.predict(text) * 100, 2)
 
+    # ------------------------------------------------------------------ #
+    def predict_batch(self, texts: list[str], batch_size: int = 32) -> list[float]:
+        """
+        אותה תוצאה כמו predict() לכל טקסט, אבל במקבצים.
+
+        predict() מריץ forward אחד לכל מייל. בסריקה חיה זה בדיוק מה
+        שנדרש — מייל אחד נכנס, תשובה אחת יוצאת. בהערכה על 16,137
+        שורות זה בזבוז: כל forward משלם מחדש על overhead קבוע, וה-CPU
+        אינו מנוצל. מקבץ של 32 מבצע את אותו חישוב בכפל מטריצות אחד.
+
+        padding="longest" ולא "max_length": אם המקבץ כולו קצר, אין
+        טעם לרפד ל-256 טוקנים ולחשב על ריפוד. התוצאה זהה כי
+        attention_mask מסתיר את הריפוד כך או כך.
+        """
+        self.eval()
+        out: list[float] = []
+        for start in range(0, len(texts), batch_size):
+            chunk = texts[start:start + batch_size]
+            encoding = self.tokenizer(
+                chunk,
+                max_length=MAX_LENGTH,
+                padding="longest",
+                truncation=True,
+                return_tensors="pt",
+            )
+            with torch.no_grad():
+                outputs = self(
+                    input_ids=encoding["input_ids"].to(DEVICE),
+                    attention_mask=encoding["attention_mask"].to(DEVICE),
+                    token_type_ids=(
+                        encoding["token_type_ids"].to(DEVICE)
+                        if "token_type_ids" in encoding else None
+                    ),
+                )
+            probs = torch.softmax(outputs.logits, dim=-1)
+            out.extend(float(p) for p in probs[:, 1])
+        return out
+
+    def predict_scores(self, rows: list[tuple[str, str, str]],
+                       batch_size: int = 32) -> list[float]:
+        """predict_score על רשימת (sender, subject, content), במקבצים."""
+        texts = [f"{s} {sub} {c}" for s, sub, c in rows]
+        return [round(p * 100, 2) for p in self.predict_batch(texts, batch_size)]
+
 
 # ---------------------------------------------------------------------------
 # Loader
@@ -220,7 +291,9 @@ def load_model(
     _apply_checkpoint_metadata(checkpoint_path)
 
     try:
-        model = PhishingBertClassifier()
+        # pretrained=False: ה-state_dict שנטען בשורה הבאה מכיל את כל
+        # המשקלים, ולכן אין טעם לקרוא קודם את משקלי הבסיס.
+        model = PhishingBertClassifier(pretrained=False)
         state_dict = torch.load(checkpoint_path, map_location=DEVICE, weights_only=True)
         model.bert.load_state_dict(state_dict)
         model = model.to(DEVICE)

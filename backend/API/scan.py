@@ -20,9 +20,8 @@ from config import (
     HIGH_RISK_THRESHOLD,
     MEDIUM_RISK_THRESHOLD,
     LOW_RISK_THRESHOLD,
-    BERT_WEIGHT,
-    HEURISTIC_WEIGHT,
 )
+from scoring import combine
 
 logger = logging.getLogger(__name__)
 
@@ -78,8 +77,8 @@ def get_risk_score(sender: str, subject: str, content: str) -> dict:
         logger.exception("BERT prediction failed — falling back to heuristics")
         return result
 
-    ensemble = BERT_WEIGHT * bert_score + HEURISTIC_WEIGHT * result["risk_score"]
-    result["risk_score"] = min(round(ensemble, 2), 100.0)
+    ensemble = combine(bert_score, result["risk_score"], sender)
+    result["risk_score"] = round(ensemble, 2)
     result["indicators"].append("ניתוח סמנטי (BERT)")
     return _apply_thresholds(result)
 
