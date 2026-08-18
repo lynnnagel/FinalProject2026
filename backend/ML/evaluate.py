@@ -65,7 +65,10 @@ def score_rows(df: pd.DataFrame, use_bert: bool,
             [(r.sender, r.subject, r.content) for r in chunk], batch_size=BATCH
         )
         for row, h, b in zip(chunk, heur[start:start + BATCH], bert):
-            scores.append(b if bert_only else combine(b, h, row.sender))
+            scores.append(
+                b if bert_only
+                else combine(b, h, row.sender, row.subject, row.content)
+            )
         done = min(start + BATCH, len(rows))
         if done % 512 < BATCH:
             print(f"    BERT: {done}/{len(rows)}", flush=True)

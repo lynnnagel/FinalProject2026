@@ -72,7 +72,7 @@ async def _start_bert_load():
 
 
 @app.get("/health/model", tags=["health"])
-async def model_health():
+def model_health():
     """מצב טעינת המודל: not_started / loading / ready / failed."""
     try:
         from ML.bert_model import load_state, MAX_LENGTH, DEFAULT_CHECKPOINT
@@ -88,7 +88,7 @@ async def model_health():
 
 
 @app.get("/", tags=["health"])
-async def root():
+def root():
     return {
         "message": "LURA API Active",
         "version": "1.0.0",
@@ -107,7 +107,7 @@ async def root():
     }
 
 @app.get("/test-email", tags=["health"])
-async def test_email():
+def test_email():
     from config import EMAIL_ENABLED, SMTP_USER, SMTP_PASSWORD, SMTP_HOST, SMTP_PORT
     from email_service import send_guardian_phishing_alert
     import smtplib
@@ -133,17 +133,17 @@ async def test_email():
             server.ehlo()
             server.starttls()
             server.login(SMTP_USER, SMTP_PASSWORD)
-        status["smtp_login"] = "✅ התחברות SMTP הצליחה"
+        status["smtp_login"] = "התחברות SMTP הצליחה"
     except smtplib.SMTPAuthenticationError:
-        status["smtp_login"] = "❌ שגיאת אימות — בדוק SMTP_USER ו-SMTP_PASSWORD"
+        status["smtp_login"] = "שגיאת אימות — בדוק SMTP_USER ו-SMTP_PASSWORD"
     except Exception as e:
-        status["smtp_login"] = f"❌ שגיאה: {e}"
+        status["smtp_login"] = f"שגיאה: {e}"
 
     return status
 
 
 @app.get("/test-email/send", tags=["health"])
-async def test_email_send():
+def test_email_send():
     from config import EMAIL_ENABLED, SMTP_USER
     from email_service import send_guardian_phishing_alert
 

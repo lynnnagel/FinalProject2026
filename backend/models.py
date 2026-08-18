@@ -46,6 +46,19 @@ class EmailRecord(Base):
     clicked_suspicious = Column(Boolean, default=False)
     scanned_at = Column(DateTime, default=datetime.utcnow)
 
+    # גרסת נוסחת הניקוד שהפיקה את הציון. הסריקה מחזירה תוצאה שמורה
+    # למייל שכבר נבדק — חיסכון אמיתי, כי הרצת BERT היא החלק היקר.
+    # אבל בלי חותמת הגרסה, שינוי בנוסחה או בסף לא היה משפיע על אף
+    # מייל שכבר נסרק: התיבה הייתה ממשיכה להציג ציונים שחושבו בקוד
+    # ישן, ובדיקה אחרי תיקון הייתה מודדת את הגרסה הקודמת.
+    scoring_version = Column(String, default="", index=True)
+
+    # טביעת אצבע של הטקסט שנוסח ממנו הציון. הזיהוי של רשומה הוא
+    # (משתמש, שולח, נושא), ולכן בלי החתימה הזאת סריקה שנייה של אותו
+    # מייל מקבלת את התוצאה השמורה גם כשהטקסט שנשלח שונה לגמרי —
+    # וזה בדיוק המקרה של סריקת הגוף המלא אחרי סריקת התצוגה המקדימה.
+    content_hash = Column(String, default="")
+
     user = relationship("User", back_populates="emails")
     alerts = relationship(
         "Alert", back_populates="email", cascade="all, delete-orphan"

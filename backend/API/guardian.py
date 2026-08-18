@@ -16,7 +16,7 @@ router = APIRouter(prefix="/guardian", tags=["guardian"])
 
 
 @router.post("/connect", summary="חיבור מפקח-מנוטר")
-async def connect_guardian(
+def connect_guardian(
     request: GuardianConnectRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -54,7 +54,7 @@ async def connect_guardian(
 
 
 @router.post("/disconnect", summary="ניתוק מפקח-מנוטר")
-async def disconnect_guardian(
+def disconnect_guardian(
     request: GuardianConnectRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -75,7 +75,7 @@ async def disconnect_guardian(
 
 
 @router.get("/{parent_email}", response_model=GuardianData, summary="לוח בקרה למפקח")
-async def get_guardian_data(
+def get_guardian_data(
     parent_email: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -90,14 +90,25 @@ async def get_guardian_data(
 
     children = db.query(User).filter(User.guardian_id == parent.id).all()
     if not children:
-        raise HTTPException(status_code=404, detail="לא נמצאו ילדים מחוברים")
+        # מצב ריק ולא שגיאה. מפקח שרשום במערכת אך טרם חיבר חשבון הוא
+        # מצב תקין לחלוטין, ו-404 גרם ללוח הבקרה להציג הודעת תקלה
+        # במקום הנחיה מה לעשות.
+        return GuardianData(
+            child_name="", child_email="", risk_score=0.0,
+            recent_alerts=[], phishing_blocked_today=0,
+        )
 
-    # השתמש בילד הראשון (הכי פעיל לפי סריקות)
+    # החשבון הפעיל ביותר. תמיכה במספר מנוטרים בו-זמנית דורשת שינוי
+    # במבנה התשובה, והיא רשומה כפריט פתוח.
     child = max(children, key=lambda c: c.total_scanned)
 
+    # ההתראות של המפקח, לא של המנוטר. שתי רשומות נוצרות לכל זיהוי:
+    # אחת למנוטר ואחת למפקח, וזו של המפקח היא היחידה שנושאת את שם
+    # המנוטר. עד כה לוח הבקרה שאב דווקא את זו של המנוטר, ולכן רשומות
+    # המפקח נכתבו ומעולם לא נקראו.
     alerts = (
         db.query(Alert)
-        .filter(Alert.user_id == child.id)
+        .filter(Alert.user_id == parent.id)
         .order_by(Alert.created_at.desc())
         .limit(ALERT_HISTORY_LIMIT)
         .all()

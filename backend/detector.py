@@ -1,13 +1,17 @@
 """
-Heuristic phishing detector – 8 rule-based checks.
-Enhanced from 5 checks to 8 with 50+ bilingual keywords.
+LURA – מנוע החוקים.
+
+תשע בדיקות משוקללות על השולח, הנושא והגוף, מסוכמות לציון 0–100.
+המנוע שקוף במלואו: כל נקודה בציון מגיעה מבדיקה שאפשר להצביע עליה,
+ולכן הוא גם מסביר למשתמש למה המייל סומן וגם אינו תלוי בקורפוס
+האימון — מה שהופך אותו לחלק שמכליל למיילים שלא נראו מעולם.
 """
 import re
 from datetime import datetime
 
+import risk_levels
 from config import (
-    PHISHING_THRESHOLD, HIGH_RISK_THRESHOLD, MEDIUM_RISK_THRESHOLD,
-    LOW_RISK_THRESHOLD, MAX_KEYWORD_SCORE, KEYWORD_SCORE_PER_WORD,
+    MAX_KEYWORD_SCORE, KEYWORD_SCORE_PER_WORD,
     SUSPICIOUS_DOMAIN_SCORE, MULTIPLE_URLS_SCORE, URGENCY_SCORE,
     INVALID_DOMAIN_SCORE, URL_COUNT_THRESHOLD, BRAND_IMPERSONATION_SCORE,
     BODY_IMPERSONATION_SCORE, WEAK_KEYWORD_SCORE, MAX_WEAK_KEYWORD_SCORE,
@@ -177,6 +181,48 @@ class PhishingDetector:
         "adobe":            ["adobe.com"],
         "openai":           ["openai.com"],
         "anthropic":        ["anthropic.com"],
+        "discord":          ["discord.com", "discordapp.com"],
+        "alibaba":          ["alibaba.com", "alibabagroup.com"],
+        "shein":            ["shein.com"],
+        "steam":            ["steampowered.com", "valvesoftware.com"],
+        "zoom":             ["zoom.us"],
+        "slack":            ["slack.com"],
+        "trello":           ["trello.com"],
+        "notion":           ["notion.so"],
+        "canva":            ["canva.com"],
+
+        # ── חנויות ושירותים שדואר תפעולי שלהם נפוץ בתיבה ─────────────
+        # אישור הזמנה, הודעת משלוח וקבלה הם הקטגוריה שהמערכת טעתה בה
+        # יותר מכל: המבנה שלהם — הרבה קישורים, "order", "account" —
+        # מפעיל את מנוע החוקים, והמודל מסמן אותם כמעט תמיד.
+        "iherb":            ["iherb.com"],
+        "asos":             ["asos.com"],
+        "next":             ["next.co.il", "nextdirect.com"],
+        "adidas":           ["adidas.com", "adidas.co.il"],
+        "nike":             ["nike.com"],
+        "zara":             ["zara.com"],
+        "castro":           ["castro.com"],
+        "fox":              ["fox.co.il"],
+        "golf":             ["golfandco.co.il"],
+        "מקס":              ["max.co.il"],
+        "עזריאלי":          ["azrieli.com"],
+        "yes":              ["yes.co.il"],
+        "hot":              ["hot.net.il", "hot.co.il"],
+        "wix":              ["wix.com"],
+        "paypal me":        ["paypal.com"],
+        "aliexpress il":    ["aliexpress.com"],
+        "trustpilot":       ["trustpilot.com", "trustpilotmail.com"],
+        "booking com":      ["booking.com"],
+        "ryanair":          ["ryanair.com"],
+        "el al":            ["elal.co.il"],
+        "אל על":            ["elal.co.il"],
+        "issta":            ["issta.co.il"],
+        "gett":             ["gett.com"],
+        "יאנגו":            ["yango.com"],
+        "cibus":            ["cibus.co.il"],
+        "סיבוס":            ["cibus.co.il"],
+        "10bis":            ["10bis.co.il"],
+        "תן ביס":           ["10bis.co.il"],
     }
 
     _URL_RE = re.compile(
@@ -293,6 +339,142 @@ class PhishingDetector:
 
         return None
 
+    # ביטויים שמסגירים דיוור שיווקי או התראת שירות. הם אינם ראיה
+    # ללגיטימיות בפני עצמם, אבל הם ראיה לכך שהמייל שייך לקטגוריה אחרת
+    # מפישינג — ובזה תפקידם.
+    PROMO_MARKERS = [
+        # קישור הסרה — הסימן האמין ביותר. חוקי הספאם בארה"ב ובאירופה
+        # מחייבים אותו בדיוור שיווקי, ולכן הוא מופיע כמעט תמיד.
+        "unsubscribe", "opt out", "opt-out", "manage preferences",
+        "email preferences", "notification settings",
+        "להסרה מרשימת התפוצה", "להסרה מרשימת הדיוור", "הסרה מרשימת",
+        "לביטול קבלת הודעות", "אם אינך מעוניין לקבל",
+        # סימון פרסומת מפורש
+        "(ad)", "[ad]", "advertisement", "פרסומת", "מודעה",
+        # אוצר מילים של מבצעים
+        "% off", "discount", "coupon", "promo code", "free shipping",
+        "add to cart", "shop now", "limited stock", "best sellers",
+        "מבצע", "הנחה", "קופון", "משלוח חינם", "לרכישה", "בהזדמנות",
+        "מוצרים חדשים", "הטבות", "במחיר מיוחד",
+    ]
+
+    # תת-קבוצה של STRONG_KEYWORDS שמבטלת את סיווג "פרסומת".
+    #
+    # אי אפשר להשתמש ב-STRONG_KEYWORDS המלאה: היא כוללת "לחץ כאן",
+    # "היום בלבד" ו-"limited time" — ניסוחים שמופיעים כמעט בכל דיוור
+    # שיווקי לגיטימי, ולכן כל פרסומת הייתה נפסלת והבדיקה הייתה חסרת
+    # תועלת. הן סימני ספאם, לא סימני פישינג.
+    #
+    # מה שנשאר כאן הוא מה שמאפיין תקיפה ולא מכירה: בקשה לאישורים,
+    # איום על החשבון, או פיתיון של פרס. פישינג שעוטה מעטה של פרסומת
+    # ייתפס בזכות הקבוצה הזאת.
+    ATTACK_KEYWORDS = [
+        "אמת את חשבונך", "אימות זהות", "החשבון יינעל", "חשבונך ייחסם",
+        "החשבון הושעה", "פעילות חריגה", "עדכן פרטים", "הזן סיסמה",
+        "הזן פרטי אשראי", "תעודת זהות", "לחץ לאימות", "חשבונך מוקפא",
+        "זכית", "זכייה", "הגרלה", "פרס",
+        "verify your account", "verify your identity", "account locked",
+        "account suspended", "unusual activity", "suspicious activity",
+        "confirm your password", "verify your password", "reset password",
+        "update your payment", "payment required", "your account has been",
+        "social security", "tax refund", "congratulations", "you have won",
+        "claim your prize",
+    ]
+
+    def looks_promotional(self, subject: str, content: str) -> bool:
+        """
+        האם המייל הוא דיוור שיווקי או התראת שירות, ולא ניסיון פישינג.
+
+        BERT אומן על קורפוסים שבהם ספאם מתויג כמחלקה החיובית יחד עם
+        פישינג, ולכן הוא לא מבדיל ביניהם: פרסומת של Temu מקבלת ממנו
+        99.99 בדיוק כמו מייל שמבקש פרטי אשראי. אבל LURA מזהה פישינג,
+        לא ספאם — פרסומת מעצבנת אינה איום, וסימונה כ"סכנה" שוחק את
+        אמון המשתמש בכל שאר ההתרעות.
+
+        הבדיקה דורשת ראיה חיובית לקטגוריה השיווקית, ולא שקט של מנוע
+        החוקים. שקט אינו אומר דבר — ודווקא מייל פישינג מנוסח היטב
+        משתיק את החוקים. לכן גם אם נמצא סימן שיווקי, נדרש שלא יופיע
+        אף ניסוח של בקשת אישורים או איום על החשבון: "זכית בפרס, לחץ
+        כאן" הוא פישינג שעוטה מעטה של פרסומת, וה-STRONG_KEYWORDS
+        מכסים אותו.
+        """
+        haystack = f"{subject or ''} {content or ''}".lower()
+        if not any(marker in haystack for marker in self.PROMO_MARKERS):
+            return False
+        return not any(kw in haystack for kw in self.ATTACK_KEYWORDS)
+
+    # אוצר מילים של דואר תפעולי: אישורי הזמנה, משלוחים, קבלות.
+    TRANSACTIONAL_MARKERS = [
+        "order", "your order", "shipped", "shipping", "delivery", "delivered",
+        "tracking", "receipt", "invoice", "purchase", "subscription renews",
+        "has been sent", "on its way", "arriving",
+        "הזמנה", "ההזמנה", "משלוח", "נשלח", "מעקב", "קבלה", "חשבונית",
+        "רכישה", "נארז", "בדרך אליך", "אישור הזמנה", "מספר הזמנה",
+    ]
+
+    def looks_transactional(self, sender: str, subject: str, content: str) -> bool:
+        """
+        האם זהו דואר תפעולי אמיתי — אישור הזמנה, הודעת משלוח, קבלה.
+
+        זו הקטגוריה הגדולה ביותר שהמערכת טעתה בה. מייל הזמנה מכיל
+        באופן טבעי הרבה קישורים ומילים כמו order ו-account, ולכן מנוע
+        החוקים נותן לו ניקוד בינוני; BERT מסמן אותו כמעט תמיד, כי
+        בקורפוסי האימון אין כמעט דואר מסחרי לגיטימי. שני המנועים
+        טועים באותו כיוון, ולכן ההסכמה ביניהם אינה מעידה על דבר.
+
+        מה שמפריד בין אישור הזמנה אמיתי לזיוף שלו הוא **לאן מובילים
+        הקישורים**. חנות אמיתית מקשרת לעצמה. תוקף שמחקה אישור הזמנה
+        חייב להוביל לדומיין שהוא שולט בו — אחרת אין לו מה להרוויח.
+
+        ארבעה תנאים, וכולם נדרשים:
+          1. השולח הוא חברה מזוהה. בלי התנאי הזה הבדיקה חסרת ערך:
+             זיוף שנשלח מ-iherb-delivery.info ומקשר לעצמו מקיים את כל
+             השאר, כי התוקף שולט בשני הצדדים. "הקישור מוביל לשולח"
+             מעיד על עקביות, לא על אמינות — האמינות מגיעה מכך שהשולח
+             הוא מי שהוא טוען שהוא.
+          2. יש בטקסט אוצר מילים תפעולי.
+          3. אין בקשת אישורים או איום על החשבון.
+          4. כל קישור מוביל לדומיין של השולח או של מותג מוכר.
+        """
+        if not self.is_trusted_sender(sender):
+            return False
+
+        haystack = f"{subject or ''} {content or ''}".lower()
+        if not any(m in haystack for m in self.TRANSACTIONAL_MARKERS):
+            return False
+        if any(kw in haystack for kw in self.ATTACK_KEYWORDS):
+            return False
+
+        domain = self._sender_domain(sender)
+        if not domain:
+            return False
+
+        known = [off for offs in self.BRAND_DOMAINS.values() for off in offs]
+        for url in self._URL_RE.findall(content or ""):
+            url_domain = self._url_domain(url)
+            if not url_domain:
+                continue
+            if self._domain_matches(url_domain, domain):
+                continue
+            if self._shares_registrable_part(url_domain, domain):
+                continue
+            if any(self._domain_matches(url_domain, off) for off in known):
+                continue
+            return False          # קישור שיוצא החוצה — לא תפעולי
+        return True
+
+    @staticmethod
+    def _shares_registrable_part(a: str, b: str) -> bool:
+        """
+        האם שני דומיינים שייכים לאותו ארגון.
+
+        חנויות שולחות דואר תפעולי מתשתית נלווית — iherb.com מול
+        e.iherb.com או iherbemail.com — ולכן השוואה מדויקת בלבד הייתה
+        פוסלת אישורי הזמנה אמיתיים.
+        """
+        core = lambda d: d.rsplit(".", 2)[0].split(".")[-1]
+        return bool(core(a)) and core(a) == core(b)
+
     def is_trusted_sender(self, sender: str) -> bool:
         """
         האם המייל נשלח באמת מדומיין של חברה מוכרת.
@@ -310,6 +492,18 @@ class PhishingDetector:
         domain = self._sender_domain(sender)
         if not domain:
             return False
+
+        # ספק דואר חינמי אינו "החברה עצמה". gmail.com ו-outlook.com
+        # מופיעים ב-BRAND_DOMAINS כדומיינים של גוגל ומיקרוסופט, אבל
+        # בניגוד ל-accounts.google.com הם כתובות שכל אחד יכול לפתוח
+        # תוך דקה. בלי החרגה כאן, כל פישינג שנשלח מ-Gmail קיבל הנמכה
+        # של ציון המודל פי ארבעה — וזה אחד הערוצים הנפוצים ביותר
+        # לפישינג בפועל. אותה רשימה כבר משמשת את בדיקה 8, שמזהה
+        # ארגון רשמי שפונה מכתובת חינמית.
+        if any(domain == p or domain.endswith("." + p)
+               for p in self.FREE_EMAIL_PROVIDERS):
+            return False
+
         return any(
             self._domain_matches(domain, official)
             for officials in self.BRAND_DOMAINS.values()
@@ -412,33 +606,17 @@ class PhishingDetector:
             risk_score += 30
             indicators.append("ארגון רשמי משתמש בכתובת מייל חינמית")
 
-        # סיכום
+        # סיכום. רמת הסיכון וההמלצה נקבעות ב-risk_levels, המודול
+        # היחיד שמכיר את הספים — כדי שהתווית לא תיקבע בשני מקומות
+        # ותיפרד מהם.
         risk_score = min(risk_score, 100.0)
-        is_phishing = risk_score >= PHISHING_THRESHOLD
-
-        if risk_score >= HIGH_RISK_THRESHOLD:
-            risk_level = "סכנה גבוהה"
-            recommendation = "⛔ אל תלחץ על שום קישור! מחק את המייל מיד."
-        elif risk_score >= MEDIUM_RISK_THRESHOLD:
-            risk_level = "חשוד"
-            recommendation = "⚠️ היזהר מאוד. בדוק את המקור לפני כל פעולה."
-        elif risk_score >= LOW_RISK_THRESHOLD:
-            risk_level = "זהירות"
-            recommendation = "🔍 המייל מכיל אלמנטים חשודים. היה ערני."
-        else:
-            risk_level = "בטוח"
-            recommendation = "✅ המייל נראה תקין."
-
         response_time = (datetime.now() - start).total_seconds()
 
-        return {
+        return risk_levels.apply({
             "risk_score": round(risk_score, 2),
-            "is_phishing": is_phishing,
-            "risk_level": risk_level,
             "indicators": indicators if indicators else ["לא נמצאו אינדיקטורים חשודים"],
-            "recommendation": recommendation,
             "response_time": round(response_time, 4),
-        }
+        })
 
 
 detector = PhishingDetector()

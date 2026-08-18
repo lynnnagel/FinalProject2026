@@ -11,7 +11,7 @@ router = APIRouter(tags=["metrics"])
 
 
 @router.get("/metrics", summary="מטריקות מערכת")
-async def get_metrics(db: Session = Depends(get_db)):
+def get_metrics(db: Session = Depends(get_db)):
     """
     Return system performance metrics.
 

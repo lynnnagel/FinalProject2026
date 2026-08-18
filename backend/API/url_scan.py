@@ -14,7 +14,7 @@ class URLInput(BaseModel):
 
 
 @router.post("/scan-url")
-async def scan_url(data: URLInput):
+def scan_url(data: URLInput):
     if not data.url or len(data.url.strip()) < 4:
         return {
             "risk_score": 0,

@@ -39,20 +39,32 @@ LURA – שילוב שני המנועים לציון אחד.
 """
 from __future__ import annotations
 
-from config import RULE_BOOST, TRUST_DAMPING
+from config import (
+    RULE_BOOST, TRUST_DAMPING, PROMO_DAMPING, TRANSACTIONAL_DAMPING,
+)
 from detector import detector
 
 
-def combine(bert_score: float, rule_score: float, sender: str) -> float:
+def combine(bert_score: float, rule_score: float, sender: str,
+            subject: str = "", content: str = "") -> float:
     """
     ציון סופי ב-[0,100] משני ציוני המנועים.
 
     bert_score, rule_score – שניהם ב-[0,100].
     sender – כתובת השולח; מחרוזת ריקה כשאין (קורפוסים שמספקים גוף
              מייל בלבד). ריקה פירושה "לא ידוע", ולא "לא אמין".
+    subject, content – נחוצים לזיהוי דיוור שיווקי. אופציונליים כדי
+             שקוד קיים שמעביר ציונים בלבד ימשיך לעבוד.
+
+    שתי ההנמכות אינן מצטברות: די בראיה אחת, וההכפלה בשתיהן הייתה
+    מוחקת את ציון המודל כמעט לחלוטין.
     """
     bert = bert_score
-    if sender and detector.is_trusted_sender(sender):
+    if sender and detector.looks_transactional(sender, subject, content):
+        bert *= TRANSACTIONAL_DAMPING
+    elif sender and detector.is_trusted_sender(sender):
         bert *= TRUST_DAMPING
+    elif detector.looks_promotional(subject, content):
+        bert *= PROMO_DAMPING
 
     return min(max(bert + RULE_BOOST * rule_score, rule_score), 100.0)

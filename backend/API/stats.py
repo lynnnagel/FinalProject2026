@@ -9,7 +9,7 @@ from utils import today_start
 router = APIRouter(tags=["stats"])
 
 @router.get("/stats/{user_email}", response_model=UserStats)
-async def get_user_stats(
+def get_user_stats(
     user_email: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),

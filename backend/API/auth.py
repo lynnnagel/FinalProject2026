@@ -96,8 +96,37 @@ def get_current_user(
     return user
 
 
+def get_optional_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db),
+) -> User | None:
+    """
+    מחזיר את המשתמש המזוהה אם נשלח טוקן תקין, ו-None אם לא נשלח כלל.
+
+    קיים בשביל /scan. סקריפט התוכן של התוסף שולח את הכתובת שהוא מגרד
+    מה-DOM של Gmail, ולכן שתי בעיות נוצרו יחד: כל אחד היה יכול לשלוח
+    בקשה בשם משתמש אחר, ובמקביל הסריקות נרשמו תחת זהות שאינה בהכרח
+    זו שאיתה המשתמש התחבר — ולכן לוח הבקרה שלו הופיע ריק.
+
+    כשיש טוקן, הוא הקובע וגוברת עליו כל כתובת בגוף הבקשה. טוקן פגום
+    נדחה במפורש; היעדר טוקן מותר, כדי שהתוסף ימשיך לעבוד גם לפני
+    התחברות.
+    """
+    if not credentials:
+        return None
+    try:
+        email = decode_token(credentials.credentials)
+    except HTTPException:
+        # טוקן פגום או שפג תוקפו נחשב כהיעדר טוקן, ולא כשגיאה.
+        # הנתיב הזה מתיר בקשה בלי הזדהות מלכתחילה, ולכן דחייה ב-401
+        # לא הוסיפה שום הגנה — היא רק שברה את הסריקה כליל אצל משתמש
+        # שהטוקן שלו פג אחרי שבעה ימים, במקום להמשיך כאנונימי.
+        return None
+    return db.query(User).filter(User.email == email).first()
+
+
 @router.post("/register", response_model=TokenResponse)
-async def register(data: RegisterRequest, db: Session = Depends(get_db)):
+def register(data: RegisterRequest, db: Session = Depends(get_db)):
     if db.query(User).filter(User.email == str(data.email)).first():
         raise HTTPException(400, "כתובת המייל כבר רשומה במערכת")
     user = User(
@@ -110,7 +139,7 @@ async def register(data: RegisterRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(data: LoginRequest, db: Session = Depends(get_db)):
+def login(data: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == str(data.email)).first()
     if not user or not user.password_hash:
         raise HTTPException(401, "כתובת מייל או סיסמה שגויים")
@@ -124,7 +153,7 @@ async def login(data: LoginRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/forgot-password", summary="בקשת קישור לאיפוס סיסמה")
-async def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get_db)):
+def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get_db)):
     """
     שולח קישור איפוס למייל. התשובה זהה בין אם הכתובת רשומה ובין אם לא,
     כדי לא לחשוף אילו כתובות קיימות במערכת (user enumeration).
@@ -140,7 +169,7 @@ async def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get
 
 
 @router.post("/reset-password", summary="איפוס סיסמה באמצעות אסימון")
-async def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
+def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
     try:
         payload = jwt.decode(data.token, SECRET_KEY, algorithms=[ALGORITHM])
     except jwt.ExpiredSignatureError:
@@ -166,7 +195,7 @@ async def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_d
 
 
 @router.get("/me", response_model=UserProfile)
-async def me(current_user: User = Depends(get_current_user)):
+def me(current_user: User = Depends(get_current_user)):
     return UserProfile(
         email=current_user.email, name=current_user.name,
         total_scanned=current_user.total_scanned,

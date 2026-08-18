@@ -157,7 +157,8 @@ def main() -> None:
 
     for r in rows:
         r["trusted"] = bool(r["sender"]) and detector.is_trusted_sender(r["sender"])
-        r["final"] = combine(r["b"], r["h"], r["sender"])
+        r["final"] = combine(r["b"], r["h"], r["sender"],
+                             r["subject"], r["content"])
 
     # ── טבלה ─────────────────────────────────────────────────────────
     print("═" * 78)

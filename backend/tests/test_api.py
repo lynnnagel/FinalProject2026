@@ -165,12 +165,23 @@ class TestGuardianEndpoint:
         r = client.get("/guardian/someone-else@example.com", headers=parent_headers)
         assert r.status_code == 403
 
-    def test_guardian_data_no_children_returns_404(self, client, safe_email, parent_headers):
+    def test_guardian_data_no_children_returns_empty_state(
+        self, client, safe_email, parent_headers
+    ):
+        """
+        מפקח רשום שטרם חיבר חשבון מקבל לוח בקרה ריק, לא שגיאה.
+
+        קודם הוחזר 404, ולוח הבקרה הציג הודעת תקלה למשתמש שלא עשה
+        דבר רע — הוא פשוט עוד לא חיבר אף אחד.
+        """
         client.post("/scan", json=safe_email)
-        # parent without children
         client.post("/scan", json={**safe_email, "user_email": "parent@example.com"})
         r = client.get("/guardian/parent@example.com", headers=parent_headers)
-        assert r.status_code == 404
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["child_email"] == ""
+        assert body["recent_alerts"] == []
+        assert body["phishing_blocked_today"] == 0
 
     def test_guardian_data_correct_structure(self, client, safe_email, parent_headers):
         client.post("/scan", json=safe_email)
@@ -308,3 +319,124 @@ class TestAuthEndpoint:
 
     def test_me_requires_token(self, client):
         assert client.get("/auth/me").status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# מצב מפקח — הזרימה המלאה
+#
+# הפיצ'ר הזה נוגע בשלושה חלקים שנכתבו בנפרד: הסריקה שיוצרת התראה,
+# הרשומה שנשמרת עבור המפקח, והלוח שקורא אותה. הבדיקות כאן עוברות
+# את כל השרשרת, כי כל אחת מהתקלות שהן מכסות התגלתה בתפר בין שניים
+# מהם ולא בתוך אחד מהם.
+# ---------------------------------------------------------------------------
+class TestGuardianFlow:
+    @staticmethod
+    def _connect(client, parent_headers, child_email):
+        r = client.post(
+            "/guardian/connect",
+            json={"child_email": child_email, "parent_email": "ignored@example.com"},
+            headers=parent_headers,
+        )
+        assert r.status_code == 200, r.text
+
+    def test_phishing_reaches_guardian_dashboard(
+        self, client, phishing_email, parent_headers
+    ):
+        """מייל פישינג אצל המנוטר מופיע בלוח הבקרה של המפקח."""
+        self._connect(client, parent_headers, phishing_email["user_email"])
+        assert client.post("/scan", json=phishing_email).json()["is_phishing"] is True
+
+        data = client.get("/guardian/parent@example.com", headers=parent_headers).json()
+        assert data["child_email"] == phishing_email["user_email"]
+        assert data["phishing_blocked_today"] == 1
+        assert len(data["recent_alerts"]) == 1
+
+    def test_alert_names_the_monitored_user(
+        self, client, phishing_email, parent_headers
+    ):
+        """
+        ההתראה בלוח נושאת את שם המנוטר.
+
+        נוצרות שתי רשומות התראה לכל זיהוי — אחת למנוטר ואחת למפקח —
+        ורק זו של המפקח אומרת של מי המייל. הלוח שאב בעבר דווקא את זו
+        של המנוטר, כך שרשומות המפקח נכתבו ומעולם לא נקראו.
+        """
+        self._connect(client, parent_headers, phishing_email["user_email"])
+        client.post("/scan", json=phishing_email)
+
+        alerts = client.get(
+            "/guardian/parent@example.com", headers=parent_headers
+        ).json()["recent_alerts"]
+        assert alerts, "לא נוצרה התראה עבור המפקח"
+        assert phishing_email["sender"] in alerts[0]["message"]
+        assert "קיבל מייל פישינג" in alerts[0]["message"]
+
+    def test_rescanning_does_not_duplicate_the_alert(
+        self, client, phishing_email, parent_headers
+    ):
+        """
+        סריקה חוזרת של אותו מייל אינה מייצרת התראה שנייה.
+
+        תוצאות סריקה נשמרות במסד, אך שינוי בנוסחת הניקוד מחשב אותן
+        מחדש. בלי התניה על זיהוי *ראשון*, כל שינוי כזה היה מציף את
+        המפקח בהתראות על דואר שהמנוטר קיבל לפני שבועות.
+        """
+        self._connect(client, parent_headers, phishing_email["user_email"])
+        for _ in range(3):
+            client.post("/scan", json=phishing_email)
+
+        alerts = client.get(
+            "/guardian/parent@example.com", headers=parent_headers
+        ).json()["recent_alerts"]
+        assert len(alerts) == 1, f"נוצרו {len(alerts)} התראות במקום אחת"
+
+    def test_rescanning_does_not_inflate_counters(
+        self, client, phishing_email, auth_headers
+    ):
+        """אותו מייל נספר פעם אחת, גם אם נסרק שוב ושוב."""
+        for _ in range(3):
+            client.post("/scan", json=phishing_email)
+
+        stats = client.get(
+            f"/stats/{phishing_email['user_email']}", headers=auth_headers
+        ).json()
+        assert stats["total_scanned"] == 1
+        assert stats["phishing_blocked"] == 1
+
+    def test_safe_email_creates_no_alert(self, client, safe_email, parent_headers):
+        self._connect(client, parent_headers, safe_email["user_email"])
+        client.post("/scan", json=safe_email)
+
+        data = client.get("/guardian/parent@example.com", headers=parent_headers).json()
+        assert data["recent_alerts"] == []
+        assert data["phishing_blocked_today"] == 0
+
+    def test_disconnect_stops_new_alerts(
+        self, client, phishing_email, parent_headers
+    ):
+        self._connect(client, parent_headers, phishing_email["user_email"])
+        r = client.post(
+            "/guardian/disconnect",
+            json={"child_email": phishing_email["user_email"],
+                  "parent_email": "ignored@example.com"},
+            headers=parent_headers,
+        )
+        assert r.status_code == 200, r.text
+
+        client.post("/scan", json=phishing_email)
+        data = client.get("/guardian/parent@example.com", headers=parent_headers).json()
+        assert data["recent_alerts"] == []
+
+    def test_stranger_cannot_disconnect(self, client, phishing_email,
+                                        parent_headers, make_user):
+        """רק המפקח שמוגדר בפועל יכול לנתק את הקישור."""
+        self._connect(client, parent_headers, phishing_email["user_email"])
+        stranger = make_user("stranger@example.com")
+
+        r = client.post(
+            "/guardian/disconnect",
+            json={"child_email": phishing_email["user_email"],
+                  "parent_email": "stranger@example.com"},
+            headers=stranger,
+        )
+        assert r.status_code == 404

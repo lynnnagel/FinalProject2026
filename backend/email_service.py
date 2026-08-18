@@ -104,7 +104,7 @@ def send_guardian_phishing_alert(
             server.sendmail(SMTP_USER, guardian_email, msg.as_string())
 
         logger.info(
-            "[Email] ✅ התראה נשלחה ל-%s עבור %s (סיכון %s%%)",
+            "[Email] התראה נשלחה ל-%s עבור %s (סיכון %s%%)",
             guardian_email,
             monitored_name,
             risk_score,
@@ -113,14 +113,14 @@ def send_guardian_phishing_alert(
 
     except smtplib.SMTPAuthenticationError:
         logger.error(
-            "[Email] ❌ שגיאת אימות SMTP – בדוק SMTP_USER ו-SMTP_PASSWORD"
+            "[Email] שגיאת אימות SMTP – בדוק SMTP_USER ו-SMTP_PASSWORD"
         )
     except smtplib.SMTPException as exc:
-        logger.error("[Email] ❌ שגיאת SMTP: %s", exc)
+        logger.error("[Email] שגיאת SMTP: %s", exc)
     except OSError as exc:
-        logger.error("[Email] ❌ שגיאת רשת בשליחת מייל: %s", exc)
+        logger.error("[Email] שגיאת רשת בשליחת מייל: %s", exc)
     except Exception as exc:
-        logger.error("[Email] ❌ שגיאה לא צפויה: %s", exc)
+        logger.error("[Email] שגיאה לא צפויה: %s", exc)
 
     return False
 
