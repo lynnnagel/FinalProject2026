@@ -6,6 +6,33 @@ Run from backend/:
 """
 
 
+def reset_token_for(email: str) -> str:
+    """
+    The reset link a user would receive by mail.
+
+    It is built the same way /auth/forgot-password builds it - from the
+    password hash currently stored - because that is what makes the link
+    single-use. A token built without it is not the token the system
+    issues, and a test using one would prove nothing.
+    """
+    from API.auth import create_reset_token
+    from database import get_db
+    from models import User
+    from server import app
+
+    # The session the app itself is using. Importing conftest to reach
+    # its factory would load a second copy of that module, with a second
+    # in-memory database that has no tables in it.
+    sessions = app.dependency_overrides[get_db]()
+    db = next(sessions)
+    try:
+        user = db.query(User).filter(User.email == email).first()
+        assert user is not None, f"no such user: {email}"
+        return create_reset_token(email, user.password_hash)
+    finally:
+        next(sessions, None)
+
+
 # ---------------------------------------------------------------------------
 # /scan
 # ---------------------------------------------------------------------------
@@ -289,10 +316,9 @@ class TestAuthEndpoint:
         assert r.status_code == 400
 
     def test_reset_with_valid_token(self, client, make_user):
-        from API.auth import create_reset_token
         make_user("reset@example.com", password="originalpass1")
 
-        token = create_reset_token("reset@example.com")
+        token = reset_token_for("reset@example.com")
         r = client.post("/auth/reset-password",
                         json={"token": token, "new_password": "brandnewpass2"})
         assert r.status_code == 200
@@ -301,11 +327,51 @@ class TestAuthEndpoint:
                         json={"email": "reset@example.com", "password": "brandnewpass2"})
         assert r.status_code == 200
 
+    def test_reset_token_works_only_once(self, client, make_user):
+        """
+        הקישור נשלח במייל, ולכן מי שרואה את המייל יכול לנסות להשתמש בו
+        שוב. אחרי איפוס אחד הוא אמור להיות מת — גם בתוך 30 הדקות שבהן
+        הוא עדיין בתוקף מבחינת הזמן.
+        """
+        make_user("once@example.com", password="originalpass1")
+        token = reset_token_for("once@example.com")
+
+        first = client.post("/auth/reset-password",
+                            json={"token": token, "new_password": "firstchange1"})
+        assert first.status_code == 200
+
+        second = client.post("/auth/reset-password",
+                             json={"token": token, "new_password": "attacker999"})
+        assert second.status_code == 400
+
+        # הסיסמה שנקבעה באיפוס הראשון היא שנשארה
+        assert client.post("/auth/login",
+                           json={"email": "once@example.com",
+                                 "password": "firstchange1"}).status_code == 200
+        assert client.post("/auth/login",
+                           json={"email": "once@example.com",
+                                 "password": "attacker999"}).status_code == 401
+
+    def test_reset_links_die_when_the_password_changes(self, client, make_user):
+        """
+        שני קישורים שנשלחו לפני שינוי סיסמה — שניהם צריכים למות אחרי
+        שהראשון מומש, ולא רק זה שנוצל.
+        """
+        make_user("two@example.com", password="originalpass1")
+        first_link = reset_token_for("two@example.com")
+        second_link = reset_token_for("two@example.com")
+
+        assert client.post("/auth/reset-password",
+                           json={"token": first_link,
+                                 "new_password": "changedonce1"}).status_code == 200
+        assert client.post("/auth/reset-password",
+                           json={"token": second_link,
+                                 "new_password": "changedtwice2"}).status_code == 400
+
     def test_reset_token_is_not_an_auth_token(self, client, make_user):
         """אסימון מהמייל לא אמור לשמש כהזדהות מלאה למערכת."""
-        from API.auth import create_reset_token
         make_user("sep@example.com")
-        token = create_reset_token("sep@example.com")
+        token = reset_token_for("sep@example.com")
         r = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
         assert r.status_code == 401
 

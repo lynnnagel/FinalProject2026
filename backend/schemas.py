@@ -97,3 +97,20 @@ class UserProfile(BaseModel):
     phishing_blocked: int
     risk_score: float
     daily_active: bool
+
+# ------------------------------------------------------------------------------
+# /trusted-senders
+# ------------------------------------------------------------------------------
+
+class TrustedSenderRequest(BaseModel):
+    """כתובת מלאה (a@b.com) או דומיין (b.com)."""
+    value: str = Field(min_length=3, max_length=254)
+
+
+class TrustedSenderItem(BaseModel):
+    value: str
+    is_domain: bool
+
+
+class TrustedSenderList(BaseModel):
+    senders: list[TrustedSenderItem]

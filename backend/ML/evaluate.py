@@ -100,6 +100,8 @@ def main() -> None:
                     help="רק שורות שיש בהן כתובת שולח")
     ap.add_argument("--limit", type=int, default=0, help="הגבלת מספר דוגמאות (0 = הכל)")
     ap.add_argument("--threshold", type=int, default=PHISHING_THRESHOLD)
+    ap.add_argument("--sweep", action="store_true",
+                    help="score once, then report every threshold from 20 to 80")
     args = ap.parse_args()
 
     if args.no_bert and args.bert_only:
@@ -148,6 +150,36 @@ def main() -> None:
     scores = score_rows(df, use_bert=not args.no_bert, bert_only=args.bert_only)
     y = df["label"].tolist()
     pred = [1 if s >= threshold else 0 for s in scores]
+
+    # Scoring is the expensive part - one pass over 14,862 messages
+    # through BERT. Trying thresholds one run at a time repeats that
+    # pass for a decision that only reads the scores, so the sweep
+    # scores once and then evaluates every cut-off over the same list.
+    if args.sweep:
+        heb = set(i for i, v in enumerate(is_hebrew) if v)
+        print("\n" + "═" * 72)
+        print("  סריקת ספים — ניקוד אחד, כל הספים")
+        print("═" * 72)
+        print(f"  {'סף':>4} {'דיוק':>7} {'F1':>7} {'שווא':>7} {'פספוס':>7}"
+              f" {'שווא-עב':>9} {'פספוס-עב':>9}")
+        print("  " + "─" * 62)
+        best = None
+        for t in range(20, 81, 5):
+            pred_t = [1 if s_ >= t else 0 for s_ in scores]
+            m = metrics(y, pred_t)
+            hy = [y[i] for i in heb]
+            hp = [pred_t[i] for i in heb]
+            hm = metrics(hy, hp) if hy else {"fp": 0, "fn": 0}
+            print(f"  {t:>4} {m['accuracy']*100:>6.1f}% {m['f1']:>7.3f}"
+                  f" {m['fp']:>7} {m['fn']:>7} {hm['fp']:>9} {hm['fn']:>9}")
+            if best is None or m["f1"] > best[1]:
+                best = (t, m["f1"], m)
+        print("  " + "─" * 62)
+        print(f"\n  F1 הגבוה ביותר: סף {best[0]}  (F1={best[1]:.3f})")
+        print("  אבל F1 מתייחס לשני סוגי הטעויות כשווים. בתיבה אמיתית")
+        print("  התרעת שווא שוחקת אמון מהר יותר מפספוס בודד, ולכן כדאי")
+        print("  לבחור סף שבו עמודת 'שווא' עדיין נמוכה.\n")
+        return
 
     print("\n" + "═" * 72)
     print("  תוצאות")

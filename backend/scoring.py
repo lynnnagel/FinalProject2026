@@ -41,12 +41,14 @@ from __future__ import annotations
 
 from config import (
     RULE_BOOST, TRUST_DAMPING, PROMO_DAMPING, TRANSACTIONAL_DAMPING,
+    UNCORROBORATED_CEILING, CORROBORATION_FLOOR,
 )
 from detector import detector
 
 
 def combine(bert_score: float, rule_score: float, sender: str,
-            subject: str = "", content: str = "") -> float:
+            subject: str = "", content: str = "",
+            user_trusts_sender: bool = False) -> float:
     """
     ציון סופי ב-[0,100] משני ציוני המנועים.
 
@@ -60,11 +62,36 @@ def combine(bert_score: float, rule_score: float, sender: str,
     מוחקת את ציון המודל כמעט לחלוטין.
     """
     bert = bert_score
-    if sender and detector.looks_transactional(sender, subject, content):
+
+    # אמון אישי: השולח נמצא ברשימת המוכרים של המשתמש.
+    #
+    # ההנמכה חלה על ציון המודל בלבד, ולעולם לא על ציון החוקים — וזו
+    # ההגנה המהותית של הפיצ'ר. אם השולח מתחזה למותג, שולח מדומיין
+    # מזויף או מקשר לכתובת IP, מנוע החוקים יזהה זאת והציון יישאר
+    # גבוה גם אם המשתמש סימן אותו כמוכר. משתמש יכול לומר "אני מכיר
+    # את הכתובת הזאת"; הוא אינו יכול לומר "התעלם מראיות".
+    #
+    # התוקף עלול להתחזות דווקא לשולח מוכר, ולכן דווקא כאן חשוב
+    # שהראיות ימשיכו לפעול.
+    if user_trusts_sender:
+        bert *= TRUST_DAMPING
+    elif sender and detector.looks_transactional(sender, subject, content):
         bert *= TRANSACTIONAL_DAMPING
     elif sender and detector.is_trusted_sender(sender):
         bert *= TRUST_DAMPING
     elif detector.looks_promotional(subject, content):
         bert *= PROMO_DAMPING
 
-    return min(max(bert + RULE_BOOST * rule_score, rule_score), 100.0)
+    score = min(max(bert + RULE_BOOST * rule_score, rule_score), 100.0)
+
+    # תקרה כשאין תימוכין. מייל ממשרד שהמשתמשת מתכתבת איתו, שמנוע
+    # החוקים לא מצא בו דבר, קיבל 99 מהמודל והוצג כ-99 — מספר שמבטיח
+    # ודאות שאינה קיימת, לצד המלצה מתונה לבדוק את זהות השולח. המספר
+    # והתווית סתרו זה את זה.
+    #
+    # זה אינו חוזר לטעות של הממוצע המשוקלל, שבו שקט של החוקים נחשב
+    # לראיה ללגיטימיות והוריד את הציון מתחת לסף. כאן הסיווג נשמר
+    # במלואו — התקרה יושבת בראש תחום "חשוד" — ורק הביטחון המוצג מרוסן.
+    if rule_score < CORROBORATION_FLOOR:
+        score = min(score, float(UNCORROBORATED_CEILING))
+    return score

@@ -1,17 +1,19 @@
 """
-LURA – Email Notification Service
-========================================
-שולח מיילי התראה למפקח (הורה / אבא / אימא / סבא) כאשר מזוהה מייל פישינג
-עבור המשתמש המנוטר.
+LURA - outgoing mail.
 
-הגדרה:
-    הגדר את משתני הסביבה הבאים (ראה .env.example):
-        SMTP_HOST        - שרת SMTP  (ברירת מחדל: smtp.gmail.com)
-        SMTP_PORT        - פורט SMTP  (ברירת מחדל: 587)
-        SMTP_USER        - כתובת Gmail ממנה נשלח
-        SMTP_PASSWORD    - App Password של Gmail (לא הסיסמה הרגילה!)
-        EMAIL_FROM_NAME  - שם השולח (ברירת מחדל: LURA)
-        EMAIL_ENABLED    - "true" להפעלה, "false" לכיבוי (ברירת מחדל: false)
+Two messages are sent from here: the alert to a guardian when phishing
+is found in the account they watch, and a password reset link.
+
+Configuration (see .env.example):
+    SMTP_HOST        SMTP server        (default: smtp.gmail.com)
+    SMTP_PORT        SMTP port          (default: 587)
+    SMTP_USER        the Gmail address mail is sent from
+    SMTP_PASSWORD    a Gmail App Password, not the account password
+    EMAIL_FROM_NAME  sender name        (default: LURA)
+    EMAIL_ENABLED    "true" to send, "false" to log only (default: false)
+
+With EMAIL_ENABLED=false nothing is sent and the call is logged instead,
+so the rest of the system can be run without SMTP credentials.
 """
 
 
@@ -27,6 +29,8 @@ from pathlib import Path
 
 from config import (
     APP_BASE_URL,
+    HIGH_RISK_THRESHOLD,
+    MEDIUM_RISK_THRESHOLD,
     EMAIL_ENABLED,
     EMAIL_FROM_NAME,
     SMTP_HOST,
@@ -35,7 +39,7 @@ from config import (
     SMTP_USER,
 )
 
-# האייקון שמוטמע בגוף המייל. הקבצים יושבים תחת extension/icons/.
+# The icon embedded in the message body. The files live under extension/icons/.
 ICON_PATH = Path(__file__).parent.parent / "extension" / "icons" / "icon128.png"
 ICON_CID = "lura_icon"
 
@@ -57,19 +61,13 @@ def send_guardian_phishing_alert(
     risk_level: str,
 ) -> bool:
     """
-    שלח התראה למפקח (guardian) כאשר המשתמש המנוטר קיבל מייל פישינג.
+    Alert a guardian that phishing was found in the account they watch.
 
-    Parameters:
-        guardian_email    – כתובת המייל של המפקח (הורה/סבא/אימא)
-        monitored_name    – שם המשתמש המנוטר (ילד/קשיש)
-        monitored_email   – כתובת המייל של המנוטר
-        risk_score        – ציון סיכון (0-100)
-        phishing_sender   – שולח מייל הפישינג
-        phishing_subject  – נושא מייל הפישינג
-        risk_level        – רמת סיכון בעברית (סכנה גבוהה / חשוד / זהירות)
+    Called from a background task, so it never delays the scan response
+    and never fails it: a mail that cannot be sent is logged and the
+    detection itself still stands, recorded on the dashboard.
 
-    Returns:
-        True אם נשלח בהצלחה, False אחרת.
+    Returns True only if the message actually went out.
     """
     if not EMAIL_ENABLED:
         logger.info(
@@ -130,16 +128,23 @@ def send_guardian_phishing_alert(
 # ---------------------------------------------------------------------------
 
 def _risk_color(risk_score: float) -> str:
-    """צבע HTML לפי ציון הסיכון."""
-    if risk_score >= 80:
-        return "#dc2626"  # אדום
-    if risk_score >= 50:
-        return "#f59e0b"  # כתום
-    return "#eab308"      # צהוב
+    """
+    An HTML colour for a risk score.
+
+    The cut-offs are the same ones the rest of the system uses. They were
+    hard-coded here as 80 and 50, so after the threshold was calibrated a
+    message the extension called "סכנה גבוהה" could arrive in the
+    guardian's mail painted orange.
+    """
+    if risk_score >= HIGH_RISK_THRESHOLD:
+        return "#dc2626"  # red
+    if risk_score >= MEDIUM_RISK_THRESHOLD:
+        return "#f59e0b"  # orange
+    return "#eab308"      # yellow
 
 
 def _attach_icon(msg: MIMEMultipart) -> None:
-    """מצרף את אייקון LURA כתמונה מוטמעת (cid), לשימוש בתגית <img>."""
+    """Attaches the LURA icon as an inline image (cid) for an <img> tag."""
     if not ICON_PATH.exists():
         logger.warning("[Email] אייקון לא נמצא: %s", ICON_PATH)
         return
@@ -169,7 +174,7 @@ def _build_message(
     msg["Subject"] = subject_line
     msg["From"] = f"{EMAIL_FROM_NAME} <{SMTP_USER}>"
     msg["To"] = to_email
-    msg["X-Priority"] = "1" if risk_score >= 80 else "3"
+    msg["X-Priority"] = "1" if risk_score >= HIGH_RISK_THRESHOLD else "3"
 
     alt_part = MIMEMultipart("alternative")
 
@@ -213,18 +218,19 @@ def _build_plain_text(
         f"LURA – התראת פישינג\n"
         f"{'=' * 40}\n\n"
         f"שלום,\n\n"
-        f"LURA זיהה מייל פישינג שנשלח ל-{monitored_name} ({monitored_email}).\n\n"
+        f"LURA זיהה מייל פישינג שנשלח אל {monitored_name} ({monitored_email}).\n\n"
         f"פרטי האיום:\n"
         f"  ציון סיכון : {risk_score:.0f}%\n"
         f"  רמת סיכון  : {risk_level}\n"
         f"  שולח חשוד  : {phishing_sender}\n"
         f"  נושא       : {phishing_subject or '(ללא נושא)'}\n"
         f"  זמן זיהוי  : {now}\n\n"
-        f"מומלץ לפנות ל-{monitored_name} ולוודא שלא לחץ על קישורים במייל זה\n"
-        f"ולא מסר פרטים אישיים.\n\n"
+        f"כדאי לפנות ל-{monitored_name} ולוודא שלא נלחץ קישור במייל הזה\n"
+        f"ושלא נמסרו פרטים אישיים.\n\n"
         f"{'─' * 40}\n"
         f"LURA – מערכת הגנה מפישינג\n"
-        f"הודעה זו נשלחה אוטומטית כי אתה מוגדר כמשגיח על {monitored_name}."
+        f"הודעה זו נשלחה אוטומטית כי החשבון של {monitored_name} מוגדר\n"
+        f"במעקב במצב מפקח."
     )
 
 
@@ -261,7 +267,7 @@ def _build_html(
         <tr>
           <td style="background:linear-gradient(135deg,#1e293b 0%,#0f172a 100%);
                      padding:32px;text-align:center;border-bottom:3px solid {color};">
-            <img src="cid:lura_icon" alt="LURA" style="width:48px;height:48px;margin-bottom:8px;">
+            <img src="cid:{ICON_CID}" alt="LURA" style="width:48px;height:48px;margin-bottom:8px;">
             <h1 style="color:#fff;margin:0;font-size:26px;font-weight:800;">LURA</h1>
             <p style="color:#94a3b8;margin:6px 0 0;font-size:13px;">מערכת הגנה מפישינג</p>
           </td>
@@ -271,7 +277,7 @@ def _build_html(
         <tr>
           <td style="background:{color};padding:14px 32px;text-align:center;">
             <p style="margin:0;color:#fff;font-size:18px;font-weight:700;">
-              &nbsp; זוהה מייל פישינג!
+              זוהה מייל פישינג
             </p>
           </td>
         </tr>
@@ -282,7 +288,7 @@ def _build_html(
 
             <p style="color:#e2e8f0;font-size:16px;margin:0 0 8px;">שלום,</p>
             <p style="color:#e2e8f0;font-size:15px;margin:0 0 28px;line-height:1.7;">
-              LURA זיהה מייל פישינג שנשלח ל
+              LURA זיהה מייל פישינג שנשלח אל
               <strong style="color:#60a5fa;">{monitored_name}</strong>
               <span style="color:#64748b;font-size:13px;"> ({monitored_email})</span>.
               להלן פרטי האיום:
@@ -330,12 +336,12 @@ def _build_html(
               <tr>
                 <td style="background:#172554;border-right:4px solid #3b82f6;
                            border-radius:0 10px 10px 0;padding:16px 20px;text-align:right;direction:rtl;">
-                  <p style="color:#93c5fd;margin:0 0 6px;font-size:14px;font-weight:700;">מה לעשות עכשיו?</p>
+                  <p style="color:#93c5fd;margin:0 0 6px;font-size:14px;font-weight:700;">מה כדאי לעשות עכשיו</p>
                   <p style="color:#dbeafe;margin:0;font-size:14px;line-height:1.7;">
-                    פנה ל-<strong>{monitored_name}</strong> ווודא שהם:<br>
-                    • לא לחצו על קישורים במייל זה<br>
-                    • לא הזינו סיסמאות או פרטי כרטיס אשראי<br>
-                    • מחקו את המייל מתיבת הדואר
+                    כדאי לפנות ל-<strong>{monitored_name}</strong> ולוודא ש:<br>
+                    • לא נלחץ אף קישור במייל הזה<br>
+                    • לא הוזנו סיסמאות או פרטי כרטיס אשראי<br>
+                    • המייל נמחק מתיבת הדואר
                   </p>
                 </td>
               </tr>
@@ -344,8 +350,9 @@ def _build_html(
             <hr style="border:none;border-top:1px solid #334155;margin:0 0 20px;">
             <p style="color:#475569;font-size:12px;text-align:center;margin:0;line-height:1.6;">
               הודעה זו נשלחה אוטומטית ממערכת LURA<br>
-              אתה מקבל הודעה זו כי הגדרת מעקב על חשבון
+              היא נשלחה כי החשבון של
               <strong style="color:#64748b;">{monitored_name}</strong>
+              מוגדר במעקב במצב מפקח
             </p>
 
           </td>
@@ -365,10 +372,11 @@ def _build_html(
 
 def send_password_reset(*, to_email: str, name: str, token: str) -> bool:
     """
-    שולח קישור חד-פעמי לאיפוס סיסמה.
+    Send a one-time password reset link.
 
-    האסימון נוצר ב-API/auth.py ותוקפו קצר (ראה RESET_TOKEN_TTL_MINUTES).
-    הקישור הוא הדרך היחידה לאפס סיסמה — אין נתיב שמקבל כתובת מייל בלבד.
+    The token is created in API/auth.py and is short-lived (see
+    RESET_TOKEN_TTL_MINUTES). This link is the only way to reset a
+    password - no endpoint accepts an email address on its own.
     """
     if not EMAIL_ENABLED:
         logger.info("[Email] מצב כבוי – היה נשלח קישור איפוס ל-%s", to_email)
@@ -419,7 +427,7 @@ def _reset_plain_text(name: str, link: str) -> str:
         f"{'=' * 40}\n\n"
         f"שלום {name},\n\n"
         f"קיבלנו בקשה לאיפוס הסיסמה של החשבון שלך.\n"
-        f"לאיפוס, היכנס לקישור הבא:\n\n"
+        f"אפשר לאפס דרך הקישור הבא:\n\n"
         f"{link}\n\n"
         f"הקישור תקף ל-30 דקות ומיועד לשימוש חד-פעמי.\n\n"
         f"אם לא ביקשת לאפס את הסיסמה — אפשר להתעלם מהודעה זו,\n"
@@ -463,7 +471,7 @@ def _reset_html(name: str, link: str) -> str:
             <p style="color:#e2e8f0;font-size:16px;margin:0 0 8px;">שלום {name},</p>
             <p style="color:#e2e8f0;font-size:15px;margin:0 0 28px;line-height:1.7;">
               קיבלנו בקשה לאיפוס הסיסמה של החשבון שלך.
-              לחץ על הכפתור כדי לבחור סיסמה חדשה:
+              אפשר לבחור סיסמה חדשה כאן:
             </p>
 
             <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">

@@ -45,20 +45,13 @@ def apply(result: dict, corroborated: bool = True) -> dict:
     """
     מוסיף is_phishing, risk_level ו-recommendation לפי risk_score.
 
-    corroborated=False פירושו שרק מנוע אחד תרם לציון. במצב כזה הדרגה
-    אינה עולה מעל "חשוד": הסיווג נשאר, אבל "סכנה גבוהה" — הדרגה
-    שאומרת למשתמש למחוק מיד — נשמרת למקרים ששני המנועים מסכימים
-    עליהם. עדות יחידה מספיקה כדי להזהיר, לא כדי להחליט בוודאות.
+    corroborated נשמר בחתימה לתאימות, אך אינו משנה עוד את התווית:
+    ריסון המקרה הלא-מתומך נעשה על הציון עצמו ב-scoring.combine, כך
+    שהמספר והתווית נגזרים מאותו מקור ואינם יכולים לסתור זה את זה.
+    ריסון התווית בלבד הותיר ציון 99 לצד הכיתוב "חשוד".
     """
     score = result["risk_score"]
     result["is_phishing"] = is_phishing(score)
-
-    level = risk_level(score)
-    text = recommendation(score)
-    if not corroborated and level == "סכנה גבוהה":
-        level = "חשוד"
-        text = recommendation(MEDIUM_RISK_THRESHOLD)
-
-    result["risk_level"] = level
-    result["recommendation"] = text
+    result["risk_level"] = risk_level(score)
+    result["recommendation"] = recommendation(score)
     return result

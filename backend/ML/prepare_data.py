@@ -50,6 +50,29 @@ def clean_text(text: str) -> str:
     return text[:1000]
 
 
+# ---------------------------------------------------------------------------
+# ספאם אינו פישינג
+#
+# הקורפוסים הציבוריים מתייגים אותם יחד: SpamAssassin מסמן ספאם ב-1,
+# ומיפוי התוויות של Kaggle העביר גם "spam" וגם "phishing" ל-1. המשמעות
+# היא שהמודל **מעולם לא נדרש להבחין ביניהם** — ומדידה בתיבה אמיתית
+# הראתה בדיוק את זה: פרסומת מסחרית קיבלה 99.99, אותו ציון כמו בקשה
+# לפרטי אשראי.
+#
+# אבל LURA מזהה פישינג ולא ספאם. פרסומת מעצבנת אינה איום, וסימונה
+# כסכנה שוחק את אמון המשתמש בכל שאר ההתרעות.
+#
+# SPAM_LABEL קובע מה לעשות עם השורות האלה:
+#   0     – ספאם הוא לא פישינג. ברירת המחדל, ומה שהמוצר באמת עושה.
+#   1     – ההתנהגות הישנה, לצורך השוואה.
+#   None  – להשמיט לגמרי; המודל לא רואה ספאם כלל.
+#
+# הערה למדידה: SPAM_LABEL=0 מוריד את הדיוק המדווח על קורפוס שמתייג
+# ספאם כפישינג. זה צפוי — המספר החדש מודד משימה אחרת, וצרה יותר.
+# ---------------------------------------------------------------------------
+SPAM_LABEL: int | None = 0
+
+
 def load_kaggle(path: str) -> pd.DataFrame:
     df = pd.read_csv(path)
     logger.info("Kaggle raw columns: %s", list(df.columns))
@@ -63,9 +86,15 @@ def load_kaggle(path: str) -> pd.DataFrame:
     if set(unique_labels).issubset({0, 1}):
         pass
     elif set(unique_labels).issubset({"spam", "ham", "phishing", "legitimate"}):
+        spam_rows = (df["label"] == "spam").sum()
         df["label"] = df["label"].map(
-            {"spam": 1, "phishing": 1, "ham": 0, "legitimate": 0}
+            {"spam": SPAM_LABEL, "phishing": 1, "ham": 0, "legitimate": 0}
         )
+        if spam_rows:
+            logger.info("Kaggle: %d שורות ספאם תויגו כ-%s",
+                        spam_rows, "הושמטו" if SPAM_LABEL is None else SPAM_LABEL)
+        if SPAM_LABEL is None:
+            df = df.dropna(subset=["label"])
     df["label"] = pd.to_numeric(df["label"], errors="coerce").fillna(0).astype(int)
     df["label"] = df["label"].clip(0, 1)
     return df
@@ -101,6 +130,18 @@ def load_spamassassin(path: str) -> pd.DataFrame:
     df = df[[text_col, label_col]].dropna()
     df.columns = ["text", "label"]
     df["label"] = pd.to_numeric(df["label"], errors="coerce").fillna(0).astype(int).clip(0, 1)
+
+    # ב-SpamAssassin, 1 פירושו ספאם ולא פישינג. הקורפוס הזה נאסף
+    # בשנות ה-2000 כאוסף ham/spam, ואין בו פישינג כלל.
+    spam_rows = int((df["label"] == 1).sum())
+    if spam_rows:
+        if SPAM_LABEL is None:
+            df = df[df["label"] == 0]
+            logger.info("SpamAssassin: %d שורות ספאם הושמטו", spam_rows)
+        else:
+            df.loc[df["label"] == 1, "label"] = SPAM_LABEL
+            logger.info("SpamAssassin: %d שורות ספאם תויגו כ-%d",
+                        spam_rows, SPAM_LABEL)
     return df
 
 
@@ -270,6 +311,27 @@ def prepare(args: argparse.Namespace):
         logger.info("Hebrew (%s): %d samples (legitimate=%d, phishing=%d)%s",
                     source, len(df), int((df["label"] == 0).sum()), int(df["label"].sum()),
                     "  [עם שולח ונושא]" if "sender" in df.columns else "")
+
+    # ── דואר תפעולי לגיטימי ──────────────────────────────────────────
+    # הקטגוריה שחסרה בקורפוסים לגמרי: אישור הזמנה, חידוש מנוי, קבלה,
+    # התראת כניסה, איפוס סיסמה יזום. המודל נתן להם 99.99 פשוט מפני
+    # שלא ראה אותם מעולם — הם דומים לפישינג בכל מאפיין שטחי, וההבדל
+    # היחיד הוא שהם אמיתיים.
+    #     ML/generate_legitimate.py --n 2000
+    legit_path = os.path.join(args.data_dir, "legitimate_generated.csv")
+    if os.path.exists(legit_path):
+        df = pd.read_csv(legit_path).dropna(subset=["text", "label"])
+        df["label"] = df["label"].astype(int).clip(0, 1)
+        df["source"] = "legitimate_generated"
+        keep = [c for c in ("sender", "subject", "text", "label", "source")
+                if c in df.columns]
+        frames.append(df[keep])
+        logger.info("דואר תפעולי לגיטימי: %d דוגמאות", len(df))
+    else:
+        logger.warning(
+            "אין דואר תפעולי לגיטימי. המודל ייתן ציון גבוה לאישורי הזמנה "
+            "ולאיפוסי סיסמה. ליצירה:  python ML/generate_legitimate.py --n 2000"
+        )
 
     if not any(os.path.exists(os.path.join(args.data_dir, f))
                for f in ("hebrew_generated.csv", "hebrew_translated.csv")):

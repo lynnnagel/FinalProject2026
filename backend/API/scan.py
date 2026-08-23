@@ -21,6 +21,7 @@ from config import (
 from API.auth import get_optional_user
 import hashlib
 
+from API.trusted import is_trusted_by_user
 import risk_levels
 from scoring import combine
 
@@ -64,7 +65,8 @@ def _apply_thresholds(result: dict, corroborated: bool = True) -> dict:
     return risk_levels.apply(result, corroborated=corroborated)
 
 
-def get_risk_score(sender: str, subject: str, content: str) -> dict:
+def get_risk_score(sender: str, subject: str, content: str,
+                   user_trusts_sender: bool = False) -> dict:
     result = detector.analyze_email(sender, subject, content)
 
     model = get_bert_model()
@@ -78,7 +80,8 @@ def get_risk_score(sender: str, subject: str, content: str) -> dict:
         return result
 
     rule_score = result["risk_score"]
-    ensemble = combine(bert_score, rule_score, sender, subject, content)
+    ensemble = combine(bert_score, rule_score, sender, subject, content,
+                       user_trusts_sender=user_trusts_sender)
     result["risk_score"] = round(ensemble, 2)
 
     # ההסבר למשתמש.
@@ -174,6 +177,7 @@ def scan_email(
         email_data.sender,
         email_data.subject,
         email_data.content,
+        user_trusts_sender=is_trusted_by_user(db, user.id, email_data.sender),
     )
 
     if existing:

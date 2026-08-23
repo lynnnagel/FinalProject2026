@@ -15,6 +15,7 @@ from config import CORS_ORIGIN_REGEX
 from database import init_db
 from API.scan import router as scan_router
 from API.stats import router as stats_router
+from API.trusted import router as trusted_router
 from API.guardian import router as guardian_router
 from API.metrics import router as metrics_router
 from API.auth import router as auth_router
@@ -42,6 +43,7 @@ init_db()
 
 app.include_router(scan_router)
 app.include_router(stats_router)
+app.include_router(trusted_router)
 app.include_router(guardian_router)
 app.include_router(metrics_router)
 app.include_router(auth_router)

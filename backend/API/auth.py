@@ -32,7 +32,7 @@ MIN_PASSWORD_LENGTH = 8
 
 
 def hash_password(password: str) -> str:
-    """גיבוב סיסמה עם bcrypt (מאובטח, עם salt אוטומטי)."""
+    """Hash a password with bcrypt - secure, salted automatically."""
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
@@ -43,7 +43,7 @@ def verify_password(plain: str, stored: str) -> bool:
     """
     if stored.startswith("$2"):
         return bcrypt.checkpw(plain.encode("utf-8"), stored.encode("utf-8"))
-    # hash SHA-256 ישן – תמיכה לאחור
+    # Old SHA-256 hash - kept for backwards compatibility
     return stored == hashlib.sha256(plain.encode("utf-8")).hexdigest()
 
 
@@ -56,11 +56,27 @@ def create_token(email: str) -> str:
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def create_reset_token(email: str) -> str:
-    """אסימון חד-פעמי קצר-מועד לאיפוס סיסמה."""
+def _password_fingerprint(password_hash: str | None) -> str:
+    """A short fingerprint of the stored hash. Never the hash itself."""
+    return hashlib.sha256((password_hash or "").encode("utf-8")).hexdigest()[:16]
+
+
+def create_reset_token(email: str, password_hash: str | None) -> str:
+    """
+    A short-lived, single-use token for resetting a password.
+
+    Single use is what makes it safe to send by mail, and it needs no
+    table of spent tokens: the token carries a fingerprint of the
+    password it was issued against. Resetting replaces the password, the
+    fingerprint stops matching, and the link is dead - including every
+    other link issued earlier. Without this the token was replayable
+    for its whole 30 minutes by anyone who saw the mail, which is
+    exactly the situation the feature exists to protect against.
+    """
     payload = {
         "sub": email,
         "purpose": "reset",
+        "pwh": _password_fingerprint(password_hash),
         "exp": datetime.utcnow() + timedelta(minutes=RESET_TOKEN_TTL_MINUTES),
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
@@ -74,9 +90,9 @@ def decode_token(token: str) -> str:
     except jwt.InvalidTokenError:
         raise HTTPException(401, "טוקן לא תקין")
 
-    # אסימון איפוס סיסמה אינו אסימון התחברות — אחרת קישור מהמייל
-    # היה משמש כהזדהות מלאה למערכת.
-    # ("auth" הוא גם ברירת המחדל, לתאימות עם טוקנים שהונפקו לפני השינוי)
+    # A password-reset token is not a login token - otherwise a link
+    # from an email would work as a full login to the system.
+    # ("auth" is also the default, for tokens issued before the change.)
     if payload.get("purpose", "auth") != "auth":
         raise HTTPException(401, "טוקן לא תקין")
 
@@ -101,26 +117,29 @@ def get_optional_user(
     db: Session = Depends(get_db),
 ) -> User | None:
     """
-    מחזיר את המשתמש המזוהה אם נשלח טוקן תקין, ו-None אם לא נשלח כלל.
+    Returns the identified user if a valid token was sent, and None if
+    none was sent at all.
 
-    קיים בשביל /scan. סקריפט התוכן של התוסף שולח את הכתובת שהוא מגרד
-    מה-DOM של Gmail, ולכן שתי בעיות נוצרו יחד: כל אחד היה יכול לשלוח
-    בקשה בשם משתמש אחר, ובמקביל הסריקות נרשמו תחת זהות שאינה בהכרח
-    זו שאיתה המשתמש התחבר — ולכן לוח הבקרה שלו הופיע ריק.
+    It exists for /scan. The extension's content script sends the address
+    it scrapes from Gmail's DOM, which caused two problems at once:
+    anyone could post a request in another user's name, and scans were
+    recorded under an identity that need not match the account the user
+    signed in with - which is why their dashboard came up empty.
 
-    כשיש טוקן, הוא הקובע וגוברת עליו כל כתובת בגוף הבקשה. טוקן פגום
-    נדחה במפורש; היעדר טוקן מותר, כדי שהתוסף ימשיך לעבוד גם לפני
-    התחברות.
+    When a token is present it decides, and any address in the request
+    body is ignored. A missing token is allowed, so the extension keeps
+    working before login.
     """
     if not credentials:
         return None
     try:
         email = decode_token(credentials.credentials)
     except HTTPException:
-        # טוקן פגום או שפג תוקפו נחשב כהיעדר טוקן, ולא כשגיאה.
-        # הנתיב הזה מתיר בקשה בלי הזדהות מלכתחילה, ולכן דחייה ב-401
-        # לא הוסיפה שום הגנה — היא רק שברה את הסריקה כליל אצל משתמש
-        # שהטוקן שלו פג אחרי שבעה ימים, במקום להמשיך כאנונימי.
+        # A malformed or expired token counts as no token, not as an
+        # error. This path allows an unauthenticated request in the
+        # first place, so refusing with a 401 added no protection - it
+        # only broke scanning completely for anyone whose token had aged
+        # out after seven days, instead of carrying on anonymously.
         return None
     return db.query(User).filter(User.email == email).first()
 
@@ -145,14 +164,14 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
         raise HTTPException(401, "כתובת מייל או סיסמה שגויים")
     if not verify_password(data.password, user.password_hash):
         raise HTTPException(401, "כתובת מייל או סיסמה שגויים")
-    # שדרג hash ישן ל-bcrypt
+    # Upgrade an old hash to bcrypt
     if not user.password_hash.startswith("$2"):
         user.password_hash = hash_password(data.password)
         db.commit()
     return TokenResponse(token=create_token(str(data.email)), email=str(data.email), name=user.name)
 
 
-@router.post("/forgot-password", summary="בקשת קישור לאיפוס סיסמה")
+@router.post("/forgot-password", summary="Request a password reset link")
 def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get_db)):
     """
     שולח קישור איפוס למייל. התשובה זהה בין אם הכתובת רשומה ובין אם לא,
@@ -163,12 +182,12 @@ def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get_db)):
         send_password_reset(
             to_email=user.email,
             name=user.name,
-            token=create_reset_token(user.email),
+            token=create_reset_token(user.email, user.password_hash),
         )
     return {"message": "אם הכתובת רשומה במערכת, נשלח אליה קישור לאיפוס סיסמה"}
 
 
-@router.post("/reset-password", summary="איפוס סיסמה באמצעות אסימון")
+@router.post("/reset-password", summary="Reset a password using a token")
 def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
     try:
         payload = jwt.decode(data.token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -188,6 +207,15 @@ def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == payload["sub"]).first()
     if not user:
         raise HTTPException(404, "משתמש לא נמצא")
+
+    # The link is good for one reset. Once the password changes the
+    # fingerprint in the token no longer matches what is stored, so this
+    # link - and any older one still inside its 30 minutes - stops
+    # working.
+    if payload.get("pwh") != _password_fingerprint(user.password_hash):
+        raise HTTPException(
+            400, "הקישור כבר שימש לאיפוס סיסמה — בקש קישור חדש"
+        )
 
     user.password_hash = hash_password(data.new_password)
     db.commit()

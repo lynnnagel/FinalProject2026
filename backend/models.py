@@ -1,10 +1,11 @@
 """
 SQLAlchemy ORM models.
-Three tables: users, emails, alerts.
+Four tables: users, emails, alerts, trusted_senders.
 """
 from datetime import datetime
 from sqlalchemy import (
     Column, Integer, String, Float, Boolean, DateTime, ForeignKey,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 from database import Base
@@ -30,6 +31,9 @@ class User(Base):
     )
     alerts = relationship(
         "Alert", back_populates="user", cascade="all, delete-orphan"
+    )
+    trusted_senders = relationship(
+        "TrustedSender", back_populates="user", cascade="all, delete-orphan"
     )
 
 
@@ -63,6 +67,35 @@ class EmailRecord(Base):
     alerts = relationship(
         "Alert", back_populates="email", cascade="all, delete-orphan"
     )
+
+
+class TrustedSender(Base):
+    """
+    שולח שהמשתמש סימן כמוכר לו.
+
+    המערכת מכירה מותגים גדולים (BRAND_DOMAINS), אבל התיבה של אדם
+    מלאה בכתובות שאיש לא שמע עליהן — משרד שהוא מתכתב איתו, מורה,
+    ספק. עבורן אין למערכת שום ראיה חיובית ללגיטימיות, ולכן מייל תקין
+    לחלוטין מקבל ציון גבוה על סמך ניחוש המודל בלבד.
+
+    הרשימה הזאת היא הראיה החסרה, והיא אישית: מה שמוכר למשתמש אחד
+    אינו אומר דבר על משתמש אחר.
+
+    value מחזיק כתובת מלאה (name@example.com) או דומיין (example.com)
+    כשהארגון שולח מכמה כתובות.
+    """
+    __tablename__ = "trusted_senders"
+    __table_args__ = (
+        UniqueConstraint("user_id", "value", name="uq_trusted_sender"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    value = Column(String, nullable=False, index=True)   # תמיד באותיות קטנות
+    is_domain = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="trusted_senders")
 
 
 class Alert(Base):
