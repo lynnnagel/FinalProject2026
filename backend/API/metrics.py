@@ -10,7 +10,7 @@ from models import EmailRecord, User
 router = APIRouter(tags=["metrics"])
 
 
-@router.get("/metrics", summary="מטריקות מערכת")
+@router.get("/metrics", summary="System metrics")
 def get_metrics(db: Session = Depends(get_db)):
     """
     Return system performance metrics.

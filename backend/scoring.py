@@ -1,41 +1,43 @@
 """
-LURA – שילוב שני המנועים לציון אחד.
+LURA - turning two engine scores into one.
 
-הצינור מייצר שני ציונים בלתי תלויים ב-[0,100]: מנוע החוקים ו-BERT.
-המודול הזה מחליט איך להפוך אותם לציון סופי, ומרכז את ההחלטה במקום
-אחד כדי שהתוסף, ההערכה והכיול ימדדו בדיוק את אותה נוסחה.
+The pipeline produces two independent scores in [0,100]: the rule engine
+and BERT. This module decides how to merge them, and keeps that decision
+in one place so the extension, the evaluation and the calibration all
+measure exactly the same formula.
 
-למה לא ממוצע משוקלל
---------------------
-הגרסה הראשונה חישבה  0.4·bert + 0.6·rules.  מדידה על סט הבדיקה
-הראתה ששתי תכונות של הנוסחה הזאת הורסות את הביצועים:
+Why not a weighted average
+--------------------------
+The first version computed  0.4*bert + 0.6*rules.  Measuring it on the
+test set showed two properties of that formula wrecking the results:
 
-1. תקרה. BERT בביטחון מלא תורם 40 נקודות בלבד — פחות מהסף 57.
-   כלומר מייל שהמודל בטוח לגביו ב-100%, אך מנוע החוקים שותק עליו,
-   מסווג כתקין תמיד. על סט הבדיקה זה הפיל את הדיוק ל-52.8% עם 93.6%
-   פספוסים, בזמן ש-BERT לבדו השיג 99.4% ו-F1 0.994 על אותן שורות.
+1. A ceiling. BERT at full confidence contributes only 40 points, below
+   the threshold of 57. So a message the model is 100% sure about, but
+   the rules say nothing about, was always classed as safe. On the test
+   set that dropped accuracy to 52.8% with a 93.6% miss rate, while BERT
+   alone scored 99.4% with F1 0.994 on the same rows.
 
-2. מיצוע של שקט. כשמנוע החוקים לא מזהה דבר הוא מחזיר 0, והממוצע
-   מפרש את זה כראיה ללגיטימיות. אבל 0 פירושו "אין לי מה לומר" —
-   בין היתר כשאין בכלל כתובת שולח, ואז שלוש מתשע הבדיקות אינן
-   יכולות לרוץ.
+2. Averaging silence. When the rule engine finds nothing it returns 0,
+   and the average reads that as evidence of legitimacy. But 0 means "I
+   have nothing to say" - which is also what happens when there is no
+   sender at all, and three of the nine checks cannot run.
 
-הנוסחה כאן
-----------
-    score = max( bert' + RULE_BOOST · rules ,  rules )
+The formula used here
+---------------------
+    score = max( bert' + RULE_BOOST * rules ,  rules )
 
-  · כל מנוע יכול להגיע לבדו ל-100. חוקים שזיהו התחזות ברורה אינם
-    צריכים את אישור המודל, ולהפך.
-  · חוקים מחזקים את BERT במקום למצע אותו — שני מנועים שמסכימים
-    נותנים ודאות גבוהה יותר מאחד.
+  - Either engine can reach 100 on its own. Rules that spotted a clear
+    impersonation do not need the model to agree, and the reverse holds.
+  - Rules reinforce BERT instead of averaging it down - two engines
+    agreeing is stronger evidence than one.
 
-  · bert' = bert · TRUST_DAMPING  אם השולח הוא דומיין של חברה מוכרת.
-    זו ההנמכה היחידה, והיא דורשת ראיה חיובית ללגיטימיות ולא סתם
-    שקט. היא מכוונת לכשל מתועד של המודל: הוא נותן 99.99 גם להודעת
-    חידוש מנוי מ-malwarebytes.com וגם לאיפוס סיסמה מ-
-    accounts.google.com, כי בקורפוסי האימון כמעט אין דואר לגיטימי
-    בענייני חשבון ואבטחה. מייל שנשלח באמת מהדומיין של החברה אינו
-    יכול להיות התחזות אליה.
+  - bert' = bert * damping, and damping only ever applies when there is
+    positive evidence the mail is legitimate, never just silence. It
+    targets a measured weakness of the model: it gives 99.99 both to a
+    subscription renewal from malwarebytes.com and to a password reset
+    from accounts.google.com, because the training corpora contain
+    almost no legitimate account or security mail. Mail genuinely sent
+    from a company's own domain cannot be impersonating that company.
 """
 from __future__ import annotations
 
@@ -50,29 +52,31 @@ def combine(bert_score: float, rule_score: float, sender: str,
             subject: str = "", content: str = "",
             user_trusts_sender: bool = False) -> float:
     """
-    ציון סופי ב-[0,100] משני ציוני המנועים.
+    Final score in [0,100] from the two engine scores.
 
-    bert_score, rule_score – שניהם ב-[0,100].
-    sender – כתובת השולח; מחרוזת ריקה כשאין (קורפוסים שמספקים גוף
-             מייל בלבד). ריקה פירושה "לא ידוע", ולא "לא אמין".
-    subject, content – נחוצים לזיהוי דיוור שיווקי. אופציונליים כדי
-             שקוד קיים שמעביר ציונים בלבד ימשיך לעבוד.
+    bert_score, rule_score - both in [0,100].
+    sender - the sender address; empty when there is none (corpora that
+             supply only a message body). Empty means "unknown", not
+             "untrusted".
+    subject, content - needed to spot marketing mail. Optional so older
+             code that passes scores only keeps working.
 
-    שתי ההנמכות אינן מצטברות: די בראיה אחת, וההכפלה בשתיהן הייתה
-    מוחקת את ציון המודל כמעט לחלוטין.
+    The dampings do not stack: one piece of evidence is enough, and
+    multiplying by several would wipe out the model's score entirely.
     """
     bert = bert_score
 
-    # אמון אישי: השולח נמצא ברשימת המוכרים של המשתמש.
+    # Personal trust: the sender is on the user's known-sender list.
     #
-    # ההנמכה חלה על ציון המודל בלבד, ולעולם לא על ציון החוקים — וזו
-    # ההגנה המהותית של הפיצ'ר. אם השולח מתחזה למותג, שולח מדומיין
-    # מזויף או מקשר לכתובת IP, מנוע החוקים יזהה זאת והציון יישאר
-    # גבוה גם אם המשתמש סימן אותו כמוכר. משתמש יכול לומר "אני מכיר
-    # את הכתובת הזאת"; הוא אינו יכול לומר "התעלם מראיות".
+    # This damps the model's score only, never the rules - that is what
+    # makes the feature safe. If the sender impersonates a brand, writes
+    # from a forged domain, or links to a raw IP, the rule engine sees
+    # it and the score stays high even after the user marked it. A user
+    # can say "I know this address"; they cannot say "ignore the
+    # evidence".
     #
-    # התוקף עלול להתחזות דווקא לשולח מוכר, ולכן דווקא כאן חשוב
-    # שהראיות ימשיכו לפעול.
+    # An attacker would impersonate a known sender in particular, so
+    # this is exactly where the evidence has to keep working.
     if user_trusts_sender:
         bert *= TRUST_DAMPING
     elif sender and detector.looks_transactional(sender, subject, content):
@@ -84,14 +88,17 @@ def combine(bert_score: float, rule_score: float, sender: str,
 
     score = min(max(bert + RULE_BOOST * rule_score, rule_score), 100.0)
 
-    # תקרה כשאין תימוכין. מייל ממשרד שהמשתמשת מתכתבת איתו, שמנוע
-    # החוקים לא מצא בו דבר, קיבל 99 מהמודל והוצג כ-99 — מספר שמבטיח
-    # ודאות שאינה קיימת, לצד המלצה מתונה לבדוק את זהות השולח. המספר
-    # והתווית סתרו זה את זה.
+    # Ceiling when nothing corroborates. Mail from an office the user
+    # writes to, with no rule finding at all, got 99 from the model and
+    # was shown as 99 - a number promising a certainty that is not there,
+    # next to a mild suggestion to check who sent it. The number and the
+    # label contradicted each other.
     #
-    # זה אינו חוזר לטעות של הממוצע המשוקלל, שבו שקט של החוקים נחשב
-    # לראיה ללגיטימיות והוריד את הציון מתחת לסף. כאן הסיווג נשמר
-    # במלואו — התקרה יושבת בראש תחום "חשוד" — ורק הביטחון המוצג מרוסן.
+    # This is not a return to the weighted-average mistake, where
+    # silence from the rules counted as evidence of legitimacy and
+    # pushed the score under the threshold. Here the classification is
+    # untouched - the ceiling sits at the top of the "suspicious" band -
+    # and only the displayed confidence is held back.
     if rule_score < CORROBORATION_FLOOR:
         score = min(score, float(UNCORROBORATED_CEILING))
     return score

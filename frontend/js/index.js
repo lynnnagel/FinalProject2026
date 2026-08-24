@@ -11,13 +11,21 @@ function esc(value) {
 }
 
 // ── Nav state ─────────────────────────────────────────────
+// $ מחזיר null בשקט לאלמנט שאינו בדף. דף הבית עבר לגרסה המאושרת,
+// שאינה כוללת את כל האזורים שהיו קודם, ו-getElementById ישיר היה
+// זורק שגיאה שמפילה את שאר האתחול — כולל אנימציות החשיפה.
+const $ = id => document.getElementById(id);
+
+function show(id, visible) {
+  const el = $(id);
+  if (el) el.style.display = visible ? '' : 'none';
+}
+
 function initNav() {
-  const token = localStorage.getItem('pg_token');
-  if (token) {
-    document.getElementById('navLogin').style.display     = 'none';
-    document.getElementById('navLogout').style.display    = 'block';
-    document.getElementById('navDashboard').style.display = 'block';
-  }
+  const loggedIn = Boolean(localStorage.getItem('pg_token'));
+  show('navLogin', !loggedIn);
+  show('navLogout', loggedIn);
+  show('navDashboard', loggedIn);
 }
 
 function logout() {
@@ -42,10 +50,9 @@ async function loadStats() {
     const r = await fetch(`${API}/metrics`);
     if (!r.ok) return;
     const d = await r.json();
-    document.getElementById('totalScanned').textContent =
-      (d.total_emails_scanned || 0).toLocaleString();
-    document.getElementById('totalBlocked').textContent =
-      (d.phishing_blocked || 0).toLocaleString();
+    const scanned = $('totalScanned'), blocked = $('totalBlocked');
+    if (scanned) scanned.textContent = (d.total_emails_scanned || 0).toLocaleString();
+    if (blocked) blocked.textContent = (d.phishing_blocked || 0).toLocaleString();
   } catch {
     // השרת לא פועל — הסטטיסטיקות נשארות "—"
   }
@@ -53,11 +60,14 @@ async function loadStats() {
 
 // ── URL scanner ───────────────────────────────────────────
 async function scanURL() {
-  const url = document.getElementById('urlInput').value.trim();
+  const input = $('urlInput');
+  if (!input) return;
+  const url = input.value.trim();
   if (!url) return;
 
-  const btn      = document.getElementById('scanBtn');
-  const resultEl = document.getElementById('scanResult');
+  const btn      = $('scanBtn');
+  const resultEl = $('scanResult');
+  if (!btn || !resultEl) return;
 
   btn.textContent = 'סורק...';
   btn.disabled    = true;
@@ -145,6 +155,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initSmoothScroll();
   initReveal();
 
-  document.getElementById('urlInput')
-    .addEventListener('keydown', e => { if (e.key === 'Enter') scanURL(); });
+  $('urlInput')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') scanURL();
+  });
 });

@@ -15,24 +15,25 @@ from config import ALERT_HISTORY_LIMIT
 router = APIRouter(prefix="/guardian", tags=["guardian"])
 
 
-@router.post("/connect", summary="חיבור מפקח-מנוטר")
+@router.post("/connect", summary="Link a guardian to a monitored account")
 def connect_guardian(
     request: GuardianConnectRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
-    מקשר חשבון מנוטר למפקח.
+    Links a monitored account to a guardian.
 
-    המפקח נקבע תמיד לפי הטוקן ולא לפי שדה בבקשה — אחרת כל אחד היה יכול
-    להגדיר את עצמו כמפקח על תיבה זרה ולקבל את תוכן ההתראות שלה.
+    The guardian always comes from the token and never from a request
+    field - otherwise anyone could make themselves the guardian of a
+    stranger's inbox and receive the contents of its alerts.
     """
     parent = current_user
 
     if str(request.child_email) == parent.email:
         raise HTTPException(status_code=400, detail="לא ניתן להגדיר מפקח על עצמך")
 
-    # מצא או צור את חשבון המנוטר – סריקות עתידיות ישויכו אליו
+    # Find or create the monitored account, so future scans attach to it
     child = db.query(User).filter(User.email == str(request.child_email)).first()
     if not child:
         child = User(
@@ -53,13 +54,13 @@ def connect_guardian(
     }
 
 
-@router.post("/disconnect", summary="ניתוק מפקח-מנוטר")
+@router.post("/disconnect", summary="Unlink a guardian")
 def disconnect_guardian(
     request: GuardianConnectRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """מסיר את הקישור. אפשרי רק למפקח שמוגדר בפועל על אותו חשבון."""
+    """Removes the link. Only the guardian actually set on that account can."""
     child = db.query(User).filter(User.email == str(request.child_email)).first()
     if not child or child.guardian_id != current_user.id:
         raise HTTPException(status_code=404, detail="חיבור מפקח לא נמצא")
@@ -74,7 +75,7 @@ def disconnect_guardian(
     }
 
 
-@router.get("/{parent_email}", response_model=GuardianData, summary="לוח בקרה למפקח")
+@router.get("/{parent_email}", response_model=GuardianData, summary="Guardian dashboard")
 def get_guardian_data(
     parent_email: str,
     current_user: User = Depends(get_current_user),
@@ -90,22 +91,25 @@ def get_guardian_data(
 
     children = db.query(User).filter(User.guardian_id == parent.id).all()
     if not children:
-        # מצב ריק ולא שגיאה. מפקח שרשום במערכת אך טרם חיבר חשבון הוא
-        # מצב תקין לחלוטין, ו-404 גרם ללוח הבקרה להציג הודעת תקלה
-        # במקום הנחיה מה לעשות.
+        # An empty state, not an error. A guardian who is registered
+        # but has not linked an account yet is a perfectly normal case,
+        # and a 404 made the dashboard show a failure message instead of
+        # telling them what to do.
         return GuardianData(
             child_name="", child_email="", risk_score=0.0,
             recent_alerts=[], phishing_blocked_today=0,
         )
 
-    # החשבון הפעיל ביותר. תמיכה במספר מנוטרים בו-זמנית דורשת שינוי
-    # במבנה התשובה, והיא רשומה כפריט פתוח.
+    # The most active account. Supporting several monitored accounts at
+    # once needs a change to the response shape, and is filed as an open
+    # item.
     child = max(children, key=lambda c: c.total_scanned)
 
-    # ההתראות של המפקח, לא של המנוטר. שתי רשומות נוצרות לכל זיהוי:
-    # אחת למנוטר ואחת למפקח, וזו של המפקח היא היחידה שנושאת את שם
-    # המנוטר. עד כה לוח הבקרה שאב דווקא את זו של המנוטר, ולכן רשומות
-    # המפקח נכתבו ומעולם לא נקראו.
+    # The guardian's alerts, not the monitored user's. Two records are
+    # created per detection: one for the monitored user and one for the
+    # guardian, and only the guardian's carries the monitored user's
+    # name. Until now the dashboard pulled the monitored user's instead,
+    # so the guardian records were written and never read.
     alerts = (
         db.query(Alert)
         .filter(Alert.user_id == parent.id)

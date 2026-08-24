@@ -41,16 +41,17 @@ def init_db():
 
 
 # ---------------------------------------------------------------------------
-# מיגרציה מינימלית
+# A minimal migration
 #
-# create_all יוצר טבלאות חסרות, אך אינו נוגע בטבלה קיימת. עמודה שנוספה
-# למודל אחרי שהמסד כבר נוצר פשוט לא תהיה שם, וכל שאילתה שמזכירה אותה
-# תיפול ב-"no such column" — על מסד שכבר מכיל את היסטוריית הסריקות של
-# המשתמש. הפונקציה מוסיפה עמודות חסרות בלבד; היא לעולם אינה מוחקת או
-# משנה עמודה קיימת, ולכן בטוחה להרצה בכל עלייה.
+# create_all creates missing tables but never touches an existing one. A
+# column added to a model after the database was created simply is not
+# there, and any query mentioning it fails with "no such column" - on a
+# database that already holds the user's scan history. This function
+# only adds missing columns; it never drops or alters an existing one,
+# so it is safe to run on every startup.
 #
-# פרויקט גדול יותר היה משתמש ב-Alembic. כאן מדובר בעמודות בודדות,
-# ותלות נוספת אינה מוצדקת.
+# A larger project would use Alembic. Here it is a couple of columns,
+# and another dependency is not worth it.
 # ---------------------------------------------------------------------------
 _EXPECTED_COLUMNS = {
     "emails": {
@@ -73,4 +74,4 @@ def _add_missing_columns() -> None:
                 if column in present:
                     continue
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))
-                logger.info("נוספה עמודה חסרה: %s.%s", table, column)
+                logger.info("Added missing column: %s.%s", table, column)

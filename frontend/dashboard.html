@@ -4,19 +4,25 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LURA — אזור אישי</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap">
   <link rel="stylesheet" href="css/main.css">
     <link rel="icon" href="icons/icon128.png">
 </head>
 <body class="dash-page">
  <nav class="navbar">
-    <div class="nav-brand">LURA</div>
+    <div class="nav-brand">
+      <img src="icons/icon128.png" alt="LURA" class="brand-mark">
+      <span class="brand-word">LURA</span>
+    </div>
     <div class="nav-links">
       <a href="index.html">בית</a>
       <span class="nav-user" id="navUser"></span>
       <button class="btn-logout" onclick="logout()">יציאה</button>
     </div>
-    <img src="icons/icon128.png" alt="LURA" style="height:50px;">
-</nav>
+  </nav>
 
   <div class="dash-layout">
     <aside class="sidebar">
@@ -27,6 +33,7 @@
         <a href="#overview" class="sidebar-link active" onclick="showSection('overview')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3.4 20.6h17.2"/><path d="M6.6 20.6v-6.2M11.2 20.6V8.4M15.8 20.6v-9M20.4 20.6V4.6" stroke-width="2.1"/></svg><span>סקירה כללית</span></a>
         <a href="#scanner"  class="sidebar-link"        onclick="showSection('scanner')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M16.2 16.2L21 21"/></svg><span>סריקת קישור</span></a>
         <a href="#alerts"   class="sidebar-link"        onclick="showSection('alerts')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8.6a6 6 0 10-12 0c0 6-2.4 7.4-2.4 7.4h16.8S18 14.6 18 8.6z"/><path d="M13.7 20a2 2 0 01-3.4 0"/></svg><span>התראות</span></a>
+        <a href="#trusted"  class="sidebar-link"        onclick="showSection('trusted')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.2l7 2.8v5.2c0 4.3-3 8.1-7 9.6-4-1.5-7-5.3-7-9.6V6z"/><path d="M9 12.2l2 2 4-4.2"/></svg><span>שולחים מוכרים</span></a>
         <a href="#guardian" class="sidebar-link"        onclick="showSection('guardian')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2.4 12S5.8 5.8 12 5.8 21.6 12 21.6 12 18.2 18.2 12 18.2 2.4 12 2.4 12z"/><circle cx="12" cy="12" r="3.1"/></svg><span>מצב מפקח</span></a>
       </nav>
     </aside>
@@ -94,6 +101,31 @@
         </div>
       </section>
 
+      <section id="sec-trusted" class="dash-section" style="display:none">
+        <h2 class="section-title">שולחים מוכרים</h2>
+        <div class="guardian-box">
+          <p>
+            LURA מכירה מותגים גדולים, אבל לא את הכתובות שאת מתכתבת איתן —
+            משרד, מורה, ספק. עבורן אין לה שום ראיה שהשולח לגיטימי, ולכן
+            מייל תקין עלול לקבל ציון גבוה על סמך ניתוח הניסוח בלבד.
+          </p>
+          <p style="margin-top:10px;color:var(--text-2);font-size:13.5px;">
+            סימון כאן מנמיך את משקל ניתוח הניסוח לאותו שולח.
+            <strong>הוא אינו מבטל את בדיקות האבטחה:</strong> אם השולח
+            מתחזה למותג או מקשר לדומיין מזויף, המייל יסומן גם אחריו.
+          </p>
+          <div class="form-group" style="margin-top:16px;">
+            <label>כתובת מלאה או דומיין</label>
+            <input type="text" id="trustedValue" placeholder="office@example.com  או  example.com" dir="ltr">
+          </div>
+          <div style="display:flex;gap:8px;margin-top:12px;">
+            <button class="btn-primary" onclick="addTrusted()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5.5v13M5.5 12h13"/></svg><span>הוסף</span></button>
+          </div>
+          <div id="trustedResult" style="margin-top:16px;"></div>
+          <div id="trustedList" style="margin-top:24px;"></div>
+        </div>
+      </section>
+
             <section id="sec-guardian" class="dash-section" style="display:none">
         <h2 class="section-title">מצב מפקח</h2>
         <div class="guardian-box">
@@ -104,7 +136,7 @@
           </div>
           <div style="display:flex;gap:8px;margin-top:12px;">
             <button class="btn-primary" onclick="connectGuardian()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 14.5l5-5"/><path d="M11.5 6.5l1.5-1.5a3.6 3.6 0 015 5L16.5 11.5"/><path d="M12.5 17.5L11 19a3.6 3.6 0 01-5-5l1.5-1.5"/></svg><span>חבר</span></button>
-            <button class="btn-primary" style="background:#ef4444;" onclick="disconnectGuardian()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 7l3-3M20 7l-3-3"/><path d="M11 6.5l1.5-1.5a3.6 3.6 0 015 5L16 11.5"/><path d="M12.5 17.5L11 19a3.6 3.6 0 01-5-5l1.5-1.5"/></svg><span>נתק שיוך</span></button>
+            <button class="btn-danger" onclick="disconnectGuardian()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 7l3-3M20 7l-3-3"/><path d="M11 6.5l1.5-1.5a3.6 3.6 0 015 5L16 11.5"/><path d="M12.5 17.5L11 19a3.6 3.6 0 01-5-5l1.5-1.5"/></svg><span>נתק שיוך</span></button>
           </div>
           <div id="guardianResult" style="margin-top:16px;"></div>
           <div id="guardianData" style="margin-top:24px;"></div>

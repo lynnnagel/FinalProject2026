@@ -22,8 +22,8 @@ async function handleReset(e) {
     errEl.style.display = 'block';
     return;
   }
-  if (pass.length < 6) {
-    errEl.textContent = 'הסיסמה חייבת להכיל לפחות 6 תווים';
+  if (pass.length < 8) {
+    errEl.textContent = 'הסיסמה חייבת להכיל לפחות 8 תווים';
     errEl.style.display = 'block';
     return;
   }
@@ -86,8 +86,8 @@ async function handleRegister(e) {
     errEl.style.display = 'block';
     return;
   }
-  if (pass.length < 6) {
-    errEl.textContent = 'הסיסמה חייבת להכיל לפחות 6 תווים';
+  if (pass.length < 8) {
+    errEl.textContent = 'הסיסמה חייבת להכיל לפחות 8 תווים';
     errEl.style.display = 'block';
     return;
   }

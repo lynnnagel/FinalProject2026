@@ -1,12 +1,44 @@
 @import url('https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap');
 
+/* אותם טוקנים כמו frontend/css/main.css. התוסף הוא חבילה נפרדת ואינו
+   יכול לייבא את הגיליון של האתר, ולכן הם משוכפלים כאן — אבל פעם אחת
+   ובמקום אחד, במקום כערכים גולמיים פזורים לאורך הקובץ. */
+:root {
+  --blue: #42A5F5;
+  --purple: #7C4DFF;
+  --pink: #E040FB;
+  --brand-gradient: var(--brand-gradient);
+
+  --accent: #7C4DFF;
+  --accent-hover: #6B3AF0;
+  --accent-wash: #F4F0FF;
+  --accent-line: #E4DAFF;
+
+  --bg: #FAFAFB;
+  --surface: #FFFFFF;
+  --border: #E9EAF0;
+  --border-light: #F1F2F6;
+  --text: #14142B;
+  --text-secondary: #565673;
+  --muted: #8E8EA8;
+
+  --danger: #DC2626;
+  --red: #EF4444;
+  --orange: #D97706;
+  --yellow: #EAB308;
+  --green: #059669;
+
+  --r: 8px;
+  --r-lg: 14px;
+}
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
   width: 380px;
   font-family: 'Rubik', -apple-system, sans-serif;
-  background: linear-gradient(135deg, #e8f4fd, #f0e6ff, #fce4f6);
-  color: #1a1a2e;
+  background: var(--bg);
+  color: var(--text);
   min-height: 100vh;
 }
 
@@ -36,7 +68,7 @@ body {
 .header h1 {
   font-size: 22px;
   font-weight: 800;
-  background: linear-gradient(90deg, #42A5F5, #7C4DFF, #E040FB);
+  background: var(--brand-gradient);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -44,7 +76,7 @@ body {
 
 .header p {
   font-size: 12px;
-  color: rgba(26, 26, 46, 0.5);
+  color: var(--text-secondary);
   letter-spacing: 0.5px;
 }
 
@@ -52,7 +84,7 @@ body {
   display: inline-block;
   width: 8px;
   height: 8px;
-  background: #34d399;
+  background: var(--green);
   border-radius: 50%;
   margin-left: 6px;
   animation: blink 1.5s ease-in-out infinite;
@@ -70,7 +102,7 @@ body {
 
 .login-subtitle {
   font-size: 12px;
-  color: rgba(26, 26, 46, 0.5);
+  color: var(--text-secondary);
   text-align: center;
   margin-bottom: 16px;
 }
@@ -78,7 +110,7 @@ body {
 .form-tabs {
   display: flex;
   background: rgba(124, 77, 255, 0.08);
-  border-radius: 10px;
+  border-radius: var(--r);
   padding: 3px;
   margin-bottom: 16px;
   gap: 3px;
@@ -93,13 +125,13 @@ body {
   font-weight: 600;
   cursor: pointer;
   background: transparent;
-  color: rgba(26, 26, 46, 0.45);
+  color: var(--muted);
   font-family: inherit;
   transition: all 0.2s;
 }
 
 .tab.active {
-  background: linear-gradient(135deg, #42A5F5, #7C4DFF);
+  background: var(--accent);
   color: #fff;
   box-shadow: 0 2px 8px rgba(66, 165, 245, 0.4);
 }
@@ -109,23 +141,22 @@ body {
 .input {
   width: 100%;
   padding: 11px 14px;
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(124, 77, 255, 0.15);
-  border-radius: 10px;
-  color: #1a1a2e;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  color: var(--text);
   font-size: 14px;
   font-family: inherit;
   outline: none;
   direction: rtl;
   transition: border-color 0.2s, background 0.2s;
-  backdrop-filter: blur(8px);
 }
 
-.input::placeholder { color: rgba(26, 26, 46, 0.35); }
+.input::placeholder { color: var(--muted); }
 
 .input:focus {
-  border-color: #7C4DFF;
-  background: rgba(255, 255, 255, 0.9);
+  border-color: var(--accent);
+  background: var(--surface);
 }
 
 .form-error {
@@ -151,7 +182,7 @@ body {
 .user-avatar {
   width: 28px;
   height: 28px;
-  background: linear-gradient(135deg, #42A5F5, #7C4DFF);
+  background: var(--accent);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -165,7 +196,7 @@ body {
 .user-name {
   font-size: 13px;
   font-weight: 600;
-  color: #1a1a2e;
+  color: var(--text);
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -174,10 +205,10 @@ body {
 }
 
 .logout-btn {
-  background: rgba(255, 255, 255, 0.5);
-  border: 1px solid rgba(124, 77, 255, 0.15);
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 6px;
-  color: rgba(26, 26, 46, 0.5);
+  color: var(--text-secondary);
   cursor: pointer;
   font-size: 14px;
   padding: 3px 7px;
@@ -200,10 +231,9 @@ body {
 }
 
 .stat-card {
-  background: rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(124, 77, 255, 0.12);
-  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
   padding: 14px;
   text-align: center;
   transition: transform 0.2s, background 0.2s, box-shadow 0.2s;
@@ -212,16 +242,17 @@ body {
 
 .stat-card:hover {
   transform: translateY(-3px);
-  background: rgba(255, 255, 255, 0.75);
+  background: var(--surface);
   box-shadow: 0 8px 24px rgba(124, 77, 255, 0.15);
 }
 
-.stat-icon  { font-size: 24px; margin-bottom: 6px; }
+.stat-icon  { margin-bottom: 6px; display: flex; justify-content: center; }
+.stat-icon svg { width: 20px; height: 20px; color: var(--accent); }
 
 .stat-value {
   font-size: 26px;
   font-weight: 800;
-  background: linear-gradient(135deg, #42A5F5, #7C4DFF);
+  background: var(--accent);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -229,7 +260,7 @@ body {
 
 .stat-label {
   font-size: 11px;
-  color: rgba(26, 26, 46, 0.45);
+  color: var(--muted);
   font-weight: 500;
   margin-top: 2px;
 }
@@ -237,11 +268,10 @@ body {
 /* ── Risk Meter ── */
 .risk-section {
   margin: 0 16px 16px;
-  background: rgba(255, 255, 255, 0.55);
-  border: 1px solid rgba(124, 77, 255, 0.12);
-  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
   padding: 16px;
-  backdrop-filter: blur(12px);
 }
 
 .risk-header {
@@ -251,10 +281,11 @@ body {
   margin-bottom: 12px;
 }
 
-.risk-title  { font-size: 13px; font-weight: 600; color: rgba(26, 26, 46, 0.65); }
-.risk-emoji  { font-size: 24px; }
+.risk-title  { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+.risk-badge  { font-size: 12px; font-weight: 600; padding: 5px 12px;
+               border-radius: 100px; white-space: nowrap; }
 .risk-number { font-size: 36px; font-weight: 800; line-height: 1; }
-.risk-sub    { font-size: 11px; color: rgba(26, 26, 46, 0.35); }
+.risk-sub    { font-size: 11px; color: var(--muted); }
 
 .risk-bar-track {
   height: 10px;
@@ -282,7 +313,7 @@ body {
 .guardian-card {
   background: rgba(224, 64, 251, 0.08);
   border: 1px solid rgba(224, 64, 251, 0.25);
-  border-radius: 14px;
+  border-radius: var(--r-lg);
   padding: 12px 14px;
   display: flex;
   align-items: center;
@@ -295,7 +326,7 @@ body {
   gap: 8px;
   font-size: 13px;
   font-weight: 600;
-  color: #7C4DFF;
+  color: var(--accent);
 }
 
 .toggle {
@@ -308,7 +339,7 @@ body {
   transition: background 0.3s;
 }
 
-.toggle.on { background: linear-gradient(135deg, #42A5F5, #7C4DFF); }
+.toggle.on { background: var(--accent); }
 
 .toggle-knob {
   width: 22px;
@@ -328,7 +359,7 @@ body {
   width: 100%;
   padding: 13px;
   border: none;
-  border-radius: 12px;
+  border-radius: var(--r);
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
@@ -344,27 +375,24 @@ body {
 .btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .btn-primary {
-  background: linear-gradient(135deg, #42A5F5, #7C4DFF);
+  background: var(--accent);
   color: white;
   box-shadow: 0 4px 15px rgba(124, 77, 255, 0.35);
   margin-top: 6px;
 }
 
 .btn-primary:hover:not(:disabled) {
-  transform: translateY(-2px);
   box-shadow: 0 6px 20px rgba(124, 77, 255, 0.5);
 }
 
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.55);
-  color: #7C4DFF;
+  background: var(--surface);
+  color: var(--accent);
   border: 1px solid rgba(124, 77, 255, 0.2);
-  backdrop-filter: blur(8px);
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.8);
-  transform: translateY(-2px);
+  background: var(--surface);
 }
 
 /* ── Footer ── */
@@ -372,7 +400,7 @@ body {
   padding: 12px 16px;
   text-align: center;
   font-size: 10px;
-  color: rgba(26, 26, 46, 0.25);
+  color: var(--muted);
   border-top: 1px solid rgba(124, 77, 255, 0.08);
 }
 
@@ -380,14 +408,14 @@ body {
 .loading {
   padding: 40px 20px;
   text-align: center;
-  color: rgba(26, 26, 46, 0.45);
+  color: var(--muted);
 }
 
 .spinner {
   width: 36px;
   height: 36px;
   border: 3px solid rgba(124, 77, 255, 0.1);
-  border-top-color: #7C4DFF;
+  border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
   margin: 0 auto 12px;

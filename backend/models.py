@@ -22,7 +22,7 @@ class User(Base):
     total_scanned = Column(Integer, default=0)
     phishing_blocked = Column(Integer, default=0)
     daily_active = Column(Boolean, default=True)
-    # Self-referential FK: child → parent (guardian)
+    # Self-referential FK: child -> parent (guardian)
     guardian_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -50,17 +50,20 @@ class EmailRecord(Base):
     clicked_suspicious = Column(Boolean, default=False)
     scanned_at = Column(DateTime, default=datetime.utcnow)
 
-    # גרסת נוסחת הניקוד שהפיקה את הציון. הסריקה מחזירה תוצאה שמורה
-    # למייל שכבר נבדק — חיסכון אמיתי, כי הרצת BERT היא החלק היקר.
-    # אבל בלי חותמת הגרסה, שינוי בנוסחה או בסף לא היה משפיע על אף
-    # מייל שכבר נסרק: התיבה הייתה ממשיכה להציג ציונים שחושבו בקוד
-    # ישן, ובדיקה אחרי תיקון הייתה מודדת את הגרסה הקודמת.
+    # Which scoring formula produced this score. A scan returns the
+    # stored result for mail already checked - a real saving, since
+    # running BERT is the expensive part. But without a version stamp, a
+    # change to the formula or the threshold would affect nothing
+    # already scanned: the inbox would keep showing scores computed by
+    # old code, and testing after a fix would measure the previous
+    # version.
     scoring_version = Column(String, default="", index=True)
 
-    # טביעת אצבע של הטקסט שנוסח ממנו הציון. הזיהוי של רשומה הוא
-    # (משתמש, שולח, נושא), ולכן בלי החתימה הזאת סריקה שנייה של אותו
-    # מייל מקבלת את התוצאה השמורה גם כשהטקסט שנשלח שונה לגמרי —
-    # וזה בדיוק המקרה של סריקת הגוף המלא אחרי סריקת התצוגה המקדימה.
+    # Fingerprint of the text the score was computed from. A record is
+    # identified by (user, sender, subject), so without this a second
+    # scan of the same message gets the stored result even when the text
+    # sent is completely different - which is exactly what happens when
+    # the full body is scanned after the preview.
     content_hash = Column(String, default="")
 
     user = relationship("User", back_populates="emails")
@@ -71,18 +74,19 @@ class EmailRecord(Base):
 
 class TrustedSender(Base):
     """
-    שולח שהמשתמש סימן כמוכר לו.
+    A sender the user has marked as known to them.
 
-    המערכת מכירה מותגים גדולים (BRAND_DOMAINS), אבל התיבה של אדם
-    מלאה בכתובות שאיש לא שמע עליהן — משרד שהוא מתכתב איתו, מורה,
-    ספק. עבורן אין למערכת שום ראיה חיובית ללגיטימיות, ולכן מייל תקין
-    לחלוטין מקבל ציון גבוה על סמך ניחוש המודל בלבד.
+    The system knows the large brands (BRAND_DOMAINS), but a person's
+    inbox is full of addresses nobody has heard of - an office they
+    write to, a teacher, a supplier. For those the system has no
+    positive evidence of legitimacy at all, so entirely ordinary mail
+    gets a high score on the model's guess alone.
 
-    הרשימה הזאת היא הראיה החסרה, והיא אישית: מה שמוכר למשתמש אחד
-    אינו אומר דבר על משתמש אחר.
+    This list is the missing evidence, and it is personal: what one user
+    recognises says nothing about another.
 
-    value מחזיק כתובת מלאה (name@example.com) או דומיין (example.com)
-    כשהארגון שולח מכמה כתובות.
+    value holds either a full address (name@example.com) or a domain
+    (example.com) when an organisation writes from several addresses.
     """
     __tablename__ = "trusted_senders"
     __table_args__ = (
@@ -91,7 +95,7 @@ class TrustedSender(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    value = Column(String, nullable=False, index=True)   # תמיד באותיות קטנות
+    value = Column(String, nullable=False, index=True)   # always lowercased
     is_domain = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 

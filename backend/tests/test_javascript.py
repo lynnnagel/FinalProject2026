@@ -92,9 +92,26 @@ def called_names(src: str) -> set[str]:
 
 
 @pytest.mark.parametrize("path", JS_FILES, ids=lambda p: p.name)
+def test_the_file_is_there(path: Path) -> None:
+    """
+    כל קובץ ברשימה אמור להיות בפרויקט, ולכן היעדרו הוא כישלון ולא סיבה
+    לדלג.
+
+    זה נכתב אחרי ש-frontend/js/forgot_password.js נמחק מעותק העבודה
+    ואיש לא ידע: הדף נטען כרגיל, אבל הכפתור "בחרי סיסמה חדשה" הפסיק
+    להגיב. הבדיקות שכן נוגעות בקובץ הזה דילגו בשקט, כי כתבתי בהן
+    skip כשהקובץ חסר — כלומר בדיוק במקרה שהן נועדו לתפוס.
+    """
+    assert path.exists(), (
+        f"{path.relative_to(ROOT)} אינו קיים.\n"
+        "אם הוא נמחק בטעות:  git restore " + str(path.relative_to(ROOT))
+    )
+
+
+@pytest.mark.parametrize("path", JS_FILES, ids=lambda p: p.name)
 def test_every_called_function_is_defined(path: Path) -> None:
     if not path.exists():
-        pytest.skip(f"{path} לא קיים")
+        pytest.skip("נבדק ב-test_the_file_is_there")
 
     src = strip_noise(path.read_text(encoding="utf-8"))
     missing = sorted(
@@ -116,7 +133,7 @@ def test_syntax_is_valid(path: Path) -> None:
     בתוסף זה אומר שאף תג לא מופיע, ובדף — ששום כפתור לא מגיב.
     """
     if not path.exists():
-        pytest.skip(f"{path} לא קיים")
+        pytest.skip("נבדק ב-test_the_file_is_there")
     node = shutil.which("node")
     if not node:
         pytest.skip("node אינו מותקן — בדיקת התחביר מדולגת")
@@ -145,8 +162,8 @@ PAGES = [
 
 @pytest.mark.parametrize("js,html", PAGES, ids=lambda p: p.name)
 def test_referenced_ids_exist(js: Path, html: Path) -> None:
-    if not (js.exists() and html.exists()):
-        pytest.skip(f"{js.name} / {html.name} לא קיימים")
+    assert js.exists(), f"{js.relative_to(ROOT)} אינו קיים"
+    assert html.exists(), f"{html.relative_to(ROOT)} אינו קיים"
 
     js_src = js.read_text(encoding="utf-8")
     html_src = html.read_text(encoding="utf-8")

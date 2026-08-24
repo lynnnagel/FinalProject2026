@@ -1,10 +1,12 @@
 """
-LURA – מנוע החוקים.
+LURA - the rule engine.
 
-תשע בדיקות משוקללות על השולח, הנושא והגוף, מסוכמות לציון 0–100.
-המנוע שקוף במלואו: כל נקודה בציון מגיעה מבדיקה שאפשר להצביע עליה,
-ולכן הוא גם מסביר למשתמש למה המייל סומן וגם אינו תלוי בקורפוס
-האימון — מה שהופך אותו לחלק שמכליל למיילים שלא נראו מעולם.
+Nine weighted checks over the sender, the subject and the body, summed
+into a score from 0 to 100. The engine is fully transparent: every point
+comes from a check you can point at. That is what lets it tell the user
+why a message was flagged, and it is also why it does not depend on the
+training corpus - which makes it the part that generalises to mail
+nobody has ever seen.
 """
 import re
 from datetime import datetime
@@ -20,15 +22,15 @@ from config import (
 
 class PhishingDetector:
 
-    # מילים שמופיעות כמעט אך ורק בפישינג. כל אחת מהן היא סימן חזק.
+    # Words that show up almost only in phishing. Each one is a strong sign.
     STRONG_KEYWORDS = [
-        # עברית — ניסוחים שארגון אמיתי לא ישלח
+        # Hebrew - phrasings a real organisation would not send
         "אמת את חשבונך", "אימות זהות", "החשבון יינעל", "חשבונך ייחסם",
         "החשבון הושעה", "פעילות חריגה", "לחץ כאן", "עדכן פרטים",
         "הזן סיסמה", "הזן פרטי אשראי", "תעודת זהות", "זכית",
         "זכייה", "הגרלה", "פרס", "היום בלבד", "הצעה מוגבלת",
         "לחץ לאימות", "אישור מיידי", "חשבונך מוקפא",
-        # אנגלית
+        # English
         "verify your account", "verify your identity", "account locked",
         "account suspended", "unusual activity", "security alert",
         "click here", "update your payment", "confirm your password",
@@ -38,10 +40,11 @@ class PhishingDetector:
         "tax refund", "immediately",
     ]
 
-    # מילים שמופיעות גם במיילים לגיטימיים לחלוטין. מייל אמיתי של בנק
-    # או חברת אשראי מכיל "חשבון", "אשראי" ו"כרטיס אשראי" בהכרח, ולכן
-    # הן שוות פחות ומוגבלות בתקרה נמוכה. מייל אמיתי של כאל סומן בעבר
-    # כפישינג רק בגללן.
+    # Words that also appear in entirely legitimate mail. A real message
+    # from a bank or a card company is bound to contain "account",
+    # "credit" and "credit card", so these are worth less and capped
+    # low. A genuine Cal message was once flagged as phishing on their
+    # account alone.
     WEAK_KEYWORDS = [
         "חשבון", "בנק", "אשראי", "כרטיס אשראי", "העברה", "מזומן",
         "סיסמה", "אימות", "אישור", "ביטול", "חסימה", "פרטים אישיים",
@@ -53,7 +56,7 @@ class PhishingDetector:
         "prize", "winner", "claim", "urgent", "validate", "update your",
     ]
 
-    # לתאימות לאחור — קוד או בדיקות שמצפים לרשימה אחת
+    # Backwards compatibility - code or tests expecting a single list
     SUSPICIOUS_KEYWORDS = STRONG_KEYWORDS + WEAK_KEYWORDS
 
     URGENCY_WORDS = [
@@ -91,21 +94,23 @@ class PhishingDetector:
     ]
 
     # -----------------------------------------------------------------------
-    # מותגים והדומיינים הרשמיים שלהם.
+    # Brands and the domains they really send from.
     #
-    # זו הבדיקה החזקה ביותר בזיהוי פישינג: אם המייל מציג את עצמו כבנק
-    # הפועלים אך נשלח מ-bankhapoalim-secure.net, זו התחזות ודאית.
+    # This is the strongest check in the engine: if a message presents
+    # itself as Bank Hapoalim but arrives from bankhapoalim-secure.net,
+    # that is impersonation, full stop.
     #
-    # הבדיקה הקודמת על דומיינים (VALID_DOMAIN_SUFFIXES) בחנה רק את הסיומת,
-    # ולכן bezeq-pay.net ו-netflix-il.info עברו בה בשלום — .net ו-.info הן
-    # סיומות חוקיות לחלוטין. מדידה על 250 מיילי פישינג בעברית הראתה שהיא
-    # לא נדלקה אף פעם.
+    # The earlier domain check (VALID_DOMAIN_SUFFIXES) only looked at the
+    # suffix, so bezeq-pay.net and netflix-il.info sailed through - .net
+    # and .info are perfectly valid endings. Measured over 250 Hebrew
+    # phishing messages, it never fired once.
     #
-    # המפתח הוא צורת ההופעה של המותג בטקסט; הערך הוא הדומיינים שמהם
-    # הארגון באמת שולח. יש לרשום כל וריאציה שסביר שתופיע במייל.
+    # The key is how the brand appears in the text; the value is the
+    # domains the organisation actually sends from. List every spelling
+    # likely to turn up in a message.
     # -----------------------------------------------------------------------
     BRAND_DOMAINS = {
-        # בנקים וכרטיסי אשראי — ישראל
+        # Banks and credit cards - Israel
         "בנק הפועלים":      ["bankhapoalim.co.il", "poalim.co.il"],
         "הפועלים":          ["bankhapoalim.co.il", "poalim.co.il"],
         "בנק לאומי":        ["leumi.co.il", "bankleumi.co.il", "leumi-card.co.il"],
@@ -120,7 +125,7 @@ class PhishingDetector:
         "cal-online":       ["cal-online.co.il", "icc.co.il"],
         "hot mobile":       ["hot.net.il", "hot.co.il"],
         "זאפ":              ["zap.co.il"],
-        # תקשורת
+        # Telecoms
         "פרטנר":            ["partner.co.il", "orange.co.il"],          # פרטנר היה אורנג'
         "partner":          ["partner.co.il", "orange.co.il"],
         "סלקום":            ["cellcom.co.il"],
@@ -128,24 +133,24 @@ class PhishingDetector:
         "בזק":              ["bezeq.co.il", "bezeqint.net"],
         "bezeq":            ["bezeq.co.il", "bezeqint.net"],
         "גולן טלקום":       ["golantelecom.co.il"],
-        # משלוחים
+        # Shipping
         "דואר ישראל":       ["israelpost.co.il"],
         "israel post":      ["israelpost.co.il"],
         "dhl":              ["dhl.com", "dhl.co.il"],
         "fedex":            ["fedex.com"],
-        # מסחר
+        # Retail
         "ksp":              ["ksp.co.il"],
         "terminal x":       ["terminalx.com"],
         "איקאה":            ["ikea.co.il", "ikea.com"],
         "ikea":             ["ikea.co.il", "ikea.com"],
         "רמי לוי":          ["rami-levy.co.il"],
         "שופרסל":           ["shufersal.co.il"],
-        # ממשלה
+        # Government
         "רשות המסים":       ["gov.il", "taxes.gov.il"],
         "ביטוח לאומי":      ["btl.gov.il", "gov.il"],
         "משרד התחבורה":     ["gov.il"],
         "חברת החשמל":       ["iec.co.il"],
-        # בינלאומי
+        # International
         "paypal":           ["paypal.com"],
         "netflix":          ["netflix.com"],
         "spotify":          ["spotify.com"],
@@ -160,12 +165,14 @@ class PhishingDetector:
         "ebay":             ["ebay.com"],
         "dropbox":          ["dropbox.com"],
 
-        # ── ספקי אבטחה, מנויים ומסחר ─────────────────────────────────
-        # הטבלה הזאת משמשת גם לזיהוי התחזות וגם לזיהוי שולח מוכר
-        # (is_trusted_sender). המותגים כאן נוספו בגלל הצד השני:
-        # דואר תפעולי שלהם — חידוש מנוי, אישור הזמנה, התראת אבטחה —
-        # הוא בדיוק סוג הדואר הלגיטימי שכמעט אינו קיים בקורפוסי
-        # האימון, ולכן BERT מסמן אותו כפישינג בביטחון גבוה.
+        # -- Security vendors, subscriptions and retail ---------------
+        # This table serves both impersonation detection and recognising
+        # a known sender (is_trusted_sender). The brands below were added
+        # for the second purpose: their operational mail - a renewal
+        # notice, an order confirmation, a security alert - is exactly
+        # the kind of legitimate message that barely exists in the
+        # training corpora, so BERT flags it as phishing with high
+        # confidence.
         "temu":             ["temu.com"],
         "aliexpress":       ["aliexpress.com"],
         "booking":          ["booking.com"],
@@ -191,10 +198,11 @@ class PhishingDetector:
         "notion":           ["notion.so"],
         "canva":            ["canva.com"],
 
-        # ── חנויות ושירותים שדואר תפעולי שלהם נפוץ בתיבה ─────────────
-        # אישור הזמנה, הודעת משלוח וקבלה הם הקטגוריה שהמערכת טעתה בה
-        # יותר מכל: המבנה שלהם — הרבה קישורים, "order", "account" —
-        # מפעיל את מנוע החוקים, והמודל מסמן אותם כמעט תמיד.
+        # -- Shops and services whose operational mail fills an inbox --
+        # Order confirmations, shipping notices and receipts are the
+        # category the system got wrong most often: their shape - many
+        # links, "order", "account" - sets off the rule engine, and the
+        # model flags them nearly every time.
         "iherb":            ["iherb.com"],
         "asos":             ["asos.com"],
         "next":             ["next.co.il", "nextdirect.com"],
@@ -233,28 +241,29 @@ class PhishingDetector:
 
     # -----------------------------------------------------------------------
     def _sender_domain(self, sender: str) -> str:
-        """הדומיין מתוך כתובת השולח, באותיות קטנות. מחרוזת ריקה אם אין."""
+        """The domain from a sender address, lowercased. Empty if there is none."""
         match = self._SENDER_DOMAIN_RE.search(sender or "")
         return match.group(1).lower().rstrip(".") if match else ""
 
     def _domain_matches(self, domain: str, official: str) -> bool:
         """
-        האם הדומיין הוא הדומיין הרשמי או תת-דומיין שלו.
+        Is this the official domain, or a subdomain of it?
 
-        mail.netflix.com  מול  netflix.com   → כן
-        netflix-il.info   מול  netflix.com   → לא
+        mail.netflix.com  vs  netflix.com   -> yes
+        netflix-il.info   vs  netflix.com   -> no
         """
         return domain == official or domain.endswith("." + official)
 
     @classmethod
     def _brand_patterns(cls) -> dict:
         """
-        ביטוי לכל מותג, עם גבולות מילה.
+        One pattern per brand, with word boundaries.
 
-        בלי הגבולות ההתאמה היא של תת-מחרוזת: המפתח "cal" נתפס בתוך
-        call, local ו-calendar, ומייל תמים של Temu סומן כמתחזה לכאל.
-        \b עובד גם על עברית, כי אותיות עבריות הן תווי-מילה — ולכן
-        "כאל" לא ייתפס בתוך "כאלה".
+        Without the boundaries this matches substrings: the key "cal"
+        was found inside call, local and calendar, and an innocent Temu
+        message got flagged as impersonating Cal. \b works on Hebrew
+        too, since Hebrew letters count as word characters - so "כאל"
+        will not match inside "כאלה".
         """
         if not hasattr(cls, "_brand_re_cache"):
             cls._brand_re_cache = {
@@ -266,11 +275,13 @@ class PhishingDetector:
     def _check_brand_impersonation(self, sender: str, subject: str,
                                    content: str) -> tuple[str, str, str] | None:
         """
-        מחזיר (מותג, דומיין השולח, מקום ההתאמה) אם המייל מתחזה למותג
-        מוכר, אחרת None. מקום ההתאמה הוא "subject" או "body", והוא
-        קובע את הניקוד — התאמה בגוף חלשה יותר.
+        Returns (brand, sender domain, where it matched) if the message
+        impersonates a known brand, otherwise None. "where" is either
+        "subject" or "body" and decides the score - a body match counts
+        for less.
 
-        אם השולח הוא בכל זאת הדומיין הרשמי, אין התחזות.
+        If the sender is the official domain after all, there is no
+        impersonation.
         """
         domain = self._sender_domain(sender)
         if not domain:
@@ -280,9 +291,10 @@ class PhishingDetector:
         subject_l = (subject or "").lower()
         body_l = (content or "").lower()
 
-        # ── שלב א: שורת הנושא ────────────────────────────────────────
-        # תוקף שם את שם המותג בנושא כדי לבנות אמון כבר בשורה הראשונה.
-        # זהו הסיגנל החזק, ולכן הוא נבדק ראשון ומקבל את הניקוד המלא.
+        # -- Step 1: the subject line ---------------------------------
+        # An attacker puts the brand name in the subject to build trust
+        # from the very first line. That is the strong signal, so it is
+        # checked first and carries the full score.
         for brand, official_domains in self.BRAND_DOMAINS.items():
             if not patterns[brand].search(subject_l):
                 continue
@@ -290,26 +302,28 @@ class PhishingDetector:
                 return None          # נשלח מהדומיין הרשמי — תקין
             return brand, domain, "subject"
 
-        # ── שלב ב: גוף ההודעה, בתנאים מחמירים ────────────────────────
-        # בדיקת הגוף בלי תנאים היא זו שסימנה מייל אמיתי של Malwarebytes
-        # שהזכיר "Google Chrome" כמתחזה לגוגל: הזכרת מותג אינה התחזות
-        # אליו, וניוזלטרים מזכירים מותגים כדבר שבשגרה.
+        # -- Step 2: the body, under stricter conditions ---------------
+        # Checking the body with no conditions is what flagged a genuine
+        # Malwarebytes message that mentioned "Google Chrome" as
+        # impersonating Google. Mentioning a brand is not impersonating
+        # it, and newsletters name brands all the time.
         #
-        # אבל דילוג מוחלט על הגוף פותח פער אמיתי: מייל עם הנושא
-        # "Action required: your mailbox is full", שמזכיר
-        # "Microsoft 365" רק בגוף ומקשר ל-office365-alert.net, קיבל
-        # 19 נקודות בלבד — פחות מכל סף סביר. ההתחזות הייתה שם, פשוט
-        # לא בשורת הנושא.
+        # But skipping the body entirely leaves a real gap: a message
+        # subjected "Action required: your mailbox is full", naming
+        # "Microsoft 365" only in the body and linking to
+        # office365-alert.net, scored just 19 - below any sensible
+        # threshold. The impersonation was there, only not in the
+        # subject line.
         #
-        # שני תנאים מפרידים בין השניים:
-        #   1. יש קישור, ואף קישור אינו מוביל לדומיין הרשמי של המותג.
-        #      ניוזלטר שמזכיר מותג מקשר אליו או לאתר עצמו; מתחזה
-        #      מקשר לדומיין שהוא שולט בו.
-        #   2. השולח עצמו אינו חברה מוכרת. מייל שנשלח באמת
-        #      מ-malwarebytes.com אינו מתחזה לגוגל גם אם הזכיר את
-        #      Google Chrome; זה בדיוק המקרה שיצר את ההתרעה השגויה.
-        #      לעומתו office365-alert.net אינו הדומיין של אף חברה
-        #      בטבלה.
+        # Two conditions separate the two cases:
+        #   1. There is a link, and no link resolves to the brand's own
+        #      domain. A newsletter naming a brand links to it or to its
+        #      own site; a forger links to a domain they control.
+        #   2. The sender is not itself a recognised company. Mail
+        #      genuinely from malwarebytes.com is not impersonating
+        #      Google even if it mentioned Google Chrome - which is
+        #      exactly what caused the false alarm. office365-alert.net,
+        #      by contrast, is nobody's domain in the table.
         urls = self._URL_RE.findall(content or "")
         if not urls:
             return None
@@ -326,7 +340,7 @@ class PhishingDetector:
                 continue
             if any(self._domain_matches(domain, off) for off in official_domains):
                 return None          # נשלח מהדומיין הרשמי — תקין
-            # האם קישור כלשהו מוביל בכל זאת למותג האמיתי?
+            # Does any link point at the real brand after all?
             if any(
                 self._domain_matches(url_domain, off)
                 for url in urls
@@ -339,35 +353,38 @@ class PhishingDetector:
 
         return None
 
-    # ביטויים שמסגירים דיוור שיווקי או התראת שירות. הם אינם ראיה
-    # ללגיטימיות בפני עצמם, אבל הם ראיה לכך שהמייל שייך לקטגוריה אחרת
-    # מפישינג — ובזה תפקידם.
+    # Phrases that give away marketing mail or a service notice. They
+    # are not evidence of legitimacy on their own, but they are evidence
+    # the message belongs to a different category than phishing - and
+    # that is their job here.
     PROMO_MARKERS = [
-        # קישור הסרה — הסימן האמין ביותר. חוקי הספאם בארה"ב ובאירופה
-        # מחייבים אותו בדיוור שיווקי, ולכן הוא מופיע כמעט תמיד.
+        # Unsubscribe link - the most reliable marker. Spam law in the
+        # US and Europe requires it on marketing mail, so it is almost
+        # always present.
         "unsubscribe", "opt out", "opt-out", "manage preferences",
         "email preferences", "notification settings",
         "להסרה מרשימת התפוצה", "להסרה מרשימת הדיוור", "הסרה מרשימת",
         "לביטול קבלת הודעות", "אם אינך מעוניין לקבל",
-        # סימון פרסומת מפורש
+        # Explicit advertisement marker
         "(ad)", "[ad]", "advertisement", "פרסומת", "מודעה",
-        # אוצר מילים של מבצעים
+        # Offer and discount vocabulary
         "% off", "discount", "coupon", "promo code", "free shipping",
         "add to cart", "shop now", "limited stock", "best sellers",
         "מבצע", "הנחה", "קופון", "משלוח חינם", "לרכישה", "בהזדמנות",
         "מוצרים חדשים", "הטבות", "במחיר מיוחד",
     ]
 
-    # תת-קבוצה של STRONG_KEYWORDS שמבטלת את סיווג "פרסומת".
+    # A subset of STRONG_KEYWORDS that cancels the "marketing" verdict.
     #
-    # אי אפשר להשתמש ב-STRONG_KEYWORDS המלאה: היא כוללת "לחץ כאן",
-    # "היום בלבד" ו-"limited time" — ניסוחים שמופיעים כמעט בכל דיוור
-    # שיווקי לגיטימי, ולכן כל פרסומת הייתה נפסלת והבדיקה הייתה חסרת
-    # תועלת. הן סימני ספאם, לא סימני פישינג.
+    # The full STRONG_KEYWORDS list cannot be used here: it contains
+    # "click here", "today only" and "limited time" - phrasings that
+    # appear in nearly all legitimate marketing mail, so every
+    # advertisement was rejected and the check was useless. Those are
+    # signs of spam, not signs of phishing.
     #
-    # מה שנשאר כאן הוא מה שמאפיין תקיפה ולא מכירה: בקשה לאישורים,
-    # איום על החשבון, או פיתיון של פרס. פישינג שעוטה מעטה של פרסומת
-    # ייתפס בזכות הקבוצה הזאת.
+    # What remains marks an attack rather than a sale: a request for
+    # credentials, a threat to the account, or a prize as bait. Phishing
+    # dressed up as an advertisement is caught by this list.
     ATTACK_KEYWORDS = [
         "אמת את חשבונך", "אימות זהות", "החשבון יינעל", "חשבונך ייחסם",
         "החשבון הושעה", "פעילות חריגה", "עדכן פרטים", "הזן סיסמה",
@@ -403,7 +420,7 @@ class PhishingDetector:
             return False
         return not any(kw in haystack for kw in self.ATTACK_KEYWORDS)
 
-    # אוצר מילים של דואר תפעולי: אישורי הזמנה, משלוחים, קבלות.
+    # Operational mail vocabulary: order confirmations, shipping, receipts.
     TRANSACTIONAL_MARKERS = [
         "order", "your order", "shipped", "shipping", "delivery", "delivered",
         "tracking", "receipt", "invoice", "purchase", "subscription renews",
@@ -414,27 +431,31 @@ class PhishingDetector:
 
     def looks_transactional(self, sender: str, subject: str, content: str) -> bool:
         """
-        האם זהו דואר תפעולי אמיתי — אישור הזמנה, הודעת משלוח, קבלה.
+        Is this genuine operational mail - an order confirmation, a
+        shipping notice, a receipt?
 
-        זו הקטגוריה הגדולה ביותר שהמערכת טעתה בה. מייל הזמנה מכיל
-        באופן טבעי הרבה קישורים ומילים כמו order ו-account, ולכן מנוע
-        החוקים נותן לו ניקוד בינוני; BERT מסמן אותו כמעט תמיד, כי
-        בקורפוסי האימון אין כמעט דואר מסחרי לגיטימי. שני המנועים
-        טועים באותו כיוון, ולכן ההסכמה ביניהם אינה מעידה על דבר.
+        This is the largest category the system got wrong. An order
+        message naturally carries many links and words like order and
+        account, so the rule engine gives it a middling score; BERT
+        flags it nearly every time, because the training corpora hold
+        almost no legitimate commercial mail. Both engines err in the
+        same direction, so their agreement proves nothing.
 
-        מה שמפריד בין אישור הזמנה אמיתי לזיוף שלו הוא **לאן מובילים
-        הקישורים**. חנות אמיתית מקשרת לעצמה. תוקף שמחקה אישור הזמנה
-        חייב להוביל לדומיין שהוא שולט בו — אחרת אין לו מה להרוויח.
+        What separates a real order confirmation from a forged one is
+        **where the links go**. A real shop links to itself. An attacker
+        mimicking an order confirmation has to lead somewhere they
+        control - otherwise there is nothing in it for them.
 
-        ארבעה תנאים, וכולם נדרשים:
-          1. השולח הוא חברה מזוהה. בלי התנאי הזה הבדיקה חסרת ערך:
-             זיוף שנשלח מ-iherb-delivery.info ומקשר לעצמו מקיים את כל
-             השאר, כי התוקף שולט בשני הצדדים. "הקישור מוביל לשולח"
-             מעיד על עקביות, לא על אמינות — האמינות מגיעה מכך שהשולח
-             הוא מי שהוא טוען שהוא.
-          2. יש בטקסט אוצר מילים תפעולי.
-          3. אין בקשת אישורים או איום על החשבון.
-          4. כל קישור מוביל לדומיין של השולח או של מותג מוכר.
+        Four conditions, all required:
+          1. The sender is a recognised company. Without this the check
+             is worthless: a forgery sent from iherb-delivery.info that
+             links back to itself satisfies everything else, because the
+             attacker controls both ends. "The link points at the
+             sender" shows consistency, not trustworthiness - that comes
+             from the sender being who it claims to be.
+          2. The text carries operational vocabulary.
+          3. Nothing asks for credentials or threatens the account.
+          4. Every link resolves to the sender's domain or a known brand.
         """
         if not self.is_trusted_sender(sender):
             return False
@@ -466,11 +487,11 @@ class PhishingDetector:
     @staticmethod
     def _shares_registrable_part(a: str, b: str) -> bool:
         """
-        האם שני דומיינים שייכים לאותו ארגון.
+        Do two domains belong to the same organisation?
 
-        חנויות שולחות דואר תפעולי מתשתית נלווית — iherb.com מול
-        e.iherb.com או iherbemail.com — ולכן השוואה מדויקת בלבד הייתה
-        פוסלת אישורי הזמנה אמיתיים.
+        Shops send operational mail from adjacent infrastructure -
+        iherb.com against e.iherb.com or iherbemail.com - so an exact
+        match alone would have rejected genuine order confirmations.
         """
         core = lambda d: d.rsplit(".", 2)[0].split(".")[-1]
         return bool(core(a)) and core(a) == core(b)
@@ -493,13 +514,15 @@ class PhishingDetector:
         if not domain:
             return False
 
-        # ספק דואר חינמי אינו "החברה עצמה". gmail.com ו-outlook.com
-        # מופיעים ב-BRAND_DOMAINS כדומיינים של גוגל ומיקרוסופט, אבל
-        # בניגוד ל-accounts.google.com הם כתובות שכל אחד יכול לפתוח
-        # תוך דקה. בלי החרגה כאן, כל פישינג שנשלח מ-Gmail קיבל הנמכה
-        # של ציון המודל פי ארבעה — וזה אחד הערוצים הנפוצים ביותר
-        # לפישינג בפועל. אותה רשימה כבר משמשת את בדיקה 8, שמזהה
-        # ארגון רשמי שפונה מכתובת חינמית.
+        # A free mail provider is not "the company itself". gmail.com
+        # and outlook.com appear in BRAND_DOMAINS as Google's and
+        # Microsoft's domains, but unlike accounts.google.com they are
+        # addresses anyone can open in a minute. Without excluding them,
+        # every phishing message sent from Gmail had the model's score
+        # cut by a factor of four - and a free mailbox is one of the
+        # commonest channels phishing actually arrives through. The same
+        # list already backs check 8, which flags an official-sounding
+        # organisation writing from a free address.
         if any(domain == p or domain.endswith("." + p)
                for p in self.FREE_EMAIL_PROVIDERS):
             return False
@@ -512,7 +535,7 @@ class PhishingDetector:
 
     @staticmethod
     def _url_domain(url: str) -> str:
-        """הדומיין מתוך URL, באותיות קטנות. מחרוזת ריקה אם אין."""
+        """The domain from a URL, lowercased. Empty if there is none."""
         rest = url.split("://", 1)[-1]
         host = rest.split("/", 1)[0].split("?", 1)[0].split("#", 1)[0]
         host = host.split("@")[-1].split(":", 1)[0]
@@ -524,13 +547,13 @@ class PhishingDetector:
         risk_score = 0.0
         indicators: list[str] = []
 
-        # בדיקה 1: מילות מפתח חשודות
+        # Check 1: suspicious keywords
         strong_hits = [kw for kw in self.STRONG_KEYWORDS if kw.lower() in full_text]
         weak_hits = [kw for kw in self.WEAK_KEYWORDS if kw.lower() in full_text]
 
-        # מילים חזקות נושאות את מלוא הניקוד. מילים חלשות מוגבלות לתקרה
-        # נמוכה, כי הן מופיעות גם במייל בנקאי לגיטימי — בלי ההפרדה הזאת
-        # כל חשבונית של חברת אשראי נספרה כפישינג.
+        # Strong words carry the full score. Weak ones are held to a low
+        # cap, because they also turn up in genuine bank mail - without
+        # that split, every credit card statement counted as phishing.
         if strong_hits:
             risk_score += min(len(strong_hits) * KEYWORD_SCORE_PER_WORD, MAX_KEYWORD_SCORE)
             indicators.append(f"נמצאו {len(strong_hits)} ניסוחים אופייניים לפישינג")
@@ -542,39 +565,40 @@ class PhishingDetector:
 
         keyword_hits = strong_hits + weak_hits
 
-        # בדיקה 2: תבניות חשודות בשולח
+        # Check 2: lookalike patterns in the sender
         sender_lower = sender.lower()
         if any(pat in sender_lower for pat in self.SUSPICIOUS_SENDER_PATTERNS):
             risk_score += SUSPICIOUS_DOMAIN_SCORE
             indicators.append('כתובת דוא"ל חשודה – תווים מבלבלים')
 
-        # בדיקה 3: ריבוי קישורים
+        # Check 3: too many links
         urls = self._URL_RE.findall(content)
         if len(urls) > URL_COUNT_THRESHOLD:
             risk_score += MULTIPLE_URLS_SCORE
             indicators.append(f"נמצאו {len(urls)} קישורים חשודים")
 
-        # בדיקה 4: שפת דחיפות
+        # Check 4: urgency language
         urgency_hits = [w for w in self.URGENCY_WORDS if w in full_text]
         if urgency_hits:
             risk_score += URGENCY_SCORE
             indicators.append("דחיפות מלאכותית – לחץ על המשתמש")
 
-        # בדיקה 5: דומיין לא תקני
+        # Check 5: non-standard sending domain
         if "@" in sender and not any(
             sfx in sender.lower() for sfx in self.VALID_DOMAIN_SUFFIXES
         ):
             risk_score += INVALID_DOMAIN_SCORE
             indicators.append("דומיין לא תקני")
 
-        # בדיקה 9: התחזות למותג מוכר
-        # המייל מציג את עצמו כארגון מוכר אך נשלח מדומיין שאינו שלו.
-        # זהו הסיגנל החזק ביותר, ולכן הניקוד הגבוה ביותר.
+        # Check 9: impersonating a known brand
+        # The message presents itself as a known organisation but comes
+        # from a domain that is not theirs. Strongest signal here, so it
+        # carries the highest score.
         impersonation = self._check_brand_impersonation(sender, subject, content)
         if impersonation:
             brand, domain, where = impersonation
-            # התאמה בגוף ההודעה חלשה יותר מהתאמה בנושא, ולכן מנוקדת
-            # פחות: המותג יכול להופיע שם גם באזכור לגיטימי.
+            # A body match is weaker than a subject match and scores
+            # less: the brand can appear there in a legitimate mention.
             risk_score += (
                 BRAND_IMPERSONATION_SCORE if where == "subject"
                 else BODY_IMPERSONATION_SCORE
@@ -583,17 +607,17 @@ class PhishingDetector:
                 f'המייל מתיימר להיות מ"{brand}" אך נשלח מהדומיין {domain}'
             )
 
-        # בדיקה 6: כתובת IP ישירה בקישור
+        # Check 6: a raw IP address in a link
         if self._IP_IN_URL.search(content):
             risk_score += 25
             indicators.append("קישור עם כתובת IP ישירה – חשוד מאוד")
 
-        # בדיקה 7: קיצור URL (מסתיר את היעד)
+        # Check 7: URL shortener (hides the destination)
         if any(s in content.lower() for s in self.URL_SHORTENERS):
             risk_score += 15
             indicators.append("שימוש בקיצור URL – מסתיר יעד")
 
-        # בדיקה 8: ארגון רשמי + מייל חינמי
+        # Check 8: official-sounding organisation on a free mailbox
         subject_lower = subject.lower()
         content_lower = content.lower()
         claims_official = any(
@@ -606,9 +630,9 @@ class PhishingDetector:
             risk_score += 30
             indicators.append("ארגון רשמי משתמש בכתובת מייל חינמית")
 
-        # סיכום. רמת הסיכון וההמלצה נקבעות ב-risk_levels, המודול
-        # היחיד שמכיר את הספים — כדי שהתווית לא תיקבע בשני מקומות
-        # ותיפרד מהם.
+        # Wrap up. The risk band and the advice come from risk_levels,
+        # the only module that knows the thresholds - so the label is
+        # not decided in two places and cannot drift from them.
         risk_score = min(risk_score, 100.0)
         response_time = (datetime.now() - start).total_seconds()
 

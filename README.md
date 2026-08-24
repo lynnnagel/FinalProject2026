@@ -30,24 +30,34 @@ and novel attacks, in Hebrew and English.
 - **Colour-coded badges** — green (safe), orange (suspicious), red (danger) inline in Gmail
 - **Explainable results** — each score lists the specific indicators that triggered it
 - **Bilingual** — Hebrew and English detection
+- **Known senders** — mark a correspondent the system has no way to recognise, so its
+  mail stops being judged on phrasing alone. Damps the model only, never the rule checks
 - **Guardian Mode** — email alerts to a supervisor when a monitored user receives phishing
 - **Graceful degradation** — falls back to rules-only mode if the ML model is unavailable
+- **Cached verdicts** — a message already scored is not re-run through the model, and
+  stored results carry the scoring version so a change to the formula refreshes them
 
 ## How Detection Works
 
 Two layers run in parallel and their scores are combined:
 
 ```
-final_score = 0.7 × heuristic_score + 0.3 × bert_score
+score = max( bert × damping + 0.5 × rules ,  rules )
 ```
+
+See [Combining the two engines](#combining-the-two-engines) for why this is a
+maximum rather than an average.
 
 ### Layer 1 — Heuristic engine (`detector.py`)
 
-Eight weighted checks, capped at 100 points total:
+Nine weighted checks, capped at 100 points total:
 
 | Check | Max points |
 |---|---:|
+| Brand impersonation — known company, sender on another domain | 45 |
+| &nbsp;&nbsp;↳ brand named only in the body, with a link away from it | 30 |
 | Suspicious keywords (50+ bilingual terms) | 40 |
+| &nbsp;&nbsp;↳ weaker terms that also occur in legitimate mail | 16 |
 | Impersonating an organisation via free email provider | 30 |
 | Lookalike / spoofed sender patterns | 25 |
 | Raw IP address in URL | 25 |
@@ -56,32 +66,123 @@ Eight weighted checks, capped at 100 points total:
 | Urgency language | 15 |
 | URL shorteners | 15 |
 
+Brand impersonation is the strongest single signal and the one the extension
+relies on most in a real inbox: it is the only check that cannot be satisfied
+by rewording, because it compares what the mail claims to be against the
+domain it was actually sent from.
+
 ### Layer 2 — Multilingual BERT (`ML/bert_model.py`)
 
 `bert-base-multilingual-cased`, fine-tuned for binary phishing classification.
 It detects psychological manipulation from meaning and context rather than
 keyword matching — catching messages that contain no individually suspicious words.
 
+### Combining the two engines
+
+Each engine produces an independent 0–100 score. They are combined as
+
+```
+score = max( bert × damping + 0.5 × rules ,  rules )
+```
+
+so either engine can reach 100 on its own — rules that identify a clear
+impersonation do not need the model's agreement, and the reverse holds too.
+Agreement between them raises confidence rather than averaging it away.
+
+`damping` (0.25) applies only when the mail was genuinely sent from a known
+company's own domain. That is positive evidence of legitimacy, not merely the
+absence of suspicion, and it targets a measured weakness of the model: the
+training corpora contain almost no legitimate account or security mail, so
+BERT scores a subscription renewal notice and a user-requested password reset
+at 99.99 — the same as real phishing.
+
+A second damping covers a different failure. The training corpora label spam
+and phishing as one class, so the model does not separate them: it scores a
+retail advertisement at 99.99, the same as a request for card details. LURA
+detects phishing, not spam — an irritating advertisement is not a threat, and
+flagging it as danger costs the user's trust in every other alert. Mail is
+damped when it carries positive evidence of the marketing category — an
+unsubscribe link, an `(AD)` marker, offer vocabulary — and no request for
+credentials, so a prize scam dressed as a promotion still scores full.
+
+A third damping is the user's own. LURA knows large brands, but an inbox is full of
+addresses no list contains — a local business, a teacher, a supplier. For those there is
+no positive evidence of legitimacy at all, so ordinary mail is judged on phrasing alone.
+Marking a sender as known supplies the missing evidence. It damps the model's score and
+nothing else: if the rules find brand impersonation or a link to a forged domain, the
+message is still flagged. A user may say they recognise an address; they may not say
+ignore the evidence.
+
+Since the feature lets a user weaken detection, its weak point is the user rather
+than the server: an attacker does not need to break in, only to talk the victim into
+marking their address. Three things stand in the way. The endpoints are scoped to the
+token, so nobody can write to another account's list. An address the rule engine has
+already found impersonation in is refused outright, with the finding quoted — if the
+mail looks like a forgery, the person asking to trust it may well be the one being
+deceived. And a whole free-mail provider cannot be trusted as a domain, which would
+otherwise disable detection for every phishing message sent from Gmail; a single
+address there is fine, since it concerns one person.
+
+Where no engine has corroborating evidence, the score is capped at the top of the
+suspicious band. The classification stands — the alert is recorded and the guardian
+notified — but the figure shown does not claim a certainty resting on a single signal.
+
+An earlier version averaged the two scores. It was replaced after measurement;
+see [Results](#results).
+
 ### Risk thresholds
+
+The classification threshold is the only calibrated value. The remaining bands
+are derived from it, so they cannot drift apart when it is retuned.
 
 | Score | Classification |
 |---|---|
-| ≥ 80 | High risk |
-| ≥ 70 | Phishing |
-| ≥ 50 | Suspicious |
-| ≥ 30 | Caution |
-| < 30 | Safe |
+| ≥ 76 | High risk |
+| ≥ 57 | Phishing |
+| ≥ 34 | Caution |
+| < 34 | Safe |
 
 ## Results
 
+Measured on a held-out test set of 16,137 emails, deduplicated before the
+train/test split.
+
 | Metric | Result | Target |
 |---|---:|---:|
-| Overall accuracy | 95.1% | 85% |
-| F1-Score (phishing) | 0.94 | 0.88 |
-| False negative rate | 3.2% | < 5% |
-| AUC-ROC | 0.96 | — |
+| Overall accuracy | 99.4% | 85% |
+| F1-score (phishing) | 0.994 | 0.88 |
+| False negative rate | 0.9% | < 5% |
+| False positive rate | 0.4% | — |
 
-Trained on ~130,000 emails from multiple sources, including a Hebrew corpus
+By language:
+
+| | Samples | Accuracy | F1 | Precision |
+|---|---:|---:|---:|---:|
+| Hebrew | 638 | 99.2% | 0.990 | 100% |
+| English | 15,499 | 99.4% | 0.994 | 99.6% |
+
+31 false alarms across 8,007 legitimate emails, and none at all in Hebrew.
+
+### What the numbers cost to get
+
+The first ensemble scored **52.8% accuracy with F1 0.121** on the same test
+set, while BERT alone scored 99.4%. The weighted average was the cause. It
+capped the model's contribution at `BERT_WEIGHT × 100 = 40`, below the
+threshold of 57, so BERT could never cross on its own however certain it was.
+It also treated a rule score of 0 as evidence of legitimacy, when zero only
+means the rules have nothing to say — which is also what happens when there is
+no sender for three of the nine checks to read. Replacing the average with the
+formula above recovered the full 99.4%.
+
+Two limitations are worth stating. 96% of the corpus rows carry no `From`
+line, so three rule checks cannot run on them; the extension always has a
+sender from Gmail, making the deployed pipeline stronger than this figure
+suggests. And leave-one-source-out validation drops to 67.2% accuracy, which
+means part of any high score on public corpora reflects recognising the
+dataset rather than recognising phishing. The rule engine is corpus-
+independent and is what carries the system on mail it has never seen.
+
+Trained on ~119,000 emails from multiple sources, including a Hebrew corpus
 built specifically for this project.
 
 ## Installation
@@ -155,7 +256,10 @@ backend/
 ├── API/                 Endpoints: auth, scan, stats, guardian, metrics
 ├── ML/                  BERT model, training, data preparation
 │   └── data/            Training datasets (CSV)
-├── detector.py          Heuristic engine — 8 weighted checks
+├── detector.py          Heuristic engine — 9 weighted checks
+├── scoring.py           Combines the two engines into one score
+├── risk_levels.py       Score to risk band and user-facing wording
+├── API/trusted.py       Per-user known-sender list
 ├── url_detector.py      URL analysis
 ├── email_service.py     Guardian alert emails (SMTP)
 ├── config.py            Environment configuration

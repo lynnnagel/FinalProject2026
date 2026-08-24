@@ -14,6 +14,9 @@
     python cleanup_users.py                    # מציג בלבד, לא משנה דבר
     python cleanup_users.py --delete           # מוחק אחרי אישור
     python cleanup_users.py --delete --yes     # בלי לשאול
+
+למחיקת חשבונות ששמם ידוע, כולל רשומים — למשל אלה שנוצרו ב-check_demo.py:
+    python cleanup_users.py --emails demo-user@example.com --delete
 """
 from __future__ import annotations
 
@@ -45,13 +48,30 @@ def main() -> None:
     ap.add_argument("--yes", action="store_true", help="לא לשאול לאישור")
     ap.add_argument("--keep", nargs="*", default=[],
                     help="כתובות לשמור גם אם אין להן סיסמה")
+    ap.add_argument("--emails", nargs="*", default=[],
+                    help="למחוק כתובות מסוימות, גם אם יש להן סיסמה "
+                         "(למשל חשבונות הבדיקה של check_demo.py)")
     args = ap.parse_args()
 
     init_db()
     db = SessionLocal()
     try:
         keep = {e.strip().lower() for e in args.keep}
-        targets = [u for u in suspect_users(db) if u.email.lower() not in keep]
+
+        # Named addresses are deleted whether or not they have a
+        # password. The automatic sweep below never touches a registered
+        # account, which is the right default - but the check scripts
+        # register real accounts, and those are worth being able to
+        # clear by name after a rehearsal.
+        if args.emails:
+            wanted = {e.strip().lower() for e in args.emails}
+            targets = [u for u in db.query(User).order_by(User.id).all()
+                       if u.email.lower() in wanted]
+            if not targets:
+                print("\nאף אחת מהכתובות שביקשת אינה במסד.\n")
+                return
+        else:
+            targets = [u for u in suspect_users(db) if u.email.lower() not in keep]
 
         registered = db.query(User).filter(User.password_hash.isnot(None)).count()
         print(f"\n{registered} חשבונות רשומים (עם סיסמה) — הם לא ייגעו.\n")
@@ -60,7 +80,8 @@ def main() -> None:
             print("אין חשבונות למחיקה.\n")
             return
 
-        print(f"{len(targets)} חשבונות שנוצרו אוטומטית:\n")
+        print(f"{len(targets)} חשבונות "
+              f"{'שביקשת למחוק' if args.emails else 'שנוצרו אוטומטית'}:\n")
         total_emails = 0
         for u in targets:
             n = db.query(EmailRecord).filter(EmailRecord.user_id == u.id).count()

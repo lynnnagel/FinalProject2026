@@ -14,14 +14,14 @@ def get_user_stats(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    # סטטיסטיקות הן נתונים אישיים – רק בעל החשבון רשאי לראות אותן
+    # Stats are personal data - only the account owner may see them
     if user_email != current_user.email:
         raise HTTPException(status_code=403, detail="אין הרשאה")
     user = db.query(User).filter(User.email == user_email).first()
     if not user:
         raise HTTPException(status_code=404, detail="משתמש לא נמצא")
 
-    # daily_active – האם סרק מייל כלשהו היום?
+    # daily_active - did they scan any mail today?
     scanned_today = (
         db.query(EmailRecord)
         .filter(
@@ -32,7 +32,7 @@ def get_user_stats(
     )
     daily_active = scanned_today > 0
 
-    # התראות היום – ללא "התראות מפקח" (כדי למנוע כפילות)
+    # Today's alerts, excluding guardian alerts so nothing appears twice
     alerts_today = (
         db.query(Alert)
         .filter(

@@ -11,7 +11,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
 
-from config import CORS_ORIGIN_REGEX
+import risk_levels
+from config import (
+    CORS_ORIGIN_REGEX, PHISHING_THRESHOLD, HIGH_RISK_THRESHOLD,
+    MEDIUM_RISK_THRESHOLD, LOW_RISK_THRESHOLD,
+)
 from database import init_db
 from API.scan import router as scan_router
 from API.stats import router as stats_router
@@ -29,8 +33,9 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# מקורות מותרים: תוספי דפדפן ו-localhost בלבד (ראה CORS_ORIGIN_REGEX ב-config.py).
-# בעבר עמד כאן allow_origins=["*"], שהתעלם מההגדרה ואיפשר לכל אתר לקרוא ל-API.
+# Allowed origins: browser extensions and localhost only (see
+# CORS_ORIGIN_REGEX in config.py). This used to read allow_origins=["*"],
+# which ignored that setting and let any website call the API.
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=CORS_ORIGIN_REGEX,
@@ -75,7 +80,7 @@ async def _start_bert_load():
 
 @app.get("/health/model", tags=["health"])
 def model_health():
-    """מצב טעינת המודל: not_started / loading / ready / failed."""
+    """Model loading state: not_started / loading / ready / failed."""
     try:
         from ML.bert_model import load_state, MAX_LENGTH, DEFAULT_CHECKPOINT
         return {
@@ -107,6 +112,33 @@ def root():
             "frontend":         "GET  /app",
         },
     }
+
+@app.get("/config/bands", tags=["health"], summary="The risk bands")
+def config_bands():
+    """
+    The four risk bands, so nothing outside the server has to repeat
+    them.
+
+    They were written out by hand in four places - the dashboard, the
+    extension's badge, the pipeline check and the scan endpoint - and
+    every calibration left another copy behind. One of them still held
+    80/50/30 long after the real threshold had moved, so the same
+    message got one label on its first scan and another when it came
+    back from the cache.
+
+    Nothing here is secret: the bands are visible in every scan result
+    anyway, so this needs no authentication.
+    """
+    return {
+        "threshold": PHISHING_THRESHOLD,
+        "bands": [
+            {"min": HIGH_RISK_THRESHOLD,   "label": risk_levels.risk_level(HIGH_RISK_THRESHOLD)},
+            {"min": MEDIUM_RISK_THRESHOLD, "label": risk_levels.risk_level(MEDIUM_RISK_THRESHOLD)},
+            {"min": LOW_RISK_THRESHOLD,    "label": risk_levels.risk_level(LOW_RISK_THRESHOLD)},
+            {"min": 0,                     "label": risk_levels.risk_level(0)},
+        ],
+    }
+
 
 @app.get("/test-email", tags=["health"])
 def test_email():

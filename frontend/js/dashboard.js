@@ -22,18 +22,155 @@
     }
 
     function showSection(name) {
-      ['overview','scanner','alerts','guardian'].forEach(s => {
+      ['overview','scanner','alerts','trusted','guardian'].forEach(s => {
         document.getElementById(`sec-${s}`).style.display = s === name ? 'block' : 'none';
       });
       document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
       event.target.classList.add('active');
+      if (name === 'trusted') loadTrusted();
     }
 
-    function riskColor(score) {
-      return score >= 80 ? '#ef4444' : score >= 50 ? '#f97316' : score >= 30 ? '#eab308' : '#22c55e';
+    // ── שולחים מוכרים ──────────────────────────────────────────────
+    async function loadTrusted() {
+      const el = document.getElementById('trustedList');
+      if (!el) return;
+      try {
+        const r = await fetch(`${API}/trusted-senders`, { headers: authHeaders() });
+        if (r.status === 401) { signOut(); return; }
+        if (!r.ok) throw new Error();
+        const list = (await r.json()).senders || [];
+        el.innerHTML = list.length === 0
+          ? '<div class="empty-state">עדיין לא סימנת שולחים.</div>'
+          : list.map(s => `
+              <div class="guardian-child-card" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;">
+                <div>
+                  <div style="font-weight:600;direction:ltr;text-align:right;">${esc(s.value)}</div>
+                  <div style="font-size:12.5px;color:var(--muted);">${s.is_domain ? 'דומיין שלם' : 'כתובת בודדת'}</div>
+                </div>
+                <button class="btn-danger" onclick="removeTrusted('${esc(s.value)}')">הסר</button>
+              </div>`).join('');
+      } catch {
+        el.innerHTML = '<div class="empty-state">לא ניתן לטעון את הרשימה.</div>';
+      }
     }
-    function riskLabel(score) {
-      return score >= 80 ? 'סכנה גבוהה' : score >= 50 ? 'חשוד' : score >= 30 ? 'זהירות' : 'בטוח';
+
+    async function addTrusted() {
+      const input = document.getElementById('trustedValue');
+      const out   = document.getElementById('trustedResult');
+      const value = (input.value || '').trim();
+      if (!value) return;
+
+      try {
+        const r = await fetch(`${API}/trusted-senders`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ value }),
+        });
+        const d = await r.json();
+        if (!r.ok) {
+          out.innerHTML = `<div class="form-error">${esc(d.detail || 'לא ניתן להוסיף')}</div>`;
+          return;
+        }
+        // rescored הוא מספר הסריקות השמורות שסומנו לחישוב מחדש. בלי
+        // הביטול הזה הסימון לא היה משנה דבר בתיבה, ולכן שווה להראות
+        // אותו: הוא מסביר מה בדיוק קרה.
+        out.innerHTML = `<div class="form-success">נוסף. ${d.rescored} מיילים יסומנו מחדש בסריקה הבאה.</div>`;
+        input.value = '';
+        loadTrusted();
+      } catch {
+        out.innerHTML = '<div class="form-error">אין חיבור לשרת.</div>';
+      }
+    }
+
+    async function removeTrusted(value) {
+      const out = document.getElementById('trustedResult');
+      try {
+        const r = await fetch(`${API}/trusted-senders/${encodeURIComponent(value)}`, {
+          method: 'DELETE',
+          headers: authHeaders(),
+        });
+        if (!r.ok) throw new Error();
+        const d = await r.json();
+        out.innerHTML = `<div class="form-success">הוסר. ${d.rescored} מיילים יסומנו מחדש.</div>`;
+        loadTrusted();
+      } catch {
+        out.innerHTML = '<div class="form-error">לא ניתן להסיר.</div>';
+      }
+    }
+
+    // The bands come from the server, which derives them from one
+    // calibrated threshold. They used to be written out here by hand -
+    // in two different sets, 80/50/30 in the overview and 70/40/20 in
+    // the scanner - and after the threshold was calibrated neither
+    // matched the real values any more.
+    //
+    // The list below is only what to fall back on if the request fails,
+    // so a dashboard on a server that is briefly down still labels
+    // scores instead of breaking. Keep it in step with config.py.
+    let BANDS = [
+      { min: 72, label: 'סכנה גבוהה', color: 'var(--danger)' },
+      { min: 50, label: 'חשוד',       color: 'var(--orange)' },
+      { min: 30, label: 'זהירות',     color: 'var(--yellow)' },
+      { min: -1, label: 'בטוח',       color: 'var(--green)'  },
+    ];
+
+    const BAND_COLORS = {
+      'סכנה גבוהה': 'var(--danger)',
+      'חשוד':       'var(--orange)',
+      'זהירות':     'var(--yellow)',
+      'בטוח':       'var(--green)',
+    };
+
+    async function loadBands() {
+      try {
+        const r = await fetch(`${API}/config/bands`);
+        if (!r.ok) return;
+        const d = await r.json();
+        if (!Array.isArray(d.bands) || d.bands.length !== 4) return;
+        BANDS = d.bands.map((b, i) => ({
+          // The lowest band has to catch every score, including a
+          // negative one used as a marker.
+          min: i === d.bands.length - 1 ? -1 : b.min,
+          label: b.label,
+          color: BAND_COLORS[b.label] || 'var(--muted)',
+        }));
+      } catch {
+        // The server is unreachable. The fallback above still labels.
+      }
+    }
+
+    const band      = score => BANDS.find(b => score >= b.min);
+    const riskColor = score => band(score).color;
+    const riskLabel = score => band(score).label;
+
+    // אין עדיין נתונים — מצב תקין לגמרי למשתמש חדש, ולכן הוא מוצג
+    // כהנחיה ולא כתקלה.
+    function showEmptyDashboard(status) {
+      ['statScanned', 'statBlocked', 'statAlerts'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = '0';
+      });
+      const statusEl = document.getElementById('statStatus');
+      if (statusEl) statusEl.textContent = '—';
+
+      const alertsEl = document.getElementById('alertsList');
+      if (alertsEl) {
+        alertsEl.innerHTML = status === 403
+          ? '<div class="empty-state">החשבון המחובר אינו תואם לנתונים המבוקשים.</div>'
+          : '<div class="empty-state">עדיין לא נסרקו מיילים.<br>' +
+            'התחבר לאותו חשבון בתוסף, ופתח את Gmail.</div>';
+      }
+    }
+
+    // חובה לנקות את האישורים לפני ההפניה. login.html מפנה מיד
+    // לדשבורד כשהוא מוצא pg_token, והדשבורד מפנה להתחברות כשהשרת
+    // מחזיר 401 — כך שטוקן שפג תוקפו יצר לולאת הפניות אינסופית בין
+    // שני העמודים, שנראית כהבהוב.
+    function signOut() {
+      localStorage.removeItem('pg_token');
+      localStorage.removeItem('pg_email');
+      localStorage.removeItem('pg_name');
+      window.location.href = 'login.html';
     }
 
     async function loadDashboard() {
@@ -41,7 +178,7 @@
       userEmail   = localStorage.getItem('pg_email') || '';
       const name  = localStorage.getItem('pg_name')  || userEmail;
 
-      if (!token) { window.location.href = 'login.html'; return; }
+      if (!token) { signOut(); return; }
 
       document.getElementById('navUser').textContent       = `שלום, ${name}`;
       document.getElementById('sidebarName').textContent   = name;
@@ -50,7 +187,14 @@
 
       try {
         const r = await fetch(`${API}/stats/${userEmail}`, { headers: authHeaders() });
-        if (r.status === 404) return; // no scans yet
+        if (r.status === 401) { signOut(); return; }
+        if (!r.ok) {
+          // 404 = טרם נסרק דבר, 403 = הטוקן שייך לחשבון אחר. קודם רק
+          // 404 טופל, ולכן תשובת שגיאה זרמה הלאה כאובייקט ללא השדות
+          // המצופים וכל המונים הוצגו כ-undefined בלי שום הסבר.
+          showEmptyDashboard(r.status);
+          return;
+        }
         const d = await r.json();
 
         document.getElementById('statScanned').textContent = d.total_scanned;
@@ -67,7 +211,7 @@
         document.getElementById('riskLevel').style.color = color;
         document.getElementById('riskBar').style.width   = `${score}%`;
         document.getElementById('riskCircle').style.background =
-          `conic-gradient(${color} ${score}%, #334155 ${score}%)`;
+          `conic-gradient(${color} ${score}%, var(--border-light) ${score}%)`;
 
         // Alerts
         const list = d.recent_alerts_list || [];
@@ -118,7 +262,7 @@
         });
         const data = await r.json();
         const score = data.risk_score ?? 0;
-        const color = score >= 70 ? '#ef4444' : score >= 40 ? '#f97316' : score >= 20 ? '#eab308' : '#22c55e';
+        const color = riskColor(score);
         resultEl.innerHTML = `
           <div class="result-card" style="border-color:${color};margin-top:16px;">
             <div class="result-header">
@@ -183,4 +327,7 @@
         resultEl.innerHTML = '<div class="form-error">שגיאת חיבור לשרת</div>';
       }
     }
-    loadDashboard();
+    // The bands are fetched before the first render, so a score is
+    // never labelled by the fallback list when the server could have
+    // said otherwise. A failed fetch resolves and the fallback stands.
+    loadBands().then(loadDashboard);

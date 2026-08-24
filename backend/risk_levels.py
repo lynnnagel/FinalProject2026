@@ -1,13 +1,14 @@
 """
-LURA – תרגום ציון מספרי לרמת סיכון ולהמלצה למשתמש.
+LURA - turning a numeric score into a risk level and a message.
 
-מודול נפרד ותלוי-config בלבד, כדי שגם `detector` וגם `scoring` וגם
-שכבת ה-API יוכלו לייבא אותו בלי מעגל ייבוא.
+A separate module that depends only on config, so `detector`, `scoring`
+and the API layer can all import it without an import cycle.
 
-הוא קיים כי הלוגיקה הזאת שוכפלה שלוש פעמים, ושני עותקים נשארו מאחור.
-העותק ב-`API/scan.py` שימש את מסלול התוצאה השמורה עם ספים קשיחים
-(80/50/30) שכבר לא תאמו את הספים האמיתיים — ולכן אותו מייל בדיוק קיבל
-תווית אחת בסריקה ראשונה ותווית אחרת כשהוחזר מהמטמון.
+It exists because this logic was duplicated three times and two copies
+drifted. The one in `API/scan.py` served the cached-result path with
+hard-coded cut-offs (80/50/30) that no longer matched the real ones - so
+the same message got one label on its first scan and a different one
+when it came back from the cache.
 """
 from config import (
     PHISHING_THRESHOLD,
@@ -16,9 +17,9 @@ from config import (
     LOW_RISK_THRESHOLD,
 )
 
-# הטקסטים נטולי אימוג'י בכוונה. ההודעה מופיעה בתוך Gmail לצד מיילים
-# אמיתיים, ובהקשר של אבטחה ניסוח ענייני קורא כמו כלי ולא כמו התראה
-# אוטומטית.
+# The wording carries no emoji on purpose. This shows up inside Gmail
+# next to real mail, and in a security context plain wording reads like
+# a tool rather than an automated alert.
 _LEVELS = (
     (HIGH_RISK_THRESHOLD,   "סכנה גבוהה", "אל תלחץ על שום קישור. מחק את המייל."),
     (MEDIUM_RISK_THRESHOLD, "חשוד",       "בדוק את זהות השולח לפני כל פעולה."),
@@ -28,12 +29,12 @@ _LEVELS = (
 
 
 def risk_level(score: float) -> str:
-    """שם רמת הסיכון עבור ציון."""
+    """Name of the risk band for a score."""
     return next(name for cutoff, name, _ in _LEVELS if score >= cutoff)
 
 
 def recommendation(score: float) -> str:
-    """ההמלצה המוצגת למשתמש עבור ציון."""
+    """The advice shown to the user for a score."""
     return next(text for cutoff, _, text in _LEVELS if score >= cutoff)
 
 
@@ -43,12 +44,14 @@ def is_phishing(score: float) -> bool:
 
 def apply(result: dict, corroborated: bool = True) -> dict:
     """
-    מוסיף is_phishing, risk_level ו-recommendation לפי risk_score.
+    Add is_phishing, risk_level and recommendation based on risk_score.
 
-    corroborated נשמר בחתימה לתאימות, אך אינו משנה עוד את התווית:
-    ריסון המקרה הלא-מתומך נעשה על הציון עצמו ב-scoring.combine, כך
-    שהמספר והתווית נגזרים מאותו מקור ואינם יכולים לסתור זה את זה.
-    ריסון התווית בלבד הותיר ציון 99 לצד הכיתוב "חשוד".
+    `corroborated` is kept in the signature for compatibility but no
+    longer changes the label: the uncorroborated case is held back on
+    the score itself in scoring.combine, so the number and the label
+    come from the same place and cannot disagree. Holding back only the
+    label used to leave a score of 99 sitting next to the word
+    "suspicious".
     """
     score = result["risk_score"]
     result["is_phishing"] = is_phishing(score)

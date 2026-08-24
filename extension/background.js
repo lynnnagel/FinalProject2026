@@ -134,7 +134,7 @@ function showPhishingNotification(data) {
   chrome.notifications.create({
     type: 'basic',
     iconUrl: 'icons/icon128.png',
-    title: '⚠️ זוהה מייל פישינג!',
+    title: 'LURA — זוהה מייל פישינג',
     message: `מייל חשוד מ-${data.sender}\nמדד סיכון: ${Math.round(data.riskScore)}%\nאל תלחץ על קישורים במייל זה.`,
     priority: 2,
     requireInteraction: true,

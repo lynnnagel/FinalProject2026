@@ -13,8 +13,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import sys
 import urllib.error
 import urllib.request
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# The real thresholds, not a copy. These were written out here as 57 and
+# 34 and went stale the moment the threshold was calibrated, so the
+# check started passing samples it should have failed.
+from config import PHISHING_THRESHOLD, LOW_RISK_THRESHOLD   # noqa: E402
 
 SAMPLES = [
     dict(
@@ -101,7 +110,8 @@ def main() -> None:
             continue
 
         score = r.get("risk_score", 0)
-        good = (score >= 57) if s["expect"] == "גבוה" else (score < 34)
+        good = (score >= PHISHING_THRESHOLD) if s["expect"] == "גבוה" \
+            else (score < LOW_RISK_THRESHOLD)
         ok &= good
         mark = "" if good else "   ← לא כצפוי"
         print(f"  {s['expect']:<6} {score:>6.1f}  {r.get('risk_level', ''):<12} "

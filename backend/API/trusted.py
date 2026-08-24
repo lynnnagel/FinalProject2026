@@ -1,17 +1,18 @@
 """
-רשימת השולחים המוכרים של המשתמש.
+The user's list of known senders.
 
-GET    /trusted-senders          – הרשימה
-POST   /trusted-senders          – הוספה
-DELETE /trusted-senders/{value}  – הסרה
+GET    /trusted-senders          - the list
+POST   /trusted-senders          - add one
+DELETE /trusted-senders/{value}  - remove one
 
-המערכת מכירה מותגים גדולים, אבל תיבה של אדם מלאה בכתובות שאיש לא שמע
-עליהן: משרד שהוא מתכתב איתו, מורה, ספק. עבורן אין שום ראיה חיובית
-ללגיטימיות, ולכן מייל תקין לחלוטין מקבל ציון גבוה על סמך ניחוש המודל
-בלבד. הרשימה הזאת היא הראיה החסרה.
+The system knows the large brands, but a person's inbox is full of
+addresses nobody has heard of: an office they write to, a teacher, a
+supplier. For those there is no positive evidence of legitimacy at all,
+so entirely ordinary mail gets a high score on the model's guess alone.
+This list is the missing evidence.
 
-היא אישית: מה שמוכר למשתמש אחד אינו אומר דבר על משתמש אחר, ולכן היא
-מסוננת לפי המשתמש שבטוקן ולא לפי פרמטר בבקשה.
+It is personal: what one user recognises says nothing about another, so
+it is filtered by the user in the token and never by a request field.
 """
 from __future__ import annotations
 
@@ -28,29 +29,32 @@ from schemas import TrustedSenderRequest, TrustedSenderList, TrustedSenderItem
 
 router = APIRouter(tags=["trusted"])
 
-# ניקוד חוקים שמעליו לא ניתן לסמן שולח כמוכר.
+# Rule score above which a sender can no longer be marked as known.
 #
-# הפיצ'ר נותן למשתמש להנמיך את ציון המודל, וזו נקודת התורפה שלו:
-# תוקף שישכנע את המשתמש ללחוץ "אני מכיר את השולח הזה" ירוויח הנמכה
-# על כל מייל עתידי מאותה כתובת. הסינון כאן מונע את זה בשורש — כתובת
-# שמנוע החוקים מצא בה ראיות של ממש אינה ניתנת לסימון בכלל.
+# The feature lets a user damp the model's score, and that is its weak
+# point: an attacker who talks the user into clicking "I know this
+# sender" earns a damping on every future message from that address.
+# This check stops it at the root - an address the rule engine has found
+# real evidence against cannot be marked at all.
 #
-# 30 הוא הרף שמעליו יש ממצא מהותי ולא רק מילים חלשות: התחזות למותג
-# בגוף (30), התחזות בנושא (45), ארגון רשמי מכתובת חינמית (30).
+# 30 is the level above which there is a substantive finding rather than
+# weak words alone: brand impersonation in the body (30), in the subject
+# (45), an official-sounding organisation on a free mailbox (30).
 MAX_RULE_SCORE_FOR_TRUST = 30
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
 _DOMAIN_RE = re.compile(r"^[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
 
-MAX_ENTRIES = 500   # תקרה שפויה; מונעת ניפוח של הטבלה
+MAX_ENTRIES = 500   # sane cap; keeps the table from ballooning
 
 
 def normalise(raw: str) -> tuple[str, bool]:
     """
-    מחזיר (ערך מנורמל, האם זהו דומיין).
+    Returns (normalised value, whether it is a domain).
 
-    מקבל כתובת מלאה או דומיין. ערך עם @ נשמר כמות שהוא; ערך בלי @
-    נחשב לדומיין, מה שמאפשר לסמוך על ארגון ששולח מכמה כתובות.
+    Accepts a full address or a domain. A value with @ is kept as is; a
+    value without one counts as a domain, which lets a user trust an
+    organisation that writes from several addresses.
     """
     value = (raw or "").strip().lower().lstrip("@")
     if not value:
@@ -62,9 +66,10 @@ def normalise(raw: str) -> tuple[str, bool]:
     if not _DOMAIN_RE.match(value):
         raise HTTPException(400, "דומיין לא תקין")
 
-    # אמון ברמת דומיין על ספק דואר חינמי הוא הרסני: הוא מנטרל את
-    # הזיהוי עבור *כל* פישינג שנשלח מ-Gmail, אחד הערוצים הנפוצים
-    # ביותר. כתובת בודדת מאותו ספק מותרת, כי היא נוגעת לאדם אחד.
+    # Trusting a whole free-mail provider is destructive: it disables
+    # detection for *every* phishing message sent from Gmail, one of the
+    # commonest channels there is. A single address from that provider
+    # is fine, since it concerns one person.
     if value in detector.FREE_EMAIL_PROVIDERS:
         raise HTTPException(
             400,
@@ -77,12 +82,13 @@ def normalise(raw: str) -> tuple[str, bool]:
 def _rule_evidence_against(db: Session, user_id: int,
                            value: str, is_domain: bool) -> tuple[float, list[str]]:
     """
-    מריץ מחדש את מנוע החוקים על המיילים השמורים מאותו שולח.
+    Re-runs the rule engine over the stored mail from that sender.
 
-    השאלה שהוא עונה עליה: האם למערכת יש כבר ראיות שהכתובת הזאת
-    בעייתית. הריצה נעשית על התוכן השמור ולא על הציון השמור, כי הציון
-    כולל גם את המודל — ודווקא המודל הוא מה שהסימון אמור להנמיך.
-    כאן מעניינות רק הראיות הקשות.
+    The question it answers: does the system already have evidence
+    against this address? It runs over the stored text rather than the
+    stored score, because that score includes the model - and the model
+    is exactly what the mark is meant to damp. Only the hard findings
+    matter here.
     """
     q = db.query(EmailRecord).filter(EmailRecord.user_id == user_id)
     q = q.filter(EmailRecord.sender.ilike(f"%@{value}" if is_domain else f"%{value}%"))
@@ -99,7 +105,7 @@ def _rule_evidence_against(db: Session, user_id: int,
 
 
 def matches(sender: str, entries: list[TrustedSender]) -> bool:
-    """האם השולח מופיע ברשימה, ישירות או דרך הדומיין שלו."""
+    """Is the sender on the list, directly or through its domain?"""
     address = (sender or "").strip().lower()
     match = re.search(r"@([A-Za-z0-9.\-]+)", address)
     domain = match.group(1).rstrip(".") if match else ""
@@ -122,11 +128,12 @@ def is_trusted_by_user(db: Session, user_id: int, sender: str) -> bool:
 def _invalidate_cached_scores(db: Session, user_id: int, value: str,
                               is_domain: bool) -> int:
     """
-    מסמן את הסריקות השמורות של אותו שולח לחישוב מחדש.
+    Marks that sender's stored scans for recomputation.
 
-    בלי זה, סימון שולח כמוכר לא היה משנה דבר בתיבה: התוצאות כבר
-    שמורות, והסריקה הבאה הייתה מחזירה אותן כמות שהן. איפוס חותמת
-    הגרסה גורם לסריקה הבאה לחשב מחדש — בלי למחוק את ההיסטוריה.
+    Without this, marking a sender would change nothing in the inbox:
+    the verdicts are already cached, and the next scan would hand them
+    back unchanged. Clearing the version stamp makes the next scan
+    recompute them, without deleting any history.
     """
     q = db.query(EmailRecord).filter(EmailRecord.user_id == user_id)
     if is_domain:
@@ -140,7 +147,7 @@ def _invalidate_cached_scores(db: Session, user_id: int, value: str,
 
 
 @router.get("/trusted-senders", response_model=TrustedSenderList,
-            summary="השולחים המוכרים של המשתמש")
+            summary="The user's known senders")
 def list_trusted(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -159,7 +166,7 @@ def list_trusted(
     )
 
 
-@router.post("/trusted-senders", summary="סימון שולח כמוכר")
+@router.post("/trusted-senders", summary="Mark a sender as known")
 def add_trusted(
     request: TrustedSenderRequest,
     current_user: User = Depends(get_current_user),
@@ -175,12 +182,14 @@ def add_trusted(
     if count >= MAX_ENTRIES:
         raise HTTPException(400, f"הרשימה מוגבלת ל-{MAX_ENTRIES} רשומות")
 
-    # ראיות קשות גוברות על הצהרת המשתמש.
+    # Hard evidence outranks what the user says.
     #
-    # המשתמש מעיד שהוא מכיר את הכתובת, וזו עדות בעלת ערך — אבל היא
-    # אינה גוברת על ממצא של מנוע החוקים. אם הכתובת מתחזה למותג או
-    # שולחת מדומיין מזויף, ייתכן מאוד שהמשתמש הוא זה שהוטעה, וזו
-    # בדיוק המטרה של התוקף: לגרום לקורבן לנטרל את ההגנה בעצמו.
+    # The user testifying that they know an address is worth something,
+    # but it does not override a finding from the rule engine. If the
+    # address impersonates a brand or writes from a forged domain, the
+    # person asking to trust it may well be the one being deceived -
+    # which is precisely what the attacker is working toward: getting
+    # the victim to switch off the protection themselves.
     evidence, indicators = _rule_evidence_against(db, current_user.id,
                                                   value, is_domain)
     if evidence >= MAX_RULE_SCORE_FOR_TRUST:
@@ -210,7 +219,7 @@ def add_trusted(
     }
 
 
-@router.delete("/trusted-senders/{value:path}", summary="הסרת שולח מוכר")
+@router.delete("/trusted-senders/{value:path}", summary="Remove a known sender")
 def remove_trusted(
     value: str,
     current_user: User = Depends(get_current_user),

@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -209,6 +210,25 @@ def check_auth(url: str, rep: Report, email: str) -> str | None:
 def check_password_reset(url: str, rep: Report) -> None:
     section(3, "שכחתי סיסמה")
     email = "reset-demo@example.com"
+
+    # This account may be left over from an earlier run of this script,
+    # holding the password this very section changes it to. Repair it
+    # instead of failing - a check should not depend on how the previous
+    # run happened to end. Nothing here is reachable without access to
+    # the database file itself.
+    try:
+        from API.auth import hash_password
+        from database import SessionLocal
+        from models import User
+        db = SessionLocal()
+        stale = db.query(User).filter(User.email == email).first()
+        if stale:
+            stale.password_hash = hash_password(PASSWORD)
+            db.commit()
+        db.close()
+    except Exception:
+        pass          # not fatal; account() reports what actually failed
+
     if not account(url, rep, email):
         return
 
@@ -229,9 +249,9 @@ def check_password_reset(url: str, rep: Report) -> None:
     # the password hash on record - reading it out of a mailbox is not
     # something this script can do.
     try:
-        from API.auth import create_reset_token
-        from database import SessionLocal
-        from models import User
+        from API.auth import create_reset_token          # noqa: F811
+        from database import SessionLocal                # noqa: F811
+        from models import User                          # noqa: F811
         db = SessionLocal()
         user = db.query(User).filter(User.email == email).first()
         link_token = create_reset_token(email, user.password_hash)
@@ -265,6 +285,25 @@ def check_password_reset(url: str, rep: Report) -> None:
     status, _ = call(url, "/auth/me", token=link_token)
     rep.check(status == 401, "קישור האיפוס אינו משמש כהזדהות למערכת",
               "קישור מהמייל התקבל כטוקן התחברות", "reset token works as auth")
+
+    # Put the password back, so the next run starts where this one did.
+    #
+    # This section does its job by changing a password, and the account
+    # survives the run - so a second run tried to log in with the
+    # original password and failed before reaching any real check. A
+    # test that only passes the first time is worse than no test: it
+    # reports a problem that is not there.
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.email == email).first()
+        restore = create_reset_token(email, user.password_hash)
+    finally:
+        db.close()
+    status, _ = call(url, "/auth/reset-password", "POST",
+                     {"token": restore, "new_password": PASSWORD})
+    if status != 200:
+        rep.warn(f"לא ניתן היה להחזיר את הסיסמה של {email} ({status}) — "
+                 f"הרצה הבאה עלולה להיכשל בסעיף הזה")
 
 
 def check_scanning(url: str, rep: Report, token: str, email: str) -> None:
@@ -462,9 +501,29 @@ def check_pages(url: str, rep: Report) -> None:
                        ("/app/login.html", "התחברות"),
                        ("/app/dashboard.html", "לוח בקרה"),
                        ("/app/forgot_password.html", "איפוס סיסמה")):
-        status, _ = call(url, path)
-        rep.check(status == 200, f"{name} נטען", f"{name} החזיר {status}",
-                  f"page {path} not served")
+        status, page = call(url, path)
+        if not rep.check(status == 200, f"{name} נטען",
+                         f"{name} החזיר {status}", f"page {path} not served"):
+            continue
+
+        # And that the scripts the page asks for actually arrive.
+        #
+        # A page whose JavaScript is missing still loads and still looks
+        # right - it just stops responding. frontend/js/forgot_password.js
+        # went missing from a working copy exactly this way: the reset
+        # page rendered, and the "choose a new password" button did
+        # nothing at all.
+        html = page.get("text", "")
+        base = path.rsplit("/", 1)[0]
+        for src in re.findall(r'<script[^>]+src=["\']([^"\']+)["\']', html):
+            if src.startswith(("http://", "https://", "//")):
+                continue
+            asset = src if src.startswith("/") else f"{base}/{src}"
+            code, _ = call(url, asset)
+            rep.check(code == 200,
+                      f"    {src}",
+                      f"    {src} חסר ({code}) — הדף ייטען אבל לא יגיב",
+                      f"missing script {asset}")
 
     status, scan = call(url, "/scan-url", "POST",
                         {"url": "http://bank-leumi-secure.xyz/verify"})

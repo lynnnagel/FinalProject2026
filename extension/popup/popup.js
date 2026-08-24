@@ -24,10 +24,10 @@ function showGuestScreen() {
         </p>
       </div>
       <button class="btn btn-primary" id="openLoginBtn">
-        <span>🔑</span><span>התחבר לחשבון</span>
+        <span>התחבר לחשבון</span>
       </button>
       <button class="btn btn-secondary" id="scanBtn">
-        <span>🔍</span><span>סרוק עכשיו</span>
+        <span>סרוק עכשיו</span>
       </button>
     </div>
   `;
@@ -62,7 +62,7 @@ function showLoginScreen() {
           <input id="reg-email" type="email" placeholder="כתובת מייל" class="input" />
         </div>
         <div class="field">
-          <input id="reg-password" type="password" placeholder="סיסמה (לפחות 6 תווים)" class="input" />
+          <input id="reg-password" type="password" placeholder="סיסמה (לפחות 8 תווים)" class="input" />
         </div>
         <div id="reg-error" class="form-error" style="display:none"></div>
         <button class="btn btn-primary" id="registerSubmitBtn">צור חשבון</button>
@@ -129,6 +129,14 @@ async function handleRegister() {
     errEl.style.display = '';
     return;
   }
+  // השרת דוחה סיסמה קצרה מ-8 תווים עם שגיאת ולידציה גולמית של
+  // Pydantic, שאינה קריאה למשתמש. הבדיקה כאן אומרת את אותו כלל
+  // בעברית, לפני שהבקשה נשלחת.
+  if (password.length < 8) {
+    errEl.textContent = 'הסיסמה חייבת להכיל לפחות 8 תווים';
+    errEl.style.display = '';
+    return;
+  }
   try {
     const res = await fetch(`${API_URL}/auth/register`, {
       method: 'POST',
@@ -158,10 +166,24 @@ async function loadStats(email, name) {
     <div class="loading"><div class="spinner"></div><p>טוען נתונים...</p></div>
   `;
   try {
-    const res = await fetch(`${API_URL}/stats/${encodeURIComponent(email)}`);
-    if (!res.ok) throw new Error();
+    // /stats הוא נתון אישי ודורש טוקן. הקריאה כאן נשלחה בלעדיו, ולכן
+    // תמיד חזרה 401 — והמסך הציג אפסים בלי לרמוז שמשהו השתבש.
+    const { pg_token } = await chrome.storage.local.get(['pg_token']);
+    const res = await fetch(`${API_URL}/stats/${encodeURIComponent(email)}`, {
+      headers: pg_token ? { Authorization: `Bearer ${pg_token}` } : {},
+    });
+
+    if (res.status === 401) {
+      // הטוקן פג או שאינו תקף. ניקויו מחזיר את המשתמש למסך ההתחברות
+      // במקום להשאיר אותו במצב "מחובר" שלא עובד.
+      await chrome.storage.local.remove(['pg_token', 'pg_email', 'pg_name']);
+      showGuestScreen();
+      return;
+    }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     renderStats(await res.json(), name, email);
-  } catch {
+  } catch (err) {
+    console.warn('LURA popup stats:', err.message);
     renderStats(
       { total_scanned:0, phishing_blocked:0, risk_score:0, daily_active:false, recent_alerts:0 },
       name, email,
@@ -169,11 +191,21 @@ async function loadStats(email, name) {
   }
 }
 
+// חייב להתאים ל-backend/config.py, שם הרמות נגזרות מ-PHISHING_THRESHOLD.
+// הערכים כאן היו 70/50/30 ולא תאמו את הספים אחרי הכיול.
+const RISK_BANDS = [
+  { min: 76, label: 'סיכון גבוה', color: '#EF4444' },
+  { min: 57, label: 'חשוד',       color: '#F97316' },
+  { min: 34, label: 'זהירות',     color: '#EAB308' },
+  { min: -1, label: 'בטוח',       color: '#34D399' },
+];
+const riskBand = s => RISK_BANDS.find(b => s >= b.min);
+
 function getRiskColor(s) {
-  return s >= 70 ? '#ef4444' : s >= 50 ? '#f97316' : s >= 30 ? '#fbbf24' : '#34d399';
+  return riskBand(s).color;
 }
-function getRiskEmoji(s) {
-  return s >= 70 ? '😰' : s >= 50 ? '😐' : s >= 30 ? '🤔' : '😊';
+function getRiskLabel(s) {
+  return riskBand(s).label;
 }
 
 function renderStats(stats, name, email) {
@@ -188,22 +220,22 @@ function renderStats(stats, name, email) {
     </div>
     <div class="stats">
       <div class="stat-card">
-        <div class="stat-icon">📧</div>
+        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 6.5l-8.5 6-8.5-6"/><rect x="3.5" y="5" width="17" height="14" rx="2.5"/></svg></div>
         <div class="stat-value">${stats.total_scanned}</div>
         <div class="stat-label">מיילים נסרקו</div>
       </div>
       <div class="stat-card">
-        <div class="stat-icon"></div>
+        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.6l7.5 3.2v5.9c0 4.5-3.1 8.2-7.5 9.1-4.4-.9-7.5-4.6-7.5-9.1V5.8L12 2.6z"/><path d="M9.2 12l2.1 2.1 4-4.3"/></svg></div>
         <div class="stat-value">${stats.phishing_blocked}</div>
         <div class="stat-label">פישינג נחסם</div>
       </div>
       <div class="stat-card">
-        <div class="stat-icon">🎯</div>
+        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/></svg></div>
         <div class="stat-value">${stats.total_scanned > 0 ? Math.round((stats.phishing_blocked / stats.total_scanned) * 100) : 0}%</div>
         <div class="stat-label">אחוז זיהוי</div>
       </div>
       <div class="stat-card">
-        <div class="stat-icon">⚡</div>
+        <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.6l7.5 3.2v5.9c0 4.5-3.1 8.2-7.5 9.1-4.4-.9-7.5-4.6-7.5-9.1V5.8L12 2.6z"/><path d="M12 9v4M12 16v.2"/></svg></div>
         <div class="stat-value">${stats.recent_alerts}</div>
         <div class="stat-label">התראות היום</div>
       </div>
@@ -215,7 +247,9 @@ function renderStats(stats, name, email) {
           <div class="risk-number" style="color:${color}">${score}</div>
           <div class="risk-sub">מתוך 100</div>
         </div>
-        <div class="risk-emoji">${getRiskEmoji(score)}</div>
+        <div class="risk-badge" style="background:${color}1a;color:${color};border:1px solid ${color}">
+          ${getRiskLabel(score)}
+        </div>
       </div>
       <div class="risk-bar-track">
         <div class="risk-bar-fill" id="riskFill" style="width:0%"></div>
@@ -226,10 +260,10 @@ function renderStats(stats, name, email) {
         <span>סרוק עכשיו</span>
       </button>
       <button class="btn btn-secondary" id="dashBtn">
-        <span>📊</span><span>לוח בקרה מלא</span>
+        <span>לוח בקרה מלא</span>
       </button>
     </div>
-    <div class="footer">PhishGuard v1.0.0 &nbsp;|&nbsp; מגן עליך 24/7</div>
+    <div class="footer">LURA v1.0.0 &nbsp;|&nbsp; מגן עליך 24/7</div>
   `;
 
   setTimeout(() => {
@@ -247,7 +281,7 @@ function renderStats(stats, name, email) {
 function scanNow() {
   const btn = document.getElementById('scanBtn');
   btn.disabled = true;
-  btn.innerHTML = '<span>⏳</span><span>סורק...</span>';
+  btn.innerHTML = '<span>סורק...</span>';
   chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
     if (!tabs[0]) {
       btn.disabled = false;

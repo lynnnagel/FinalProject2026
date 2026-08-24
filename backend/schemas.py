@@ -72,14 +72,14 @@ class LoginRequest(BaseModel):
 
 
 class ForgotPasswordRequest(BaseModel):
-    """בקשה לשליחת קישור איפוס — לא מכילה סיסמה."""
+    """Asks for a reset link. Carries no password."""
     email: EmailStr
 
 
 class ResetPasswordRequest(BaseModel):
     """
-    איפוס בפועל. מזוהה על ידי האסימון שנשלח למייל בלבד —
-    אין כאן שדה email, כדי שלא ניתן יהיה לאפס סיסמה של חשבון זר.
+    The reset itself. Identified only by the token sent to the mailbox -
+    there is no email field, so nobody can reset a stranger's password.
     """
     token: str
     new_password: str = Field(min_length=8)
@@ -103,7 +103,7 @@ class UserProfile(BaseModel):
 # ------------------------------------------------------------------------------
 
 class TrustedSenderRequest(BaseModel):
-    """כתובת מלאה (a@b.com) או דומיין (b.com)."""
+    """A full address (a@b.com) or a domain (b.com)."""
     value: str = Field(min_length=3, max_length=254)
 
 

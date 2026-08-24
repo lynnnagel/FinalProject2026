@@ -30,25 +30,27 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["scan"])
 
 # ---------------------------------------------------------------------------
-# נקודות הקצה מוגדרות ב-def רגיל ולא ב-async def, בכוונה.
+# The endpoints are plain def, not async def, on purpose.
 #
-# ב-FastAPI, נקודת קצה async רצה *על לולאת האירועים עצמה*. כל פעולה
-# חוסמת בתוכה עוצרת את כל השרת עד שתסתיים. הקוד כאן חוסם לחלוטין —
-# שאילתות SQLAlchemy סינכרוניות, hashing של bcrypt, ובמסלול הסריקה גם
-# הרצת BERT — ואין בו ולו await אחד. כלומר ה-async לא הוסיף דבר וגבה
-# את כל המחיר: טעינת תיבה ששולחת 50 סריקות עיבדה אותן בזו אחר זו,
-# בלי שום חפיפה.
+# In FastAPI an async endpoint runs *on the event loop itself*. Any
+# blocking work inside it stops the whole server until it finishes. The
+# code here blocks completely - synchronous SQLAlchemy queries, bcrypt
+# hashing, and on the scan path BERT inference - and contains not one
+# await. So the async added nothing and cost everything: loading an
+# inbox fires 50 scans, and they were processed one after another with
+# no overlap.
 #
-# ב-def רגיל FastAPI מריץ את הפונקציה ב-threadpool, ובקשות מקבילות
-# באמת רצות במקביל.
+# With plain def, FastAPI runs the function in a threadpool and
+# concurrent requests genuinely run at the same time.
 # ---------------------------------------------------------------------------
 
-# המודל נטען ברקע (ראה ML/bert_model.py). get_model מחזיר None עד שהוא
-# מוכן, ואז הסריקה רצה על מנוע החוקים בלבד — לכן הייבוא כאן זול ולא חוסם.
+# The model loads in the background (see ML/bert_model.py). get_model
+# returns None until it is ready, and until then scanning runs on the
+# rule engine alone - so this import is cheap and never blocks.
 try:
     from ML.bert_model import get_model as get_bert_model
 except ImportError as exc:
-    # torch/transformers לא מותקנים — מצב לגיטימי, לא תקלה
+    # torch/transformers not installed - a valid state, not a failure
     logger.warning("BERT לא זמין (%s) — מצב חוקים בלבד", exc)
 
     def get_bert_model():
@@ -61,7 +63,7 @@ except Exception:
 
 
 def _apply_thresholds(result: dict, corroborated: bool = True) -> dict:
-    """קובע רמת סיכון והמלצה לפי הציון הסופי."""
+    """Sets the risk band and the advice from the final score."""
     return risk_levels.apply(result, corroborated=corroborated)
 
 
@@ -84,15 +86,17 @@ def get_risk_score(sender: str, subject: str, content: str,
                        user_trusts_sender=user_trusts_sender)
     result["risk_score"] = round(ensemble, 2)
 
-    # ההסבר למשתמש.
+    # The explanation shown to the user.
     #
-    # קודם נוסף כאן התג "ניתוח סמנטי (BERT)" לצד הרשימה הקיימת. כשמנוע
-    # החוקים לא מצא דבר, הרשימה הכילה את ברירת המחדל "לא נמצאו
-    # אינדיקטורים חשודים" — והמשתמש ראה ציון 99 עם ההסבר שלא נמצא שום
-    # דבר חשוד. סתירה מוחלטת, ובלי שום דרך להבין למה המייל סומן.
+    # This used to add a bare tag reading "semantic analysis (BERT)"
+    # next to whatever the rules found. When the rules found nothing,
+    # the list still held the default "no suspicious indicators" - so
+    # the user saw a score of 99 alongside a statement that nothing
+    # suspicious was found. A flat contradiction, with no way to tell
+    # why the message was flagged.
     #
-    # אם המודל הוא שהכריע, צריך לומר את זה במפורש ולציין שזו הערכת
-    # ניסוח ולא ממצא שאפשר להצביע עליו.
+    # If the model is what decided, say so plainly, and say that this is
+    # a judgement about phrasing rather than a finding you can point at.
     if bert_score >= 50:
         result["indicators"] = [
             i for i in result["indicators"]
@@ -107,26 +111,28 @@ def get_risk_score(sender: str, subject: str, content: str,
                 "לא נמצאו סימנים טכניים בשולח, בקישורים או בניסוח"
             )
 
-    # רמת "סכנה גבוהה" נשמרת למקרים ששני המנועים מסכימים עליהם.
+    # "High risk" is reserved for cases both engines agree on.
     #
-    # כשמנוע החוקים שותק, הציון נשען על סיגנל אחד בלבד — וזה הסיגנל
-    # שידוע שהוא מסמן דואר לגיטימי בענייני חשבון, אבטחה ושיווק. הצגת
-    # "סכנה גבוהה" על סמך עדות יחידה כזאת שוחקת את משמעות הדרגה, ועם
-    # הזמן גם את האמון בכל התרעה אחרת.
+    # With the rule engine silent the score rests on a single signal -
+    # and it is the signal known to flag legitimate account, security
+    # and marketing mail. Showing "high risk" on that alone wears away
+    # what the level means, and in time the user's trust in every other
+    # alert.
     return _apply_thresholds(result, corroborated=rule_score >= 15)
 
 
-@router.post("/scan", response_model=RiskAnalysis, summary="סריקת מייל לזיהוי פישינג")
+@router.post("/scan", response_model=RiskAnalysis, summary="Scan an email for phishing")
 def scan_email(
     email_data: EmailInput,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     auth_user: User | None = Depends(get_optional_user),
 ):
-    # זהות המשתמש נלקחת מהטוקן כשהוא קיים. הכתובת בגוף הבקשה מגיעה
-    # מגירוד ה-DOM של Gmail, ולכן היא גם ניתנת לזיוף וגם עלולה שלא
-    # להתאים לחשבון שאיתו המשתמש התחבר לאתר — מה שהותיר את לוח
-    # הבקרה שלו ריק בזמן שהסריקות נרשמו תחת זהות אחרת.
+    # The user's identity comes from the token when there is one. The
+    # address in the request body is scraped out of Gmail's DOM, so it
+    # can be forged and it may not match the account the user signed in
+    # with - which left their dashboard empty while the scans were
+    # recorded under a different identity.
     if auth_user:
         user = auth_user
     else:
@@ -149,18 +155,20 @@ def scan_email(
         )
         .first()
     )
-    # תוצאה שמורה מוחזרת רק אם חושבה בגרסת הניקוד הנוכחית. אחרת
-    # המייל נסרק מחדש והרשומה הקיימת מתעדכנת — כך שינוי בנוסחה או
-    # בסף משתקף בתיבה בלי שהמשתמש יצטרך לנקות דבר, והחיסכון נשמר
-    # לכל שאר המיילים.
+    # A stored result is returned only if it was computed by the
+    # current scoring version. Otherwise the message is scanned again
+    # and the existing record updated - so a change to the formula or
+    # the threshold shows up in the inbox without the user clearing
+    # anything, and the saving still applies to everything else.
     content_hash = hashlib.sha256(
         (email_data.content or "").encode("utf-8")
     ).hexdigest()[:32]
 
-    # תוצאה שמורה נכונה רק אם גם הנוסחה וגם הטקסט זהים. סריקת הרשימה
-    # שולחת את התצוגה המקדימה, וסריקת המייל הפתוח את הגוף המלא —
-    # בלי השוואת הטקסט השנייה הייתה מקבלת את תוצאת הראשונה, והגוף
-    # המלא לא היה נבדק אף פעם.
+    # A stored result is only valid if both the formula and the text
+    # match. The list scan sends the preview, the open-message scan
+    # sends the full body - without comparing the text, the second would
+    # receive the first one's verdict and the full body would never be
+    # examined at all.
     if (existing
             and existing.scoring_version == SCORING_VERSION
             and existing.content_hash == content_hash):
@@ -188,8 +196,9 @@ def scan_email(
         existing.content_hash = content_hash
         existing.content = email_data.content[:500]
         email_record = existing
-        # המונה סופר מיילים ייחודיים, לא סריקות. חישוב מחדש שמשנה
-        # סיווג צריך לתקן אותו ולא להוסיף לו.
+        # The counter counts unique messages, not scans. A
+        # recomputation that changes the verdict should correct it
+        # rather than add to it.
         if was_phishing and not analysis["is_phishing"]:
             user.phishing_blocked = max(0, user.phishing_blocked - 1)
         elif not was_phishing and analysis["is_phishing"]:
@@ -222,10 +231,12 @@ def scan_email(
     if recent:
         user.risk_score = round(sum(e.risk_score for e in recent) / len(recent), 2)
 
-    # התראה נוצרת רק כשמייל נחשב לפישינג *לראשונה*. בלי התנאי הזה
-    # כל חישוב מחדש של מייל ישן — מה שקורה בכל שינוי בנוסחת הניקוד —
-    # היה מוסיף התראה כפולה ושולח למפקח מייל נוסף על אותו אירוע.
-    # המפקח היה מוצף בהתראות על דואר שקיבל לפני שבועות.
+    # An alert is created only the *first* time a message counts as
+    # phishing. Without this, every recomputation of older mail - which
+    # happens on any change to the scoring formula - would add a
+    # duplicate alert and mail the guardian again about the same event.
+    # The guardian would be flooded with alerts about mail received
+    # weeks ago.
     newly_flagged = analysis["risk_score"] >= ALERT_THRESHOLD and not was_phishing
 
     if newly_flagged:
@@ -237,9 +248,11 @@ def scan_email(
         ))
 
         if user.guardian_id:
-            # התראה נפרדת עבור המפקח. היא נושאת את שם המנוטר, ולכן
-            # היא זו שמוצגת בלוח הבקרה שלו — מפקח יכול לנטר יותר
-            # מחשבון אחד, וההתראה של המנוטר עצמה אינה אומרת של מי.
+            # A separate alert for the guardian. It carries the
+            # monitored user's name, which is why it is the one shown on
+            # their dashboard - a guardian can watch more than one
+            # account, and the monitored user's own alert does not say
+            # whose it is.
             guardian = db.query(User).filter(User.id == user.guardian_id).first()
             db.add(Alert(
                 user_id=user.guardian_id,
@@ -251,7 +264,7 @@ def scan_email(
                 ),
             ))
 
-            # שלח מייל למפקח ברקע (ללא עיכוב בתגובה)
+            # Mail the guardian in the background, so the response is not delayed
             if guardian:
                 background_tasks.add_task(
                     send_guardian_phishing_alert,

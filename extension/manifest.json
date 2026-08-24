@@ -47,7 +47,11 @@
 
     "web_accessible_resources": [
     {
-      "resources": ["icons/icon128.png", "icons/icon128.png"],
+      "resources": [
+        "icons/icon128.png",
+        "fonts/rubik-hebrew.woff2",
+        "fonts/rubik-latin.woff2"
+      ],
       "matches": ["https://mail.google.com/*", "https://outlook.live.com/*"]
     }
   ]
