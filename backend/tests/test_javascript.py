@@ -1,14 +1,15 @@
 """
-בדיקות סטטיות לקוד ה-JavaScript של התוסף והאתר.
+Static checks on the extension's and the site's JavaScript.
 
-הרקע: פונקציה בשם scanHeaders נמחקה בטעות מ-content.js בזמן עריכה,
-אך הקריאות אליה נשארו. הקובץ נשאר תקין תחבירית לחלוטין — בדיקת תחביר
-אינה יכולה לתפוס דבר כזה — וכל סריקה זרקה ReferenceError בזמן ריצה.
-ה-try/except שעוטף את הסריקה בלע את השגיאה, ובתיבה כל מייל הופיע
-כ"לא נסרק" בלי שום רמז לסיבה.
+A function was once deleted from content.js while the calls to it
+stayed. The file remained syntactically perfect - a syntax check cannot
+catch that - and every scan threw a ReferenceError at runtime, which the
+surrounding try/catch swallowed. Every message in the inbox showed as
+"not scanned" with no hint why.
 
-בדיקת התחביר לבדה לא הספיקה, ולכן הבדיקה כאן מאמתת שכל שם שנקרא
-כפונקציה אכן מוגדר איפשהו בקובץ.
+So these checks verify that every name called as a function is defined
+somewhere in the file, that the file parses, and that every element id
+the scripts look up exists in the page.
 """
 from __future__ import annotations
 
@@ -31,38 +32,38 @@ JS_FILES = [
     ROOT / "frontend" / "js" / "forgot_password.js",
 ]
 
-# גלובלים של הדפדפן, של Chrome ושל השפה. אינם מוגדרים בקובץ עצמו
-# ולכן אין לצפות למצוא אותם בו.
+# Browser, Chrome and language globals - not defined in the file, so
+# there is no reason to expect to find them there.
 GLOBALS = {
     "fetch", "setTimeout", "setInterval", "clearTimeout", "clearInterval",
     "parseInt", "parseFloat", "encodeURIComponent", "decodeURIComponent",
     "isNaN", "alert", "confirm", "prompt", "structuredClone", "queueMicrotask",
     "requestAnimationFrame", "atob", "btoa",
-    # מילות מפתח שנראות כקריאה כשאחריהן סוגריים
+    # Keywords that look like a call when followed by a bracket
     "if", "for", "while", "switch", "catch", "return", "function", "typeof",
     "await", "new", "delete", "in", "of", "do", "else", "throw", "yield",
     "async",
 }
 
-# שם שמתחיל באות גדולה הוא בנאי או מחלקה — Promise, Set, Map,
-# MutationObserver, Error. אלה גלובלים של הסביבה, ואין טעם לתחזק
-# רשימה סגורה שלהם.
+# A name starting with a capital is a constructor or class - Promise,
+# Set, Map, MutationObserver, Error. Environment globals, not worth
+# maintaining a closed list of.
 def is_constructor(name: str) -> bool:
     return name[:1].isupper()
 
 
 def strip_noise(src: str) -> str:
     """
-    מסיר הערות ותבניות מחרוזת.
+    Strip comments and string templates.
 
-    בתוך template literal יושב CSS — rgba(), translateY(), blur() —
-    שנראה בדיוק כמו קריאה לפונקציה. בלי ההסרה הזאת הבדיקה מלאה
-    בהתרעות שווא ואיש לא יסתכל בה.
+    Template literals hold CSS - rgba(), translateY(), blur() - which
+    looks exactly like a function call. Without this the check fills
+    with false alarms and nobody reads it.
     """
     src = re.sub(r"/\*.*?\*/", " ", src, flags=re.S)
     src = re.sub(r"(?<![:\w])//[^\n]*", " ", src)
     src = re.sub(r"`(?:\\.|[^`\\])*`", " '' ", src, flags=re.S)
-    # גם מחרוזות רגילות מכילות CSS, למשל 'rgba(0,0,0,.3)'
+    # Plain strings hold CSS too, e.g. 'rgba(0,0,0,.3)'
     src = re.sub(r"'(?:\\.|[^'\\\n])*'", " '' ", src)
     src = re.sub(r'"(?:\\.|[^"\\\n])*"', ' "" ', src)
     return src
@@ -73,45 +74,47 @@ def defined_names(src: str) -> set[str]:
     names |= set(re.findall(r"\bfunction\s+([A-Za-z_$][\w$]*)", src))
     names |= set(re.findall(r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)", src))
     names |= set(re.findall(r"\bclass\s+([A-Za-z_$][\w$]*)", src))
-    # פרמטרים של פונקציות, כולל פונקציות חץ עם פרמטר יחיד
+    # Function parameters, single-parameter arrow functions included
     for params in re.findall(r"\(([^()]*)\)\s*(?:=>|\{)", src):
         for part in params.split(","):
             token = part.split("=")[0].strip().lstrip(".")
             if re.fullmatch(r"[A-Za-z_$][\w$]*", token):
                 names.add(token)
     names |= set(re.findall(r"(?:^|[(,\s])([A-Za-z_$][\w$]*)\s*=>", src))
-    # פירוק אובייקטים:  const { a, b } = ...
+    # Destructuring:  const { a, b } = ...
     for block in re.findall(r"\{([^{}]*)\}\s*=", src):
         names |= set(re.findall(r"([A-Za-z_$][\w$]*)\s*(?::|,|$)", block))
     return names
 
 
 def called_names(src: str) -> set[str]:
-    # שם שאחריו סוגריים, שאינו גישה לשדה (אין נקודה לפניו)
+    # A name followed by a bracket that is not a property access
     return set(re.findall(r"(?<![.\w$])([A-Za-z_$][\w$]*)\s*\(", src))
 
 
 @pytest.mark.parametrize("path", JS_FILES, ids=lambda p: p.name)
 def test_the_file_is_there(path: Path) -> None:
     """
-    כל קובץ ברשימה אמור להיות בפרויקט, ולכן היעדרו הוא כישלון ולא סיבה
-    לדלג.
+    Every file in the list belongs to the project, so a missing one is
+    a failure rather than a reason to skip.
 
-    זה נכתב אחרי ש-frontend/js/forgot_password.js נמחק מעותק העבודה
-    ואיש לא ידע: הדף נטען כרגיל, אבל הכפתור "בחרי סיסמה חדשה" הפסיק
-    להגיב. הבדיקות שכן נוגעות בקובץ הזה דילגו בשקט, כי כתבתי בהן
-    skip כשהקובץ חסר — כלומר בדיוק במקרה שהן נועדו לתפוס.
+    Written after frontend/js/forgot_password.js went missing from a
+    working copy and nobody noticed: the page loaded fine, but the
+    "choose a new password" button stopped responding. The checks that
+    touch that file skipped silently, because they skip when the file is
+    absent - exactly the case they exist to catch.
     """
     assert path.exists(), (
-        f"{path.relative_to(ROOT)} אינו קיים.\n"
-        "אם הוא נמחק בטעות:  git restore " + str(path.relative_to(ROOT))
+        f"{path.relative_to(ROOT)} does not exist.\n"
+        "If it was deleted by mistake:  git restore "
+        + str(path.relative_to(ROOT))
     )
 
 
 @pytest.mark.parametrize("path", JS_FILES, ids=lambda p: p.name)
 def test_every_called_function_is_defined(path: Path) -> None:
     if not path.exists():
-        pytest.skip("נבדק ב-test_the_file_is_there")
+        pytest.skip("covered by test_the_file_is_there")
 
     src = strip_noise(path.read_text(encoding="utf-8"))
     missing = sorted(
@@ -120,23 +123,24 @@ def test_every_called_function_is_defined(path: Path) -> None:
     )
 
     assert not missing, (
-        f"{path.name}: נקראות פונקציות שאינן מוגדרות בקובץ: {', '.join(missing)}\n"
-        "שם שנמחק בעריכה והקריאות אליו נשארו אינו נתפס בבדיקת תחביר, "
-        "והשגיאה מתגלה רק בזמן ריצה."
+        f"{path.name}: calls functions that are not defined in the file: "
+        f"{', '.join(missing)}\nA name deleted while its calls stayed is not "
+        "caught by a syntax check - it only shows at runtime."
     )
 
 
 @pytest.mark.parametrize("path", JS_FILES, ids=lambda p: p.name)
 def test_syntax_is_valid(path: Path) -> None:
     """
-    שגיאת תחביר אחת משביתה קובץ שלם: הדפדפן אינו מריץ ממנו כלום.
-    בתוסף זה אומר שאף תג לא מופיע, ובדף — ששום כפתור לא מגיב.
+    One syntax error disables the whole file: the browser runs none of
+    it. In the extension that means no badges at all; in a page, no
+    button responds.
     """
     if not path.exists():
-        pytest.skip("נבדק ב-test_the_file_is_there")
+        pytest.skip("covered by test_the_file_is_there")
     node = shutil.which("node")
     if not node:
-        pytest.skip("node אינו מותקן — בדיקת התחביר מדולגת")
+        pytest.skip("node is not installed - syntax check skipped")
 
     result = subprocess.run([node, "--check", str(path)],
                             capture_output=True, text=True)
@@ -162,8 +166,8 @@ PAGES = [
 
 @pytest.mark.parametrize("js,html", PAGES, ids=lambda p: p.name)
 def test_referenced_ids_exist(js: Path, html: Path) -> None:
-    assert js.exists(), f"{js.relative_to(ROOT)} אינו קיים"
-    assert html.exists(), f"{html.relative_to(ROOT)} אינו קיים"
+    assert js.exists(), f"{js.relative_to(ROOT)} does not exist"
+    assert html.exists(), f"{html.relative_to(ROOT)} does not exist"
 
     js_src = js.read_text(encoding="utf-8")
     html_src = html.read_text(encoding="utf-8")
@@ -178,6 +182,7 @@ def test_referenced_ids_exist(js: Path, html: Path) -> None:
 
     missing = sorted(wanted - present)
     assert not missing, (
-        f"{js.name} מחפש מזהים שאינם ב-{html.name}: {', '.join(missing)}\n"
-        "getElementById יחזיר null, והאלמנט פשוט לא יגיב."
+        f"{js.name} looks up ids that are not in {html.name}: "
+        f"{', '.join(missing)}\ngetElementById returns null and the element "
+        "simply stops responding."
     )

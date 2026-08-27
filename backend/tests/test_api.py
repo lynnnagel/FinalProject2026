@@ -111,12 +111,12 @@ class TestScanEndpoint:
 # ---------------------------------------------------------------------------
 class TestStatsEndpoint:
     def test_requires_authentication(self, client):
-        """סטטיסטיקות הן נתונים אישיים – ללא טוקן אין גישה."""
+        """Stats are personal data - no token, no access."""
         r = client.get("/stats/nobody@example.com")
         assert r.status_code == 401
 
     def test_other_user_stats_forbidden(self, client, auth_headers):
-        """משתמש מחובר לא יכול לקרוא את הסטטיסטיקות של מישהו אחר."""
+        """A signed-in user cannot read someone else's stats."""
         r = client.get("/stats/someone-else@example.com", headers=auth_headers)
         assert r.status_code == 403
 
@@ -152,8 +152,8 @@ class TestGuardianEndpoint:
 
     def test_connect_unknown_child_creates_account(self, client, parent_headers):
         """
-        קישור לכתובת שאינה במערכת יוצר עבורה חשבון, כדי שסריקות
-        עתידיות מאותה תיבה ישויכו אליו.
+        Linking an unknown address creates an account for it, so future
+        scans from that mailbox attach to it.
         """
         r = client.post("/guardian/connect", json={
             "child_email": "ghost@example.com",
@@ -163,7 +163,7 @@ class TestGuardianEndpoint:
         assert r.json()["child"] == "ghost@example.com"
 
     def test_connect_requires_authentication(self, client, safe_email):
-        """ללא טוקן אי אפשר להגדיר מפקח – אחרת כל אחד היה מנטר תיבה זרה."""
+        """No token, no guardian - otherwise anyone could watch a stranger's inbox."""
         client.post("/scan", json=safe_email)
         r = client.post("/guardian/connect", json={
             "child_email": safe_email["user_email"],
@@ -172,7 +172,7 @@ class TestGuardianEndpoint:
         assert r.status_code == 401
 
     def test_parent_taken_from_token_not_body(self, client, safe_email, parent_headers):
-        """שדה parent_email בגוף הבקשה מתעלמים ממנו – המפקח נלקח מהטוקן."""
+        """parent_email in the body is ignored - the guardian comes from the token."""
         client.post("/scan", json=safe_email)
         r = client.post("/guardian/connect", json={
             "child_email": safe_email["user_email"],
@@ -196,10 +196,10 @@ class TestGuardianEndpoint:
         self, client, safe_email, parent_headers
     ):
         """
-        מפקח רשום שטרם חיבר חשבון מקבל לוח בקרה ריק, לא שגיאה.
-
-        קודם הוחזר 404, ולוח הבקרה הציג הודעת תקלה למשתמש שלא עשה
-        דבר רע — הוא פשוט עוד לא חיבר אף אחד.
+        A registered guardian who has linked nobody gets an empty
+        dashboard, not an error. It used to return 404, and the
+        dashboard showed a failure to someone who had done nothing
+        wrong.
         """
         client.post("/scan", json=safe_email)
         client.post("/scan", json={**safe_email, "user_email": "parent@example.com"})
@@ -225,7 +225,7 @@ class TestGuardianEndpoint:
 
     def test_disconnect_requires_being_the_guardian(self, client, safe_email,
                                                     parent_headers, make_user):
-        """מי שאינו המפקח בפועל לא יכול לנתק את הקישור."""
+        """Someone who is not the actual guardian cannot unlink."""
         client.post("/scan", json=safe_email)
         client.post("/guardian/connect", json={
             "child_email": safe_email["user_email"],
@@ -297,15 +297,15 @@ class TestAuthEndpoint:
 
     def test_reset_requires_token(self, client, make_user):
         """
-        רגרסיה: בעבר אפשר היה לשלוח {email, new_password} ולהחליף סיסמה
-        של כל חשבון. הסכמה כבר לא מקבלת email, ולכן הבקשה נדחית.
+        Regression: {email, new_password} once replaced any account's
+        password. The schema no longer accepts email.
         """
         make_user("victim@example.com", password="originalpass1")
         r = client.post("/auth/reset-password",
                         json={"email": "victim@example.com", "new_password": "hacked123"})
         assert r.status_code == 422
 
-        # הסיסמה המקורית עדיין תקפה
+        # the original password still works
         r = client.post("/auth/login",
                         json={"email": "victim@example.com", "password": "originalpass1"})
         assert r.status_code == 200
@@ -329,9 +329,9 @@ class TestAuthEndpoint:
 
     def test_reset_token_works_only_once(self, client, make_user):
         """
-        הקישור נשלח במייל, ולכן מי שרואה את המייל יכול לנסות להשתמש בו
-        שוב. אחרי איפוס אחד הוא אמור להיות מת — גם בתוך 30 הדקות שבהן
-        הוא עדיין בתוקף מבחינת הזמן.
+        The link arrives by mail, so anyone who sees it can try to use
+        it again. After one reset it must be dead, even inside the 30
+        minutes it is otherwise still valid for.
         """
         make_user("once@example.com", password="originalpass1")
         token = reset_token_for("once@example.com")
@@ -344,7 +344,7 @@ class TestAuthEndpoint:
                              json={"token": token, "new_password": "attacker999"})
         assert second.status_code == 400
 
-        # הסיסמה שנקבעה באיפוס הראשון היא שנשארה
+        # the password from the first reset is the one that stands
         assert client.post("/auth/login",
                            json={"email": "once@example.com",
                                  "password": "firstchange1"}).status_code == 200
@@ -354,8 +354,8 @@ class TestAuthEndpoint:
 
     def test_reset_links_die_when_the_password_changes(self, client, make_user):
         """
-        שני קישורים שנשלחו לפני שינוי סיסמה — שניהם צריכים למות אחרי
-        שהראשון מומש, ולא רק זה שנוצל.
+        Two links issued before a password change: both must die once
+        the first is used, not only the one that was used.
         """
         make_user("two@example.com", password="originalpass1")
         first_link = reset_token_for("two@example.com")
@@ -369,14 +369,14 @@ class TestAuthEndpoint:
                                  "new_password": "changedtwice2"}).status_code == 400
 
     def test_reset_token_is_not_an_auth_token(self, client, make_user):
-        """אסימון מהמייל לא אמור לשמש כהזדהות מלאה למערכת."""
+        """A token from mail must not work as a full login."""
         make_user("sep@example.com")
         token = reset_token_for("sep@example.com")
         r = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
         assert r.status_code == 401
 
     def test_forgot_password_does_not_leak_registered_emails(self, client, make_user):
-        """אותה תשובה לכתובת רשומה ולא רשומה – כדי לא לחשוף מי רשום."""
+        """Same answer for a registered and an unknown address."""
         make_user("known@example.com")
         a = client.post("/auth/forgot-password", json={"email": "known@example.com"})
         b = client.post("/auth/forgot-password", json={"email": "unknown@example.com"})
@@ -388,12 +388,12 @@ class TestAuthEndpoint:
 
 
 # ---------------------------------------------------------------------------
-# מצב מפקח — הזרימה המלאה
+# Guardian mode - the whole flow
 #
-# הפיצ'ר הזה נוגע בשלושה חלקים שנכתבו בנפרד: הסריקה שיוצרת התראה,
-# הרשומה שנשמרת עבור המפקח, והלוח שקורא אותה. הבדיקות כאן עוברות
-# את כל השרשרת, כי כל אחת מהתקלות שהן מכסות התגלתה בתפר בין שניים
-# מהם ולא בתוך אחד מהם.
+# This spans three pieces written separately: the scan that creates an
+# alert, the record kept for the guardian, and the dashboard that reads
+# it. These walk the whole chain, because every failure they cover lived
+# in a seam between two of them.
 # ---------------------------------------------------------------------------
 class TestGuardianFlow:
     @staticmethod
@@ -421,11 +421,13 @@ class TestGuardianFlow:
         self, client, phishing_email, parent_headers
     ):
         """
-        ההתראה בלוח נושאת את שם המנוטר.
+        The alert on the dashboard names the monitored user.
 
-        נוצרות שתי רשומות התראה לכל זיהוי — אחת למנוטר ואחת למפקח —
-        ורק זו של המפקח אומרת של מי המייל. הלוח שאב בעבר דווקא את זו
-        של המנוטר, כך שרשומות המפקח נכתבו ומעולם לא נקראו.
+        Two alert records are created per detection - one for the
+        monitored user and one for the guardian - and only the
+        guardian's says whose message it was. The dashboard used to pull
+        the monitored user's, so the guardian's records were written and
+        never read.
         """
         self._connect(client, parent_headers, phishing_email["user_email"])
         client.post("/scan", json=phishing_email)

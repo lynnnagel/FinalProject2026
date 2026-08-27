@@ -1,9 +1,9 @@
 const API = 'http://localhost:8000';
 
 // ── Escaping ──────────────────────────────────────────────
-// כל ערך שמגיע מהשרת עובר דרך כאן לפני שהוא נכנס ל-innerHTML.
-// data.url הוא קלט של המשתמש שהשרת מחזיר כמו שהוא, ובלי בריחה
-// הדבקת "<img src=x onerror=...>" בשדה הסריקה הייתה מריצה סקריפט.
+// Everything from the server passes through here before it reaches
+// innerHTML. data.url is user input the server echoes back, so without
+// escaping, pasting an <img onerror=...> into the scan field would run.
 function esc(value) {
   return String(value ?? '').replace(/[&<>"']/g, ch => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -11,9 +11,10 @@ function esc(value) {
 }
 
 // ── Nav state ─────────────────────────────────────────────
-// $ מחזיר null בשקט לאלמנט שאינו בדף. דף הבית עבר לגרסה המאושרת,
-// שאינה כוללת את כל האזורים שהיו קודם, ו-getElementById ישיר היה
-// זורק שגיאה שמפילה את שאר האתחול — כולל אנימציות החשיפה.
+// $ returns null quietly for an element that is not on the page. The
+// home page no longer has every section it used to, and a direct
+// getElementById would throw and take the rest of the setup with it -
+// the reveal animations included.
 const $ = id => document.getElementById(id);
 
 function show(id, visible) {
@@ -33,7 +34,7 @@ function logout() {
   window.location.reload();
 }
 
-// ── Guardian CTA: מחובר → דשבורד, לא מחובר → התחברות ──────
+// Guardian CTA: signed in -> dashboard, otherwise -> sign in
 function goGuardian() {
   const token = localStorage.getItem('pg_token');
   if (token) {
@@ -54,7 +55,7 @@ async function loadStats() {
     if (scanned) scanned.textContent = (d.total_emails_scanned || 0).toLocaleString();
     if (blocked) blocked.textContent = (d.phishing_blocked || 0).toLocaleString();
   } catch {
-    // השרת לא פועל — הסטטיסטיקות נשארות "—"
+    // Server is down - the stats stay as placeholders
   }
 }
 

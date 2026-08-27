@@ -129,9 +129,9 @@ async function handleRegister() {
     errEl.style.display = '';
     return;
   }
-  // השרת דוחה סיסמה קצרה מ-8 תווים עם שגיאת ולידציה גולמית של
-  // Pydantic, שאינה קריאה למשתמש. הבדיקה כאן אומרת את אותו כלל
-  // בעברית, לפני שהבקשה נשלחת.
+  // The server rejects a password under 8 characters with a raw
+  // validation error. This says the same rule in Hebrew, before the
+  // request is sent.
   if (password.length < 8) {
     errEl.textContent = 'הסיסמה חייבת להכיל לפחות 8 תווים';
     errEl.style.display = '';
@@ -165,17 +165,19 @@ async function loadStats(email, name) {
   document.getElementById('content').innerHTML = `
     <div class="loading"><div class="spinner"></div><p>טוען נתונים...</p></div>
   `;
+  await loadBands();
   try {
-    // /stats הוא נתון אישי ודורש טוקן. הקריאה כאן נשלחה בלעדיו, ולכן
-    // תמיד חזרה 401 — והמסך הציג אפסים בלי לרמוז שמשהו השתבש.
+    // /stats is personal and needs a token. This call was sent without
+    // one, so it always came back 401 and the popup showed zeros with
+    // no hint that anything was wrong.
     const { pg_token } = await chrome.storage.local.get(['pg_token']);
     const res = await fetch(`${API_URL}/stats/${encodeURIComponent(email)}`, {
       headers: pg_token ? { Authorization: `Bearer ${pg_token}` } : {},
     });
 
     if (res.status === 401) {
-      // הטוקן פג או שאינו תקף. ניקויו מחזיר את המשתמש למסך ההתחברות
-      // במקום להשאיר אותו במצב "מחובר" שלא עובד.
+      // The token expired. Clearing it returns the user to the sign-in
+      // screen instead of leaving them "signed in" but broken.
       await chrome.storage.local.remove(['pg_token', 'pg_email', 'pg_name']);
       showGuestScreen();
       return;
@@ -191,14 +193,40 @@ async function loadStats(email, name) {
   }
 }
 
-// חייב להתאים ל-backend/config.py, שם הרמות נגזרות מ-PHISHING_THRESHOLD.
-// הערכים כאן היו 70/50/30 ולא תאמו את הספים אחרי הכיול.
-const RISK_BANDS = [
-  { min: 76, label: 'סיכון גבוה', color: '#EF4444' },
-  { min: 57, label: 'חשוד',       color: '#F97316' },
-  { min: 34, label: 'זהירות',     color: '#EAB308' },
+// The bands are fetched from the server, which derives them from the
+// one calibrated threshold. This list is only the fallback for a server
+// that is not answering - as a hand-written copy it went stale twice,
+// once at 70/50/30 and again at 76/57/34.
+let RISK_BANDS = [
+  { min: 78, label: 'סיכון גבוה', color: '#EF4444' },
+  { min: 60, label: 'חשוד',       color: '#F97316' },
+  { min: 36, label: 'זהירות',     color: '#EAB308' },
   { min: -1, label: 'בטוח',       color: '#34D399' },
 ];
+
+const BAND_COLORS = {
+  'סכנה גבוהה': '#EF4444',
+  'חשוד':       '#F97316',
+  'זהירות':     '#EAB308',
+  'בטוח':       '#34D399',
+};
+
+async function loadBands() {
+  try {
+    const r = await fetch(`${API_URL}/config/bands`);
+    if (!r.ok) return;
+    const d = await r.json();
+    if (!Array.isArray(d.bands) || d.bands.length !== 4) return;
+    RISK_BANDS = d.bands.map((b, i) => ({
+      min: i === d.bands.length - 1 ? -1 : b.min,
+      label: b.label,
+      color: BAND_COLORS[b.label] || '#8E8EA8',
+    }));
+  } catch {
+    // Server unreachable; the fallback above still labels.
+  }
+}
+
 const riskBand = s => RISK_BANDS.find(b => s >= b.min);
 
 function getRiskColor(s) {

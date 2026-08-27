@@ -1,9 +1,10 @@
 """
-בדיקות לרשימת השולחים המוכרים.
+Tests for the known-senders list.
 
-הפיצ'ר נותן למשתמש להשפיע על הניקוד, ולכן הבדיקה החשובה כאן אינה
-שהוא עובד אלא שהוא **אינו יכול לשמש כדי להשתיק ראיות**. משתמש רשאי
-לומר "אני מכיר את הכתובת הזאת"; אין הוא רשאי לומר "התעלם ממה שמצאת".
+The feature lets a user influence the score, so what matters here is
+not that it works but that it **cannot be used to silence evidence**. A
+user may say "I know this address"; they may not say "ignore what you
+found".
 """
 
 
@@ -16,7 +17,7 @@ class TestTrustedSendersAPI:
         r = client.post("/trusted-senders", json={"value": "Office@Dance-Studio.com"},
                         headers=auth_headers)
         assert r.status_code == 200, r.text
-        assert r.json()["value"] == "office@dance-studio.com"   # מנורמל
+        assert r.json()["value"] == "office@dance-studio.com"   # normalised
         assert r.json()["is_domain"] is False
 
         rows = client.get("/trusted-senders", headers=auth_headers).json()["senders"]
@@ -38,7 +39,7 @@ class TestTrustedSendersAPI:
         for bad in ["not an email", "@@@", "a@b", "nodots"]:
             r = client.post("/trusted-senders", json={"value": bad},
                             headers=auth_headers)
-            assert r.status_code in (400, 422), f"{bad} התקבל"
+            assert r.status_code in (400, 422), f"{bad} was accepted"
 
     def test_remove(self, client, auth_headers):
         client.post("/trusted-senders", json={"value": "a@b.com"}, headers=auth_headers)
@@ -55,7 +56,7 @@ class TestTrustedSendersAPI:
         client.post("/trusted-senders", json={"value": "mine@b.com"},
                     headers=auth_headers)
         other = client.get("/trusted-senders", headers=parent_headers).json()
-        assert other["senders"] == [], "רשימת משתמש אחד דלפה למשתמש אחר"
+        assert other["senders"] == [], "one user's list leaked to another"
 
     def test_one_user_cannot_delete_another_users_entry(
         self, client, auth_headers, parent_headers
@@ -65,11 +66,11 @@ class TestTrustedSendersAPI:
         assert client.delete("/trusted-senders/mine@b.com",
                              headers=parent_headers).status_code == 404
         rows = client.get("/trusted-senders", headers=auth_headers).json()["senders"]
-        assert len(rows) == 1, "רשומה של משתמש אחד נמחקה בידי אחר"
+        assert len(rows) == 1, "one user's entry was deleted by another"
 
 
 class TestTrustedSendersScoring:
-    """הבדיקות המהותיות: מה האמון האישי כן משנה, ומה הוא לעולם לא."""
+    """What personal trust does change, and what it never changes."""
 
     BENIGN = {
         "user_email": "test@example.com",

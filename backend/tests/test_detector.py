@@ -25,14 +25,15 @@ class TestKeywords:
     def test_hebrew_keywords_raise_score(self, det):
         r = det.analyze_email("a@b.com", "דחוף אימות", "סיסמה")
         assert r["risk_score"] > 0
-        # הניסוח מבחין בין ניסוחים אופייניים לפישינג לבין מילים
-        # שמופיעות גם במייל לגיטימי; הבדיקה מאשרת שאחד מהם דווח
+        # The engine separates phishing phrasing from words that also
+        # appear in legitimate mail; this confirms one was reported
         assert any("פישינג" in ind for ind in r["indicators"])
 
     def test_generic_financial_words_do_not_flag_alone(self, det):
         """
-        מייל אמיתי של חברת אשראי הכיל 'חשבון', 'אשראי' ו'כרטיס אשראי'
-        וקיבל ציון של פישינג. המילים האלה נחלשו כדי שלא יכריעו לבדן.
+        A real credit-card message contained several banking words and
+        scored as phishing. Those words were weakened so they cannot
+        decide on their own.
         """
         r = det.analyze_email(
             "service@icc.co.il",
@@ -42,7 +43,7 @@ class TestKeywords:
         assert r["risk_score"] < 30, r["indicators"]
 
     def test_brand_alternate_domain_not_flagged(self, det):
-        """כאל שולחת מ-icc.co.il, ולא רק מ-cal-online.co.il."""
+        """The card issuer also sends from icc.co.il, not only cal-online.co.il."""
         r = det.analyze_email("service@icc.co.il", "כאל — חיוב", "פירוט החיוב החודשי")
         assert not any("מתיימר" in ind for ind in r["indicators"]), r["indicators"]
 

@@ -30,7 +30,7 @@ import re
 import sys
 
 # ---------------------------------------------------------------------------
-# מותגים ישראליים — שם, דומיין אמיתי, דומיין מזויף
+# Israeli brands: name, real domain, forged domain
 # ---------------------------------------------------------------------------
 BRANDS = {
     "bank": [
@@ -82,7 +82,7 @@ FIRST_NAMES = ["נועה", "יובל", "איתי", "שירה", "דניאל", "מ
                "יעל", "אלון", "מיכל", "נדב", "שני", "עמית", "טל", "ניר"]
 
 # ---------------------------------------------------------------------------
-# מיילים לגיטימיים
+# Legitimate messages
 # ---------------------------------------------------------------------------
 LEGIT = {
     "bank": [
@@ -117,7 +117,7 @@ LEGIT = {
 }
 
 # ---------------------------------------------------------------------------
-# מיילי פישינג — עילות נפוצות
+# Phishing, on the common pretexts
 # ---------------------------------------------------------------------------
 PHISH = {
     "bank": [
@@ -154,20 +154,22 @@ PHISH = {
 }
 
 # ---------------------------------------------------------------------------
-# מקרי גבול
+# Borderline cases
 #
-# בגרסה הראשונה ההבחנה בין המחלקות הייתה מושלמת: לגיטימי תמיד https
-# לדומיין רשמי בלי מילות דחיפות, פישינג תמיד http לדומיין עם מקף ועם
-# דחיפות. מודל שלומד מזה לומד חוק אחד — "מקף בדומיין ⇐ פישינג" — ולא
-# לזהות פישינג. הכיול על דאטה כזה נתן F1 מושלם וסף נמוך מדי, שסימן
-# חשבונית Netflix אמיתית כאיום.
+# The first version separated the classes perfectly: legitimate always
+# https to an official domain with no urgency, phishing always http to a
+# hyphenated domain with urgency. A model learning from that learns one
+# rule - "hyphen in the domain means phishing" - not how to spot
+# phishing. Calibrating on it gave a perfect F1 and a threshold low
+# enough to flag a real invoice.
 #
-# שתי הקבוצות כאן שוברות את ההפרדה: מיילים לגיטימיים שנראים חשודים,
-# ומיילי פישינג שנראים תמימים.
+# These two groups break that separation: legitimate mail that looks
+# suspicious, and phishing that looks innocent.
 # ---------------------------------------------------------------------------
 
-# לגיטימיים עם סימנים שנראים מחשידים — דחיפות אמיתית, בקשות אימות
-# תקינות, תת-דומיינים, ושפה פיננסית שמופיעה גם בהונאות.
+# Legitimate, with signs that look suspicious: real urgency, genuine
+# verification requests, subdomains, and financial language that also
+# appears in fraud.
 HARD_LEGIT = {
     "retail": [
         "המבצע מסתיים היום | {brand}\nשלום {name},\nנותרו {hours} שעות לסיום המבצע. הנחה של 30% על כל האתר.\nלצפייה: {real}\nמוזמנ/ת להצטרף למועדון הלקוחות.",
@@ -195,8 +197,8 @@ HARD_LEGIT = {
     ],
 }
 
-# פישינג בניסוח רגוע ומקצועי, בלי מילות דחיפות, ולעיתים מדומיין
-# שנראה סביר לגמרי או מתת-דומיין מטעה.
+# Phishing written calmly and professionally, with no urgency, and
+# sometimes from a domain that looks entirely reasonable.
 HARD_PHISH = {
     "bank": [
         "עדכון תנאי שימוש | {brand}\nשלום,\nתנאי השימוש בחשבונך עודכנו. כדי להמשיך לקבל שירות מלא, נא לאשר את התנאים החדשים בקישור הבא.\n{fake}\nתודה על שיתוף הפעולה.",
@@ -237,14 +239,14 @@ MERCHANTS = ["שופרסל דיל", "KSP", "פז", "רמי לוי", "מקדונ�
 STREETS = ["הרצל", "ויצמן", "בן גוריון", "אלנבי", "דיזנגוף", "רוטשילד",
            "ז'בוטינסקי", "הנשיא", "השלום", "בגין"]
 
-# שגיאות כתיב נפוצות, לצמצום המראה הרובוטי
+# Common typos, to reduce the robotic look
 TYPOS = [("שלום", "שלון"), ("החשבון", "החשבן"), ("לחץ", "לחץ  "),
          ("אנא", "אנה"), ("פרטים", "פרטים "), ("תשלום", "תשלון")]
 
 
-# ארגונים אמיתיים מפנים לאזור אישי בהצפנה. מיילי פישינג נוטים
-# לנתיבי הזדהות ולעיתים ל-http לא מוצפן — ההפרדה כאן שומרת על
-# ההבדל הזה גם בדאטה הסינתטי.
+# Real organisations link to an encrypted account area. Phishing tends
+# toward sign-in paths and sometimes plain http - this keeps that
+# difference in the synthetic data too.
 REAL_PATHS = ["", "personal", "account/statements", "my", "orders",
               "billing/history", "he/personal", "info", "support"]
 FAKE_PATHS = ["login", "verify", "secure-login", "account/verify",
@@ -252,20 +254,21 @@ FAKE_PATHS = ["login", "verify", "secure-login", "account/verify",
               "unlock", "validate"]
 
 
-# כתובות שולח. מיילי פישינג משתמשים בדומיין דומה, ולעיתים בספק חינמי
-# בשם ארגון רשמי — דפוס שמנוע החוקים מזהה במפורש.
+# Sender addresses. Phishing uses a lookalike domain, and sometimes a
+# free provider under an official-sounding name - a pattern the rule
+# engine flags explicitly.
 REAL_MAILBOXES = ["noreply", "no-reply", "service", "info", "billing",
                   "support", "updates", "notifications"]
 FAKE_MAILBOXES = ["no-reply", "security", "alert", "verify", "service-il",
                   "account-security", "support"]
 FREE_PROVIDERS = ["gmail.com", "outlook.com", "hotmail.com", "walla.co.il"]
 
-# תת-דומיינים לגיטימיים. ארגון אמיתי שולח גם מ-mail.brand.co.il, ובדיקת
-# ההתחזות חייבת לקבל אותם — אחרת כל מייל שירותי יסומן כאיום.
+# Legitimate subdomains. A real organisation also sends from
+# mail.brand.co.il, and the impersonation check has to accept those.
 LEGIT_SUBDOMAINS = ["mail", "news", "info", "no-reply", "service", "notify"]
 
-# תבניות שנראות סבירות לעין לא מנוסה. השם הרשמי מופיע כתחילית של דומיין
-# זר — טריק נפוץ שנועד להיראות נכון בקריאה מהירה.
+# Shapes that look plausible at a glance: the official name as the
+# prefix of a foreign domain, which reads as correct when skimmed.
 def deceptive_domain(real_domain: str, rng: random.Random) -> str:
     style = rng.randint(0, 2)
     if style == 0:
@@ -282,15 +285,15 @@ def rnd_sender(brand: tuple, legit: bool, rng: random.Random,
     name, real_domain, fake_domains = brand
     if legit:
         if hard and rng.random() < 0.5:
-            # תת-דומיין רשמי — נראה חריג אך תקין לחלוטין
+            # An official subdomain - looks unusual, entirely valid
             sub = rng.choice(LEGIT_SUBDOMAINS)
             return f"{rng.choice(REAL_MAILBOXES)}@{sub}.{real_domain}"
         return f"{rng.choice(REAL_MAILBOXES)}@{real_domain}"
     if hard:
-        # דומיין שנראה סביר, ותיבה עניינית — בלי "security" או "alert"
+        # A plausible domain and a plain mailbox - no "security" or "alert"
         return f"{rng.choice(REAL_MAILBOXES)}@{deceptive_domain(real_domain, rng)}"
     if rng.random() < 0.22:
-        # התחזות דרך ספק דואר חינמי
+        # Impersonation through a free mail provider
         slug = re.sub(r"[^a-z]", "", name.lower()) or "service"
         return f"{slug}.{rng.choice(['security', 'support', 'alert'])}{rng.randint(1, 99)}@{rng.choice(FREE_PROVIDERS)}"
     return f"{rng.choice(FAKE_MAILBOXES)}@{rng.choice(fake_domains)}"
@@ -312,7 +315,8 @@ def fill(template: str, brand: tuple, rng: random.Random, hard: bool = False) ->
         "brand":    name,
         "name":     rng.choice(FIRST_NAMES),
         "real":     rnd_link(real_domain, legit=True, rng=rng),
-        # פישינג "רגוע" מפנה לדומיין מטעה ובהצפנה — בלי http ובלי /verify
+        # Calm phishing links to a misleading domain over https - no
+        # plain http and no /verify
         "fake":     (rnd_link(deceptive_domain(real_domain, rng), legit=True, rng=rng)
                      if hard else
                      rnd_link(rng.choice(fake_domains), legit=False, rng=rng)),
@@ -366,8 +370,8 @@ def generate(n: int, seed: int, noise: bool, hard_ratio: float = 0.30) -> list[d
         brand = rng.choice(BRANDS[category])
         is_phish = rng.random() < 0.42          # יחס דומה לשאר המאגר
 
-        # מקרי גבול. בלעדיהם ההפרדה בין המחלקות מושלמת והמודל לומד
-        # חוק שטחי אחד במקום לזהות פישינג.
+        # Borderline cases. Without them the classes separate perfectly
+        # and the model learns one shallow rule instead of the task.
         hard_pool = HARD_PHISH if is_phish else HARD_LEGIT
         hard = rng.random() < hard_ratio and category in hard_pool
 
@@ -378,11 +382,11 @@ def generate(n: int, seed: int, noise: bool, hard_ratio: float = 0.30) -> list[d
 
         text = fill(rng.choice(pool), brand, rng, hard=hard)
         if noise and not hard:
-            # מקרי גבול נשמרים נקיים: שגיאות כתיב היו הופכות אותם
-            # לזיהוי קל ומבטלות את כל מטרתם.
+            # Borderline cases stay clean: typos would make them easy to
+            # spot and defeat their whole purpose.
             text = add_noise(text, rng)
 
-        # התבניות בנויות כ-"נושא | מותג\nגוף ההודעה"
+        # Templates are shaped as "subject | brand\nbody"
         subject, _, body = text.partition("\n")
         sender = rnd_sender(brand, legit=not is_phish, rng=rng, hard=hard)
 
@@ -403,16 +407,17 @@ def generate(n: int, seed: int, noise: bool, hard_ratio: float = 0.30) -> list[d
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="מחולל מיילים בעברית")
+    ap = argparse.ArgumentParser(description="Hebrew email generator")
     ap.add_argument("--n", type=int, default=3000)
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--output", default="ML/data/hebrew_generated.csv")
-    ap.add_argument("--no-noise", action="store_true", help="בלי שגיאות כתיב")
+    ap.add_argument("--no-noise", action="store_true", help="no typos")
     ap.add_argument(
         "--hard-ratio", type=float, default=0.30,
-        help="חלק מקרי הגבול — לגיטימיים שנראים חשודים ופישינג שנראה תמים",
+        help="share of borderline cases - legitimate that looks suspicious "
+             "and phishing that looks innocent",
     )
-    ap.add_argument("--preview", action="store_true", help="הדפסה במקום שמירה")
+    ap.add_argument("--preview", action="store_true", help="print instead of saving")
     args = ap.parse_args()
 
     rows = generate(args.n, args.seed, noise=not args.no_noise,
@@ -420,10 +425,10 @@ def main() -> None:
 
     if args.preview:
         for r in rows[:8]:
-            tag = "פישינג" if r["label"] else "לגיטימי"
-            print(f"\n{'─' * 64}\n[{tag}]  מאת: {r['sender']}")
-            print(f"נושא: {r['subject']}\n\n{r['content']}")
-        print(f"\n{'─' * 64}\nסה\"כ נוצרו {len(rows)} (מוצגות 8)")
+            tag = "phishing" if r["label"] else "legitimate"
+            print(f"\n{'-' * 64}\n[{tag}]  from: {r['sender']}")
+            print(f"subject: {r['subject']}\n\n{r['content']}")
+        print(f"\n{'-' * 64}\n{len(rows)} generated (8 shown)")
         return
 
     os.makedirs(os.path.dirname(args.output), exist_ok=True)
@@ -433,12 +438,12 @@ def main() -> None:
         w.writerows(rows)
 
     phish = sum(r["label"] for r in rows)
-    print(f"נשמרו {len(rows)} מיילים בעברית → {args.output}")
-    print(f"  פישינג: {phish} ({phish/len(rows)*100:.0f}%)  |  "
-          f"לגיטימי: {len(rows)-phish} ({(len(rows)-phish)/len(rows)*100:.0f}%)")
+    print(f"wrote {len(rows)} Hebrew messages -> {args.output}")
+    print(f"  phishing: {phish} ({phish/len(rows)*100:.0f}%)  |  "
+          f"legitimate: {len(rows)-phish} ({(len(rows)-phish)/len(rows)*100:.0f}%)")
     if len(rows) < args.n:
-        print(f"  שים לב: התבקשו {args.n} אך מרחב הצירופים הגיע לרוויה.")
-    print("\n  הצעד הבא:  python ML/prepare_data.py")
+        print(f"  note: {args.n} requested, but the combinations ran out.")
+    print("\n  next:  python ML/prepare_data.py")
 
 
 if __name__ == "__main__":

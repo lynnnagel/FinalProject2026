@@ -4,15 +4,15 @@ LURA BERT Classifier
 Fine-tuned multilingual transformer for binary phishing classification.
 Supports Hebrew + English via the multilingual tokeniser.
 
-בחירת מודל הבסיס (BERT_MODEL_NAME):
-  bert-base-multilingual-cased        177M · ~710 MB · דיוק בסיס
-  distilbert-base-multilingual-cased  135M · ~540 MB · פי ~2 מהיר, 1-2% פחות דיוק
+Base model (BERT_MODEL_NAME):
+  bert-base-multilingual-cased        177M, ~710 MB
+  distilbert-base-multilingual-cased  135M, ~540 MB, ~2x faster, 1-2% less accurate
 
-שני המודלים תומכים ב-104 שפות. מעל מחצית מהמשקל בשניהם היא טבלת
-האמבדינגס (92M פרמטרים, 119,547 טוקנים) — ולכן DistilBERT חוסך בעיקר
-בזמן חישוב ולא בגודל הקובץ.
+Both cover 104 languages. Over half the weight in each is the embedding
+table (92M parameters, 119,547 tokens), so DistilBERT mostly saves
+compute rather than file size.
 
-החלפת מודל מחייבת אימון מחדש — checkpoint של אחד אינו תואם לשני.
+Switching models means retraining - the checkpoints are not compatible.
 
 Usage
 -----
@@ -45,24 +45,15 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-# מודל הבסיס. ניתן להחלפה דרך משתנה סביבה, בלי לגעת בקוד:
-#
-#   bert-base-multilingual-cased        177M פרמטרים · ~710 MB · איטי יותר
-#   distilbert-base-multilingual-cased  135M פרמטרים · ~540 MB · פי ~2 מהיר
-#
-# שני המודלים מכסים 104 שפות כולל עברית. DistilBERT מוותר על מחצית
-# משכבות ה-Transformer ולכן מהיר בהרבה, בעלות של אחוז-שניים בדיוק.
-# רוב המשקל בשניהם הוא טבלת האמבדינגס (92M פרמטרים) — תוצאה של אוצר
-# מילים בן 119,547 טוקנים שנועד ל-104 שפות.
-#
-# החלפת מודל מחייבת אימון מחדש: checkpoint של אחד לא מתאים לשני.
+# The base model, swappable through an environment variable. Changing
+# it means retraining: the checkpoints are not compatible.
 MODEL_NAME = os.getenv("BERT_MODEL_NAME", "bert-base-multilingual-cased")
 
-# קוונטיזציה דינמית ל-int8: מקטינה זיכרון ומאיצה הרצה על CPU,
-# בלי אימון מחדש ובעלות של פחות מאחוז דיוק. אין השפעה על GPU.
+# Dynamic int8 quantisation: less memory and faster on CPU, no
+# retraining, under a percent of accuracy. No effect on GPU.
 QUANTIZE = os.getenv("BERT_QUANTIZE", "false").lower() in ("1", "true", "yes")
 
-MAX_LENGTH = int(os.getenv("BERT_MAX_LENGTH", "256"))  # זהה ל---max_length באימון
+MAX_LENGTH = int(os.getenv("BERT_MAX_LENGTH", "256"))  # same as --max_length in training
 NUM_LABELS = 2            # 0 = legitimate, 1 = phishing
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -72,12 +63,13 @@ DEFAULT_CHECKPOINT = os.path.join(_THIS_DIR, "checkpoints", "best_model.pt")
 
 def _apply_checkpoint_metadata(checkpoint_path: str) -> None:
     """
-    מיישר את הגדרות ההרצה לאלה שבהן המודל אומן.
+    Line the runtime settings up with the ones the model was trained
+    on.
 
-    train.py שומר best_model.meta.json לצד ה-checkpoint עם שם מודל הבסיס
-    ואורך הרצף. בלי זה קרה בפרויקט שהאימון רץ ב-256 וההרצה ב-512 —
-    אי-התאמה שקטה שאיש לא הבחין בה. משתני הסביבה עדיין גוברים, כדי
-    שאפשר יהיה לנסות הגדרה אחרת בכוונה.
+    train.py writes best_model.meta.json next to the checkpoint with the
+    base model name and sequence length. Without it, training ran at 256
+    and inference at 512 - a silent mismatch nobody noticed. Environment
+    variables still win, so a different setting can be tried on purpose.
     """
     global MODEL_NAME, MAX_LENGTH
 
@@ -89,29 +81,29 @@ def _apply_checkpoint_metadata(checkpoint_path: str) -> None:
         with open(meta_path, encoding="utf-8") as f:
             meta = json.load(f)
     except (OSError, json.JSONDecodeError) as exc:
-        logger.warning("לא ניתן לקרוא %s: %s", meta_path, exc)
+        logger.warning("could not read %s: %s", meta_path, exc)
         return
 
     trained_on = meta.get("model_name")
     if trained_on and "BERT_MODEL_NAME" in os.environ and trained_on != MODEL_NAME:
-        # משתנה הסביבה גובר בכוונה, כדי לאפשר ניסויים. אבל כשהוא סותר
-        # את מה שה-checkpoint אומר, התוצאה היא שגיאת טעינה עם רשימת
-        # מפתחות חסרים שקשה לפענח. עדיף להסביר מראש.
+        # The variable wins on purpose, but when it contradicts the
+        # checkpoint the load fails with an unreadable list of missing
+        # keys. Better to say so first.
         logger.error(
-            "סתירה: BERT_MODEL_NAME מוגדר כ-'%s' אך ה-checkpoint אומן על '%s'.\n"
-            "הטעינה תיכשל. הסירי את BERT_MODEL_NAME מ-backend/.env כדי\n"
-            "להשתמש במודל שאיתו אומן, או אמני מחדש עם המודל שבחרת.",
+            "conflict: BERT_MODEL_NAME is '%s' but the checkpoint was trained "
+            "on '%s'.\nThe load will fail. Remove BERT_MODEL_NAME from "
+            "backend/.env to use the model it was trained with, or retrain.",
             MODEL_NAME, trained_on,
         )
 
     if "BERT_MODEL_NAME" not in os.environ and trained_on:
         if trained_on != MODEL_NAME:
-            logger.info("מודל הבסיס נלקח מה-checkpoint: %s", trained_on)
+            logger.info("base model taken from the checkpoint: %s", trained_on)
         MODEL_NAME = trained_on
 
     if "BERT_MAX_LENGTH" not in os.environ and meta.get("max_length"):
         if meta["max_length"] != MAX_LENGTH:
-            logger.info("אורך הרצף נלקח מה-checkpoint: %s", meta["max_length"])
+            logger.info("sequence length taken from the checkpoint: %s", meta["max_length"])
         MAX_LENGTH = int(meta["max_length"])
 
 
@@ -136,43 +128,41 @@ class PhishingBertClassifier(nn.Module):
         pretrained: bool = True,
     ):
         super().__init__()
-        # ברירת מחדל נפתרת כאן ולא בחתימה: ערך בחתימה מוקפא בזמן הגדרת
-        # המחלקה, ואז עדכון MODEL_NAME מהמטא-דאטה של ה-checkpoint לא היה
-        # משפיע עליו.
+        # Resolved here rather than in the signature: a default there
+        # is frozen at class-definition time, so a MODEL_NAME updated
+        # from the checkpoint metadata would not reach it.
         model_name = model_name or MODEL_NAME
 
-        # Auto* ולא Bert* — כדי ש-DistilBERT ומודלים אחרים יעבדו גם הם
+        # Auto* rather than Bert*, so DistilBERT and others also work
         if pretrained:
-            # אימון: מתחילים מהמשקלים של המודל המאומן מראש.
+            # Training: start from the pre-trained weights.
             self.bert = AutoModelForSequenceClassification.from_pretrained(
                 model_name,
                 num_labels=num_labels,
             )
         else:
-            # הרצה: אנחנו עומדים לטעון checkpoint שדורס את כל המשקלים.
-            # from_pretrained היה קורא ~700MB מהדיסק (ובריצה ראשונה גם
-            # מוריד אותם מהרשת) רק כדי שנזרוק אותם מיד אחר כך.
-            # from_config בונה את הארכיטקטורה בלבד — מהיר בהרבה,
-            # ובלי גישה לרשת.
+            # Inference: a checkpoint is about to overwrite every weight.
+            # from_pretrained would read ~700MB off disk (and fetch it
+            # the first time) only to discard it. from_config builds the
+            # architecture alone - much faster, and offline.
             config = AutoConfig.from_pretrained(model_name, num_labels=num_labels)
             self.bert = AutoModelForSequenceClassification.from_config(config)
-        # Multilingual-MiniLM מצהיר על BertTokenizer ב-config שלו, אך אומן
-        # למעשה עם אוצר המילים של XLM-R. AutoTokenizer מכבד את ההצהרה
-        # ומחזיר טוקנייזר שגוי, מה שמייצר טוקנים חסרי משמעות ואימון שלא
-        # מתכנס. כרטיס המודל ב-Hugging Face מנחה במפורש להשתמש
-        # ב-XLMRobertaTokenizer. הבחירה נעשית כאן ולא מושארת למשתמש.
+        # Multilingual-MiniLM declares BertTokenizer in its config but
+        # was trained with XLM-R's vocabulary. AutoTokenizer honours the
+        # declaration and returns the wrong tokeniser, which produces
+        # meaningless tokens and training that never converges.
         if "minilm" in model_name.lower() and "multilingual" in model_name.lower():
             from transformers import XLMRobertaTokenizer
             self.tokenizer = XLMRobertaTokenizer.from_pretrained(
                 "xlm-roberta-base"
             )
-            logger.info("MiniLM רב-לשוני: נטען XLMRobertaTokenizer כנדרש")
+            logger.info("multilingual MiniLM: loaded XLMRobertaTokenizer as required")
         else:
             self.tokenizer = AutoTokenizer.from_pretrained(model_name)
 
         self.model_name = model_name
 
-        # DistilBERT ו-XLM-R אינם מקבלים token_type_ids
+        # DistilBERT and XLM-R do not take token_type_ids
         lowered = model_name.lower()
         self.accepts_token_type_ids = not any(
             k in lowered for k in ("distil", "minilm", "xlm-roberta")
@@ -226,16 +216,15 @@ class PhishingBertClassifier(nn.Module):
     # ------------------------------------------------------------------ #
     def predict_batch(self, texts: list[str], batch_size: int = 32) -> list[float]:
         """
-        אותה תוצאה כמו predict() לכל טקסט, אבל במקבצים.
+        Same result as predict() for each text, but in batches.
 
-        predict() מריץ forward אחד לכל מייל. בסריקה חיה זה בדיוק מה
-        שנדרש — מייל אחד נכנס, תשובה אחת יוצאת. בהערכה על 16,137
-        שורות זה בזבוז: כל forward משלם מחדש על overhead קבוע, וה-CPU
-        אינו מנוצל. מקבץ של 32 מבצע את אותו חישוב בכפל מטריצות אחד.
+        One forward per message is right for a live scan. Over a whole
+        evaluation split it wastes fixed overhead on every call; a batch
+        of 32 does the same work in one matrix multiply.
 
-        padding="longest" ולא "max_length": אם המקבץ כולו קצר, אין
-        טעם לרפד ל-256 טוקנים ולחשב על ריפוד. התוצאה זהה כי
-        attention_mask מסתיר את הריפוד כך או כך.
+        padding="longest" rather than "max_length": if the whole batch
+        is short there is no point padding to 256. The result is
+        identical, since attention_mask hides the padding either way.
         """
         self.eval()
         out: list[float] = []
@@ -263,7 +252,7 @@ class PhishingBertClassifier(nn.Module):
 
     def predict_scores(self, rows: list[tuple[str, str, str]],
                        batch_size: int = 32) -> list[float]:
-        """predict_score על רשימת (sender, subject, content), במקבצים."""
+        """predict_score over a list of (sender, subject, content), batched."""
         texts = [f"{s} {sub} {c}" for s, sub, c in rows]
         return [round(p * 100, 2) for p in self.predict_batch(texts, batch_size)]
 
@@ -291,8 +280,8 @@ def load_model(
     _apply_checkpoint_metadata(checkpoint_path)
 
     try:
-        # pretrained=False: ה-state_dict שנטען בשורה הבאה מכיל את כל
-        # המשקלים, ולכן אין טעם לקרוא קודם את משקלי הבסיס.
+        # pretrained=False: the state_dict loaded next holds every
+        # weight, so reading the base weights first is wasted work.
         model = PhishingBertClassifier(pretrained=False)
         state_dict = torch.load(checkpoint_path, map_location=DEVICE, weights_only=True)
         model.bert.load_state_dict(state_dict)
@@ -307,23 +296,23 @@ def load_model(
 
         if QUANTIZE:
             if DEVICE.type == "cuda":
-                logger.info("BERT: קוונטיזציה מדולגת — לא נדרשת על GPU")
+                logger.info("BERT: quantisation skipped - not needed on GPU")
             else:
                 model = torch.quantization.quantize_dynamic(
                     model, {nn.Linear, nn.Embedding}, dtype=torch.qint8
                 )
                 model.eval()
-                logger.info("BERT: קוונטיזציה ל-int8 הופעלה (זיכרון נמוך, הרצה מהירה)")
+                logger.info("BERT: int8 quantisation on (less memory, faster)")
 
         return model
     except RuntimeError as exc:
-        # אי-התאמה בין ה-checkpoint למודל הבסיס היא הטעות הנפוצה כאן
+        # A checkpoint/base-model mismatch is the common mistake here
         if "size mismatch" in str(exc) or "Missing key" in str(exc) or "Unexpected key" in str(exc):
             logger.error(
-                "ה-checkpoint לא תואם למודל '%s'.\n"
-                "אם החלפת BERT_MODEL_NAME — צריך לאמן מחדש:\n"
+                "the checkpoint does not match the model '%s'.\n"
+                "If BERT_MODEL_NAME changed, it needs retraining:\n"
                 "    python ML/train.py --epochs 6\n"
-                "פירוט: %s",
+                "details: %s",
                 MODEL_NAME, exc,
             )
         else:
@@ -337,10 +326,10 @@ def load_model(
 # ---------------------------------------------------------------------------
 # Lazy loading
 #
-# הטעינה קוראת checkpoint של ~678 MB ולוקחת עשרות שניות. כשהיא רצה
-# בזמן ה-import, uvicorn חוסם עד שהיא מסתיימת והאתר לא עולה.
-# לכן היא מורצת בשרשור רקע: השרת עונה מיד, וסריקות שמגיעות לפני
-# שהמודל מוכן פשוט רצות במצב חוקים בלבד.
+# Loading reads a ~700MB checkpoint and takes tens of seconds. Run at
+# import time it blocks uvicorn and the site never comes up, so it runs
+# on a background thread: the server answers immediately, and scans that
+# arrive before the model is ready run on the rules alone.
 # ---------------------------------------------------------------------------
 _model: Optional[PhishingBertClassifier] = None
 _load_thread: Optional[threading.Thread] = None
@@ -350,9 +339,9 @@ _load_failed = False
 
 def get_model() -> Optional[PhishingBertClassifier]:
     """
-    מחזיר את המודל אם הטעינה הסתיימה, אחרת None.
+    The model once loading has finished, otherwise None.
 
-    None אינו שגיאה — הוא הסימן לעבור ל-fallback של מנוע החוקים.
+    None is not an error - it is the signal to fall back to the rules.
     """
     return _model
 
@@ -362,7 +351,7 @@ def is_ready() -> bool:
 
 
 def load_state() -> str:
-    """מצב הטעינה, לצורך /health ולוגים."""
+    """Loading state, for /health and the logs."""
     if _model is not None:
         return "ready"
     if _load_failed:
@@ -383,8 +372,8 @@ def _load_into_cache(checkpoint_path: str) -> None:
 
 def start_background_load(checkpoint_path: str = DEFAULT_CHECKPOINT) -> None:
     """
-    מתחיל את טעינת המודל בשרשור רקע וחוזר מיד.
-    בטוח לקריאה חוזרת — טעינה שנייה לא תתחיל.
+    Start loading on a background thread and return immediately.
+    Safe to call again - a second load will not start.
     """
     global _load_thread
     with _load_lock:
@@ -401,13 +390,13 @@ def start_background_load(checkpoint_path: str = DEFAULT_CHECKPOINT) -> None:
 
 
 def load_now(checkpoint_path: str = DEFAULT_CHECKPOINT) -> Optional[PhishingBertClassifier]:
-    """טעינה סינכרונית — לשימוש בסקריפטים (אימון, כיול) ולא בשרת."""
+    """Blocking load - for scripts, not for the server."""
     global _model
     if _model is None:
         _load_into_cache(checkpoint_path)
     return _model
 
 
-# תאימות לאחור: קוד ישן שכתב `from ML.bert_model import bert_model`
-# יקבל None עד שהטעינה תסתיים. עדיף להשתמש ב-get_model().
+# Backwards compatibility: older code importing `bert_model` gets None
+# until loading finishes. Prefer get_model().
 bert_model: Optional[PhishingBertClassifier] = None

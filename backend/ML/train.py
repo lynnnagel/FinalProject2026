@@ -214,8 +214,8 @@ def train(args: argparse.Namespace):
     tokenizer = model.tokenizer
 
     # 3. Datasets & loaders
-    # דגימת תת-קבוצה מסט האימון. שומרת על יחס המחלקות כדי שהאימון
-    # לא יוטה, ומאפשרת אימון על CPU בזמן סביר.
+    # Subsample the training split, keeping the class ratio so the
+    # training is not skewed. Makes CPU training feasible.
     if args.limit and args.limit < len(train_texts):
         from sklearn.model_selection import train_test_split as _tts
         train_texts, _, train_labels, _ = _tts(
@@ -302,9 +302,9 @@ def train(args: argparse.Namespace):
             best_path = os.path.join(args.output_dir, "best_model.pt")
             torch.save(model.bert.state_dict(), best_path)
 
-            # נשמר לצד ה-checkpoint כדי שההרצה תשתמש בדיוק באותו מודל
-            # ובאותו אורך רצף. בעבר האימון רץ ב-256 וההרצה ב-512, ואיש
-            # לא ידע. bert_model.py קורא את הקובץ הזה בטעינה.
+            # Written next to the checkpoint so inference uses the same
+            # base model and sequence length. Training once ran at 256
+            # and inference at 512, and nobody noticed.
             meta_path = os.path.join(args.output_dir, "best_model.meta.json")
             with open(meta_path, "w", encoding="utf-8") as f:
                 json.dump({
@@ -382,7 +382,7 @@ if __name__ == "__main__":
     parser.add_argument("--max_length", type=int, default=256)
     parser.add_argument(
         "--limit", type=int, default=0,
-        help="דגימת תת-קבוצה מסט האימון (0 = הכל). מקצר אימון על CPU.",
+        help="subsample the training split (0 = all). Shortens CPU training.",
     )
 
     args = parser.parse_args()

@@ -1,14 +1,14 @@
     const API = 'http://localhost:8000';
     let userEmail = '';
 
-    // כל ערך שמגיע מהשרת עובר בריחה לפני שהוא נכנס ל-innerHTML
+    // Everything from the server is escaped before reaching innerHTML
     function esc(value) {
       return String(value ?? '').replace(/[&<>"']/g, ch => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
       }[ch]));
     }
 
-    // נתיבי /stats ו-/guardian דורשים הזדהות — הטוקן נשלח בכל קריאה
+    // /stats and /guardian need authentication - the token goes on every call
     function authHeaders() {
       return {
         'Content-Type': 'application/json',
@@ -30,7 +30,7 @@
       if (name === 'trusted') loadTrusted();
     }
 
-    // ── שולחים מוכרים ──────────────────────────────────────────────
+    // -- known senders ---------------------------------------------
     async function loadTrusted() {
       const el = document.getElementById('trustedList');
       if (!el) return;
@@ -71,9 +71,9 @@
           out.innerHTML = `<div class="form-error">${esc(d.detail || 'לא ניתן להוסיף')}</div>`;
           return;
         }
-        // rescored הוא מספר הסריקות השמורות שסומנו לחישוב מחדש. בלי
-        // הביטול הזה הסימון לא היה משנה דבר בתיבה, ולכן שווה להראות
-        // אותו: הוא מסביר מה בדיוק קרה.
+        // rescored is how many stored scans were queued for
+        // recomputing. Without that the marking would change nothing in
+        // the inbox, so it is worth showing.
         out.innerHTML = `<div class="form-success">נוסף. ${d.rescored} מיילים יסומנו מחדש בסריקה הבאה.</div>`;
         input.value = '';
         loadTrusted();
@@ -108,9 +108,9 @@
     // so a dashboard on a server that is briefly down still labels
     // scores instead of breaking. Keep it in step with config.py.
     let BANDS = [
-      { min: 72, label: 'סכנה גבוהה', color: 'var(--danger)' },
-      { min: 50, label: 'חשוד',       color: 'var(--orange)' },
-      { min: 30, label: 'זהירות',     color: 'var(--yellow)' },
+      { min: 78, label: 'סכנה גבוהה', color: 'var(--danger)' },
+      { min: 60, label: 'חשוד',       color: 'var(--orange)' },
+      { min: 36, label: 'זהירות',     color: 'var(--yellow)' },
       { min: -1, label: 'בטוח',       color: 'var(--green)'  },
     ];
 
@@ -143,8 +143,8 @@
     const riskColor = score => band(score).color;
     const riskLabel = score => band(score).label;
 
-    // אין עדיין נתונים — מצב תקין לגמרי למשתמש חדש, ולכן הוא מוצג
-    // כהנחיה ולא כתקלה.
+    // No data yet - perfectly normal for a new user, so it reads as
+    // guidance rather than a failure.
     function showEmptyDashboard(status) {
       ['statScanned', 'statBlocked', 'statAlerts'].forEach(id => {
         const el = document.getElementById(id);
@@ -162,10 +162,10 @@
       }
     }
 
-    // חובה לנקות את האישורים לפני ההפניה. login.html מפנה מיד
-    // לדשבורד כשהוא מוצא pg_token, והדשבורד מפנה להתחברות כשהשרת
-    // מחזיר 401 — כך שטוקן שפג תוקפו יצר לולאת הפניות אינסופית בין
-    // שני העמודים, שנראית כהבהוב.
+    // The credentials must be cleared before redirecting. login.html
+    // sends you straight to the dashboard when it finds pg_token, and
+    // the dashboard sends you to login on a 401 - so an expired token
+    // bounced between the two pages, which looks like flickering.
     function signOut() {
       localStorage.removeItem('pg_token');
       localStorage.removeItem('pg_email');
@@ -189,9 +189,10 @@
         const r = await fetch(`${API}/stats/${userEmail}`, { headers: authHeaders() });
         if (r.status === 401) { signOut(); return; }
         if (!r.ok) {
-          // 404 = טרם נסרק דבר, 403 = הטוקן שייך לחשבון אחר. קודם רק
-          // 404 טופל, ולכן תשובת שגיאה זרמה הלאה כאובייקט ללא השדות
-          // המצופים וכל המונים הוצגו כ-undefined בלי שום הסבר.
+          // 404 = nothing scanned yet, 403 = the token belongs to
+          // another account. Only 404 was handled, so an error response
+          // flowed on as an object without the expected fields and every
+          // counter rendered as undefined.
           showEmptyDashboard(r.status);
           return;
         }

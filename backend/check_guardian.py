@@ -1,17 +1,9 @@
 """
 End-to-end check of guardian mode, against the running server.
 
-Guardian mode touches four pieces that were written separately: linking
-the accounts, the scan that decides a message is phishing, the alert
-record kept for the guardian, and the mail that goes out. Every failure
-we found in it lived in a seam between two of those, not inside any one
-of them - so the only check worth having walks the whole chain.
-
-It creates two throwaway accounts, links them, sends one obvious
-phishing message as the monitored user, and then verifies each link:
-the message was classified, the alert reached the guardian's dashboard,
-the alert names the monitored user, and a second scan does not duplicate
-it.
+Every failure found in guardian mode lived in a seam between the four
+pieces it spans - the link, the scan, the alert record and the mail -
+so the check walks the whole chain rather than any one of them.
 
 Run from backend/, with the server up:
     python check_guardian.py
@@ -65,58 +57,54 @@ def step(n: int, text: str) -> None:
 
 
 def ok(text: str) -> None:
-    print(f"     ✓  {text}")
+    print(f"     OK    {text}")
 
 
 def fail(text: str) -> None:
-    print(f"     ✗  {text}")
+    print(f"     FAIL  {text}")
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="בדיקת מצב מפקח מקצה לקצה")
+    ap = argparse.ArgumentParser(description="end-to-end check of guardian mode")
     ap.add_argument("--url", default="http://localhost:8000")
     ap.add_argument("--guardian", default="guardian-check@example.com")
     ap.add_argument("--monitored", default="monitored-check@example.com")
     ap.add_argument("--password", default="CheckPass123",
-                    help="סיסמה לחשבונות שהסקריפט יוצר")
+                    help="password for the accounts this script creates")
     ap.add_argument("--guardian-password",
-                    help="הסיסמה של חשבון המפקח, אם הוא כבר קיים "
-                         "(כשמריצים עם --guardian על כתובת אמיתית)")
+                    help="the guardian account's own password, if it already exists")
     ap.add_argument("--keep", action="store_true",
-                    help="לא לנתק את השיוך בסוף")
+                    help="leave the guardian link in place")
     args = ap.parse_args()
 
     problems = []
 
-    # -- server and mail configuration ---------------------------------
-    step(1, "השרת והגדרות המייל")
+    # -- server and mail --------------------------------------------------
+    step(1, "Server and mail settings")
     try:
         _, health = call(args.url, "/test-email")
     except urllib.error.URLError as exc:
-        raise SystemExit(f"     ✗  השרת אינו מגיב ב-{args.url}\n        {exc}")
-    ok(f"השרת עונה ב-{args.url}")
+        raise SystemExit(f"     FAIL  no answer at {args.url}\n           {exc}")
+    ok(f"server answering at {args.url}")
 
     mail_on = health.get("email_enabled") or health.get("EMAIL_ENABLED")
     if mail_on:
-        ok("שליחת מיילים מופעלת")
+        ok("sending is on")
     else:
-        fail("EMAIL_ENABLED כבוי — ההתראה תירשם אך לא תישלח")
+        fail("EMAIL_ENABLED is off - the alert is recorded but not sent")
         problems.append("EMAIL_ENABLED=false")
     for key, value in health.items():
         if key not in ("email_enabled", "EMAIL_ENABLED"):
             print(f"        {key}: {value}")
 
     # -- accounts -------------------------------------------------------
-    step(2, "יצירת שני חשבונות")
+    step(2, "Two accounts")
     tokens = {}
-    # The guardian may be a real address that is already registered - that
-    # is the whole point of running with --guardian, to receive the alert
-    # in a mailbox someone actually reads. Then registration is refused
-    # and the login has to use that account's own password, not the
-    # throwaway one.
+    # A real guardian address is usually already registered, so the
+    # login needs that account's own password.
     accounts = (
-        ("מפקח",  args.guardian,  args.guardian_password or args.password),
-        ("מנוטר", args.monitored, args.password),
+        ("guardian", args.guardian,  args.guardian_password or args.password),
+        ("monitored", args.monitored, args.password),
     )
     for role, email, password in accounts:
         status, body = call(args.url, "/auth/register", "POST",
@@ -127,113 +115,111 @@ def main() -> None:
                                 {"email": email, "password": password})
         if status == 401 and existed:
             raise SystemExit(
-                f"     ✗  {role}: החשבון {email} כבר קיים, והסיסמה אינה מתאימה.\n"
-                f"        אם זו הכתובת האמיתית שלך, הריצי עם הסיסמה שלה:\n"
-                f"          python check_guardian.py --guardian {email} "
-                f"--guardian-password הסיסמה\n"
-                f"        ואם שכחת אותה:  python set_password.py {email}"
+                f"     FAIL  {role}: {email} already exists and the password does not match.\n"
+                f"           run it with that account's password:\n"
+                f"             python check_guardian.py --guardian {email} "
+                f"--guardian-password YOUR_PASSWORD\n"
+                f"           forgotten it?  python set_password.py {email}"
             )
         if status != 200:
-            raise SystemExit(f"     ✗  {role}: {body.get('detail', status)}")
+            raise SystemExit(f"     FAIL  {role}: {body.get('detail', status)}")
         tokens[role] = body["token"]
-        ok(f"{role}: {email}" + ("  (חשבון קיים)" if existed else ""))
+        ok(f"{role}: {email}" + ("  (existing account)" if existed else ""))
 
     # -- link -----------------------------------------------------------
-    step(3, "חיבור המפקח למנוטר")
+    step(3, "Linking them")
     status, body = call(args.url, "/guardian/connect", "POST",
                         {"child_email": args.monitored,
                          "parent_email": "ignored-on-purpose@example.com"},
-                        token=tokens["מפקח"])
+                        token=tokens["guardian"])
     if status != 200:
-        raise SystemExit(f"     ✗  {body.get('detail', status)}")
-    ok(body.get("message", "חובר"))
+        raise SystemExit(f"     FAIL  {body.get('detail', status)}")
+    ok(body.get("message", "linked"))
     if body.get("guardian") == args.guardian:
-        ok("המפקח נלקח מהטוקן ולא משדה בבקשה")
+        ok("the guardian comes from the token, not a request field")
     else:
-        fail(f"המפקח נקבע לפי גוף הבקשה: {body.get('guardian')}")
+        fail(f"the guardian came from the request body: {body.get('guardian')}")
         problems.append("guardian taken from the request body")
 
     # -- scan -----------------------------------------------------------
-    step(4, "סריקת מייל פישינג בשם המנוטר")
+    step(4, "Scanning a phishing message as the monitored user")
     status, scan = call(args.url, "/scan", "POST",
                         {"user_email": args.monitored, **PHISHING},
-                        token=tokens["מנוטר"])
+                        token=tokens["monitored"])
     if status != 200:
-        raise SystemExit(f"     ✗  {scan.get('detail', status)}")
-    print(f"        ציון {scan['risk_score']}  |  {scan['risk_level']}")
+        raise SystemExit(f"     FAIL  {scan.get('detail', status)}")
+    print(f"           score {scan['risk_score']}  |  {scan['risk_level']}")
     if scan["is_phishing"]:
-        ok("סווג כפישינג")
+        ok("classified as phishing")
     else:
-        fail("לא סווג כפישינג — ההתראה לא תיווצר")
+        fail("not classified as phishing - no alert will be created")
         problems.append("the sample did not cross the threshold")
 
     # -- the guardian's dashboard ---------------------------------------
-    step(5, "לוח הבקרה של המפקח")
+    step(5, "The guardian dashboard")
     status, dash = call(args.url, f"/guardian/{args.guardian}",
-                        token=tokens["מפקח"])
+                        token=tokens["guardian"])
     if status != 200:
-        raise SystemExit(f"     ✗  {dash.get('detail', status)}")
+        raise SystemExit(f"     FAIL  {dash.get('detail', status)}")
 
     if dash.get("child_email") == args.monitored:
-        ok(f"המנוטר מופיע: {dash['child_email']}")
+        ok(f"monitored account shown: {dash['child_email']}")
     else:
-        fail(f"המנוטר אינו מופיע (התקבל {dash.get('child_email')!r})")
+        fail(f"monitored account missing (got {dash.get('child_email')!r})")
         problems.append("the monitored account is missing from the dashboard")
 
     alerts = dash.get("recent_alerts", [])
     if alerts:
-        ok(f"{len(alerts)} התראות בלוח")
+        ok(f"{len(alerts)} alert(s) on the dashboard")
         print(f"        {alerts[0].get('message', '')[:70]}")
     else:
-        fail("אין התראות בלוח")
+        fail("no alerts on the dashboard")
         problems.append("no alert reached the dashboard")
 
     if alerts and PHISHING["sender"] in alerts[0].get("message", ""):
-        ok("ההתראה נושאת את שם המנוטר ואת השולח")
+        ok("the alert names the monitored user and the sender")
     elif alerts:
-        fail("ההתראה אינה מזכירה את השולח")
+        fail("the alert does not name the sender")
         problems.append("the alert does not name the sender")
 
     # -- no duplicate on a repeat scan ----------------------------------
-    # The body is changed slightly on purpose. An identical rescan is
-    # answered from the stored result and never reaches the alert code,
-    # so it would pass this check without testing anything. A changed
-    # body forces a fresh score on the same message, which is exactly
-    # what happens whenever the formula changes - and that is the path
-    # that used to mail the guardian again about old mail.
-    step(6, "סריקה חוזרת של אותו מייל (טקסט שונה במעט)")
+    # The body is changed on purpose: an identical rescan is answered
+    # from the cache and never reaches the alert code, so it would pass
+    # without testing anything.
+    step(6, "Rescanning the same message (slightly different text)")
     before = len(alerts)
     call(args.url, "/scan", "POST",
          {"user_email": args.monitored, **PHISHING,
           "content": PHISHING["content"] + " "},
-         token=tokens["מנוטר"])
-    _, dash2 = call(args.url, f"/guardian/{args.guardian}", token=tokens["מפקח"])
+         token=tokens["monitored"])
+    _, dash2 = call(args.url, f"/guardian/{args.guardian}", token=tokens["guardian"])
     after = len(dash2.get("recent_alerts", []))
     if after == before:
-        ok("לא נוצרה התראה כפולה")
+        ok("no duplicate alert")
     else:
-        fail(f"מספר ההתראות עלה מ-{before} ל-{after}")
+        fail(f"alerts went from {before} to {after}")
         problems.append("a repeat scan created a duplicate alert")
 
     # -- cleanup --------------------------------------------------------
     if not args.keep:
         call(args.url, "/guardian/disconnect", "POST",
              {"child_email": args.monitored, "parent_email": args.guardian},
-             token=tokens["מפקח"])
-        print("\n   השיוך נותק. החשבונות נשארו — למחיקה: python cleanup_users.py")
+             token=tokens["guardian"])
+        print("\n   Link removed. The accounts remain - to clear them:\n"
+              "   python cleanup_users.py --emails %s --delete" % args.monitored)
 
     # -- summary --------------------------------------------------------
-    print("\n" + "═" * 66)
+    print("\n" + "=" * 66)
     if problems:
-        print("  נמצאו בעיות:")
+        print("  Problems found:")
         for p in problems:
-            print(f"    · {p}")
+            print(f"    - {p}")
     else:
-        print("  כל השרשרת עובדת.")
+        print("  The whole chain works.")
         if mail_on:
-            print(f"\n  בדקי עכשיו את התיבה של {args.guardian} —")
-            print("  מייל ההתראה נשלח ברקע ואמור להגיע תוך שניות.")
-    print("═" * 66 + "\n")
+            print(f"\n  Check the inbox of {args.guardian} - the alert mail is")
+            print("  sent in the background and should arrive within seconds.")
+    print("=" * 66 + "\n")
 
 
 if __name__ == "__main__":

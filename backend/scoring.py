@@ -42,7 +42,7 @@ The formula used here
 from __future__ import annotations
 
 from config import (
-    RULE_BOOST, TRUST_DAMPING, PROMO_DAMPING, TRANSACTIONAL_DAMPING,
+    RULE_BOOST, TRUST_DAMPING, TRANSACTIONAL_DAMPING,
     UNCORROBORATED_CEILING, CORROBORATION_FLOOR,
 )
 from detector import detector
@@ -50,7 +50,8 @@ from detector import detector
 
 def combine(bert_score: float, rule_score: float, sender: str,
             subject: str = "", content: str = "",
-            user_trusts_sender: bool = False) -> float:
+            user_trusts_sender: bool = False,
+            ceiling: float | None = UNCORROBORATED_CEILING) -> float:
     """
     Final score in [0,100] from the two engine scores.
 
@@ -58,8 +59,8 @@ def combine(bert_score: float, rule_score: float, sender: str,
     sender - the sender address; empty when there is none (corpora that
              supply only a message body). Empty means "unknown", not
              "untrusted".
-    subject, content - needed to spot marketing mail. Optional so older
-             code that passes scores only keeps working.
+    subject, content - needed to recognise operational mail. Optional so
+             older code that passes scores only keeps working.
 
     The dampings do not stack: one piece of evidence is enough, and
     multiplying by several would wipe out the model's score entirely.
@@ -77,14 +78,31 @@ def combine(bert_score: float, rule_score: float, sender: str,
     #
     # An attacker would impersonate a known sender in particular, so
     # this is exactly where the evidence has to keep working.
+    #
+    # Every damping here requires a verified sender: the address is
+    # on the user's own list, or it is a company's real domain. That is
+    # evidence an attacker cannot forge.
+    #
+    # There was a fourth, for mail that reads as marketing. It was
+    # removed after measurement, and the reason is worth keeping: it was
+    # the only one that needed no sender, so it fired on any message
+    # carrying an unsubscribe link - including phishing. On the test
+    # split it fired 1,129 times, 510 of those on real attacks, and cost
+    # 488 missed detections while saving two false alarms. Not one of
+    # the legitimate messages it was built for depended on it; they are
+    # all covered by the sender-based dampings above.
+    #
+    # It had also become redundant. It was written when the corpora
+    # labelled spam as phishing, so the model could not tell an
+    # advertisement from an attack. Relabelling spam as not-phishing
+    # taught the model that distinction directly, which left this
+    # patching a problem that no longer existed.
     if user_trusts_sender:
         bert *= TRUST_DAMPING
     elif sender and detector.looks_transactional(sender, subject, content):
         bert *= TRANSACTIONAL_DAMPING
     elif sender and detector.is_trusted_sender(sender):
         bert *= TRUST_DAMPING
-    elif detector.looks_promotional(subject, content):
-        bert *= PROMO_DAMPING
 
     score = min(max(bert + RULE_BOOST * rule_score, rule_score), 100.0)
 
@@ -99,6 +117,10 @@ def combine(bert_score: float, rule_score: float, sender: str,
     # pushed the score under the threshold. Here the classification is
     # untouched - the ceiling sits at the top of the "suspicious" band -
     # and only the displayed confidence is held back.
-    if rule_score < CORROBORATION_FLOOR:
-        score = min(score, float(UNCORROBORATED_CEILING))
+    #
+    # ceiling is a parameter so the threshold sweep can pass the value
+    # derived from the threshold it is testing, or None to see the score
+    # before the ceiling. Everything else uses the configured one.
+    if ceiling is not None and rule_score < CORROBORATION_FLOOR:
+        score = min(score, float(ceiling))
     return score

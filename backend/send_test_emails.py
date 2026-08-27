@@ -29,16 +29,16 @@ from config import (
 )
 
 # ---------------------------------------------------------------------------
-# expect: הציון שהמערכת אמורה להחזיר.
-#   "גבוה"  – חייב להיתפס
-#   "בינוני" – מקרה גבול; כל תוצאה מעניינת ושווה דיון
-#   "נמוך"  – חייב לעבור בשקט
+# expect: what the system should return.
+#   "high"    - must be caught
+#   "medium"  - a borderline case; any result is worth discussing
+#   "low"     - must pass quietly
 #
-# from_name הוא שם התצוגה בלבד. כתובת השולח בפועל תהיה שלך, כי זו
-# התיבה שממנה נשלח — ולכן בדיקות המבוססות על דומיין השולח לא ייתנו
-# כאן את מלוא הניקוד. זו מגבלה של הבדיקה העצמית, לא של המערכת;
-# להערכה מדויקת של אותן בדיקות יש check_pipeline.py, ששולח ישירות
-# ל-API עם דומיין שולח אמיתי.
+# from_name is a display name only. The real sender address will be
+# yours, since that is the mailbox this sends from, so the sender-domain
+# rules cannot score fully here. That is a limit of testing against your
+# own inbox, not of the system - check_pipeline.py posts straight to the
+# API with a real sender domain.
 # ---------------------------------------------------------------------------
 SAMPLES = [
     dict(
@@ -162,8 +162,8 @@ def build(sample: dict, to_addr: str, index: int) -> MIMEText:
     msg["Subject"] = sample["subject"]
     msg["From"] = formataddr((sample["from_name"], SMTP_USER))
     msg["To"] = to_addr
-    # הכותרת אינה נסרקת (הצינור קורא שולח, נושא וגוף בלבד), ולכן היא
-    # מאפשרת לזהות ולסנן את הודעות הבדיקה בלי להשפיע על הציון.
+    # This header is not scanned (the pipeline reads sender, subject and
+    # body only), so it marks the test messages without changing a score.
     msg["X-LURA-Test"] = f"sample-{index}-{sample['expect']}"
     return msg
 

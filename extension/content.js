@@ -15,27 +15,24 @@ async function init() {
 }
 
 // ---------------------------------------------------------------------------
-// זיהוי בעל התיבה
+// Identifying the mailbox owner.
 //
-// הגרסה הקודמת חיפשה `[data-hovercard-id]` ו-`[email]` בכל הדף. אלה
-// המאפיינים שגוגל תולה על *כל* שבב של אדם — כולל שולחי המיילים
-// ברשימה ובכותרת ההודעה הפתוחה. התוצאה: הכתובת שנבחרה הייתה של מי
-// שהופיע ראשון ב-DOM, בדרך כלל שולח כלשהו.
+// This used to search the page for [data-hovercard-id] and [email] -
+// attributes Google hangs on every person chip, senders included - so
+// the address picked was whoever appeared first in the DOM, usually a
+// sender. Accounts named noreply@discord.com and info@wolt.com ended up
+// in the database with the scans recorded under them, and the real
+// user's dashboard stayed empty.
 //
-// כך נוצרו במסד הנתונים חשבונות בשמות noreply@discord.com,
-// info@wolt.com ו-feedback@service.alibaba.com, והסריקות נרשמו תחת
-// הכתובת של השולח במקום של בעל התיבה. לוח הבקרה של המשתמשת האמיתית
-// היה ריק כי הנתונים שלה מעולם לא נכתבו אליה.
-//
-// סדר העדיפויות כאן הפוך: קודם החשבון שאיתו המשתמשת התחברה ל-LURA,
-// שהוא ודאי ולא נחוש; ורק אם אין, כפתור החשבון של גוגל — אלמנט אחד
-// מוגדר היטב, ולא חיפוש חופשי בדף.
+// The order here is the other way round: the account signed in to LURA
+// first, which is known rather than guessed, and only then Google's
+// account button - one well-defined element, not a search of the page.
 // ---------------------------------------------------------------------------
 const EMAIL_RE = /[\w.+-]+@[\w-]+\.[\w.-]+/;
 
 function emailFromAccountButton() {
-  // כפתור החשבון נושא aria-label בנוסח
-  // "חשבון Google: לין נגל (lynn@gmail.com)"
+  // The account button carries an aria-label of the form
+  // "Google Account: Name (address@gmail.com)"
   const selectors = [
     'a[aria-label*="@"][href*="accounts.google"]',
     'a[aria-label*="@"]',
@@ -52,14 +49,14 @@ function emailFromAccountButton() {
 }
 
 async function getUserEmail() {
-  // 1. החשבון המחובר ל-LURA. מדויק, ומה שהשרת יסתמך עליו ממילא
-  //    כשהטוקן נשלח.
+  // 1. The account signed in to LURA. Exact, and what the server will
+  //    rely on anyway once the token is sent.
   const { pg_email, userEmail: cached } = await chrome.storage.local.get(
     ['pg_email', 'userEmail']
   );
   if (pg_email) return pg_email;
 
-  // 2. כפתור החשבון של גוגל, עם המתנה קצרה לטעינת הממשק.
+  // 2. Google's account button, with a short wait for the UI to load.
   for (let i = 0; i < 20; i++) {
     const found = emailFromAccountButton();
     if (found) {
@@ -69,17 +66,18 @@ async function getUserEmail() {
     await new Promise(r => setTimeout(r, 500));
   }
 
-  // 3. ערך שנשמר בהרצה קודמת, ולבסוף מציין מקום.
+  // 3. A value saved on an earlier run, then a placeholder.
   return cached || 'user@gmail.com';
 }
 
 // ---------------------------------------------------------------------------
-// כותרת ההזדהות לבקשת הסריקה
+// The authorization header for a scan.
 //
-// הטוקן נשמר על ידי הפופאפ ב-chrome.storage.local, ושני החלקים הם אותו
-// תוסף ולכן חולקים את אותו אחסון. כשהוא קיים, השרת גוזר ממנו את זהות
-// המשתמש ומתעלם מהכתובת בגוף הבקשה — כך הסריקות נרשמות תחת החשבון
-// שאיתו המשתמש התחבר, ולא תחת כתובת שנוחשה מה-DOM.
+// The popup stores the token in chrome.storage.local, which both halves
+// of the extension share. When it is there the server takes the user's
+// identity from it and ignores the address in the body, so scans are
+// recorded under the account signed in rather than one guessed from the
+// DOM.
 // ---------------------------------------------------------------------------
 function getAuthToken() {
   return new Promise(resolve =>
@@ -188,13 +186,13 @@ async function scanEmail(row, id) {
     const currentRow = findRowById(id) || row;
     addBadge(currentRow, result);
   } catch (err) {
-    // סריקה שנכשלה סומנה עד כה כ-risk_score 0, ולכן קיבלה תג ירוק
-    // עם הכיתוב "בטוח" — בדיוק כמו מייל שנבדק ונמצא תקין. מייל שלא
-    // נבדק כלל הוצג למשתמש כמאושר, וזו התנהגות מסוכנת יותר מהצגת
-    // שגיאה. הערך -2 מסמן כשל, ומקבל תג אפור נפרד.
+    // A failed scan used to come back as risk_score 0, so it got a
+    // green "safe" badge - exactly like a message that was checked and
+    // found clean. Mail the server never saw looked approved. -2 marks
+    // a failure and gets its own grey badge.
     //
-    // התוצאה גם אינה נשמרת במטמון, כדי שהסריקה תנוסה שוב מעצמה
-    // כשהשרת יחזור.
+    // The result is not cached either, so the scan retries by itself
+    // once the server is back.
     console.warn('LURA scan error:', err.message);
     scannedEmails.delete(id);
     addBadge(row, { risk_score: -2, risk_level: 'לא נסרק', indicators: [], recommendation: '' });
@@ -202,19 +200,21 @@ async function scanEmail(row, id) {
 }
 
 // ---------------------------------------------------------------------------
-// סריקת המייל הפתוח, עם גוף ההודעה המלא
+// Scanning the open message, with the full body.
 //
-// שורת הרשימה ב-Gmail מכילה רק תצוגה מקדימה — כמאה תווים. זה כל מה
-// שנשלח לשרת עד כה, והתוצאה הייתה שרוב הצינור עבד עיוור:
+// A row in Gmail's list holds only a preview - about a hundred
+// characters. That was all the server ever saw, so most of the pipeline
+// ran blind:
 //
-//   · בדיקת הדיוור השיווקי מחפשת קישור הסרה, והוא בכותרת התחתונה.
-//   · בדיקות הקישורים, ה-IP והמקצרים קוראות כתובות מגוף ההודעה.
-//   · בדיקת המותג בגוף — אותו דבר.
-//   · BERT אומן על גוף מייל שלם ונדרש לסווג קטע פתיחה. אי-התאמה בין
-//     האימון להרצה היא סיבה מוכרת לתוצאות לא יציבות.
+//   - the marketing check looks for an unsubscribe link, which sits
+//     in the footer.
+//   - the link, IP and shortener checks read URLs from the body.
+//   - the brand-in-body check, likewise.
+//   - BERT was trained on whole bodies and asked to classify an
+//     opening fragment.
 //
-// כשהמשתמש פותח מייל, החלונית מכילה את הטקסט המלא. הסריקה חוזרת אז
-// עם המידע האמיתי, והתג מתעדכן.
+// When the user opens a message the pane holds the full text, so the
+// scan runs again with the real content and the badge updates.
 // ---------------------------------------------------------------------------
 const fullyScanned = new Set();
 
@@ -235,9 +235,10 @@ function extractOpenEmail() {
   };
 }
 
-// מייל שיווקי ארוך מחזיק את המידע המכריע בשני הקצוות: הפתיח הוא מה
-// ש-BERT קורא, וקישור ההסרה יושב בסוף. חיתוך פשוט מלפנים היה מוחק
-// בדיוק את הסימן שמבדיל פרסומת מפישינג.
+// A long marketing message keeps what matters at both ends: the
+// opening is what BERT reads, and the unsubscribe link sits at the
+// bottom. Truncating from the front would erase the very sign that
+// separates an advertisement from phishing.
 function trimBody(text) {
   const MAX = 6000, HEAD = 4000, TAIL = 1500;
   if (text.length <= MAX) return text;
@@ -271,8 +272,8 @@ async function scanOpenEmail() {
     const result = await res.json();
     showOpenBadge(result);
 
-    // התג ברשימה נובע מהתצוגה המקדימה בלבד. עכשיו יש תוצאה טובה
-    // ממנה, ולכן המטמון המקומי מתעדכן וגם השורה תשקף אותה.
+    // The badge in the list came from the preview alone. There is a
+    // better result now, so the cache updates and the row reflects it.
     for (const row of getEmailRows()) {
       const rowData = extractEmailData(row);
       if (rowData.subject === data.subject) {
@@ -319,15 +320,15 @@ function findRowById(id) {
 }
 
 // ---------------------------------------------------------------------------
-// רמות הסיכון. חייבות להתאים ל-backend/config.py, שם הן נגזרות
-// מ-PHISHING_THRESHOLD. הערכים היו קבועים כאן בנפרד (80/50/30) ולא
-// תאמו את הספים האמיתיים אחרי הכיול, כך שמייל שהשרת סיווג כפישינג
-// הוצג למשתמש בצהוב.
+// The risk bands. These must match backend/config.py, where they are
+// derived from PHISHING_THRESHOLD. They were written out here as
+// 80/50/30 and went stale after calibration, so mail the server called
+// phishing was shown to the user in yellow.
 // ---------------------------------------------------------------------------
 const BADGE_BANDS = [
-  { min: 72, label: 'סכנה',   level: 'סכנה גבוהה', color: '#EF4444', bg: '#450A0A', pulse: true  },
-  { min: 50, label: 'חשוד',   level: 'חשוד',       color: '#F97316', bg: '#431407', pulse: false },
-  { min: 30, label: 'זהירות', level: 'זהירות',     color: '#EAB308', bg: '#422006', pulse: false },
+  { min: 78, label: 'סכנה',   level: 'סכנה גבוהה', color: '#EF4444', bg: '#450A0A', pulse: true  },
+  { min: 60, label: 'חשוד',   level: 'חשוד',       color: '#F97316', bg: '#431407', pulse: false },
+  { min: 36, label: 'זהירות', level: 'זהירות',     color: '#EAB308', bg: '#422006', pulse: false },
   { min: -1, label: 'בטוח',   level: 'בטוח',       color: '#34D399', bg: '#022C22', pulse: false },
 ];
 
@@ -550,9 +551,9 @@ function showModal(result, sender = '') {
       const outcome = await markSenderTrusted(sender);
       trustBtn.textContent = outcome.message;
       if (outcome.ok) {
-        // הציונים השמורים לאותו שולח סומנו בשרת לחישוב מחדש. ניקוי
-        // המטמון המקומי גורם לסריקה הבאה לבקש אותם מחדש, כך שהתגים
-        // בתיבה יתעדכנו בלי שהמשתמשת תצטרך לעשות דבר.
+        // The server queued the stored scores for this sender to be
+        // recomputed. Clearing the local cache makes the next scan ask
+        // for them again, so the badges update on their own.
         resultCache.clear();
         scannedEmails.clear();
         setTimeout(() => { close(); scanVisibleEmails(); }, 900);
@@ -575,15 +576,16 @@ function escapeHtml(value) {
 }
 
 // ---------------------------------------------------------------------------
-// סימון שולח כמוכר
+// Marking a sender as known.
 //
-// המערכת מכירה מותגים גדולים, אבל התיבה מלאה בכתובות שאיש לא שמע
-// עליהן — משרד שמתכתבים איתו, מורה, ספק. עבורן אין שום ראיה חיובית
-// ללגיטימיות, ולכן מייל תקין מקבל ציון גבוה על סמך ניחוש המודל בלבד.
+// The system knows the large brands, but an inbox is full of addresses
+// nobody has heard of - an office, a teacher, a supplier. For those
+// there is no positive evidence of legitimacy at all, so ordinary mail
+// scores high on the model's guess alone.
 //
-// הסימון מנמיך את ציון המודל בלבד. אם מנוע החוקים מזהה התחזות למותג
-// או קישור לדומיין מזויף, הציון יישאר גבוה גם אחריו — המשתמש מצהיר
-// שהוא מכיר כתובת, לא מבטל ראיות.
+// Marking damps the model's score only. If the rules see brand
+// impersonation or a link to a forged domain the score stays high: a
+// user can say they know an address, not that the evidence is void.
 // ---------------------------------------------------------------------------
 async function markSenderTrusted(sender) {
   const token = await getAuthToken();
@@ -601,9 +603,9 @@ async function markSenderTrusted(sender) {
     });
     if (res.status === 401) return { ok: false, message: 'ההתחברות פגה' };
     if (!res.ok) {
-      // השרת מסרב לסמן כתובת שיש נגדה ראיות, ומחזיר את הסיבה.
-      // הצגתה עדיפה על "לא ניתן לשמור": היא מסבירה למשתמש מה
-      // המערכת מצאה בכתובת שהוא עמד לאשר.
+      // The server refuses an address with evidence against it and
+      // says why. Showing that beats "could not save": it tells the
+      // user what was found in the address they were about to approve.
       const body = await res.json().catch(() => ({}));
       return { ok: false, message: body.detail || 'לא ניתן לשמור' };
     }

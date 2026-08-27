@@ -1,7 +1,7 @@
 const API = 'http://localhost:8000';
 const MIN_PASSWORD_LENGTH = 8;
 
-// האסימון מגיע מהקישור שנשלח למייל: forgot_password.html?token=...
+// The token arrives in the link sent by mail: forgot_password.html?token=...
 const resetToken = new URLSearchParams(window.location.search).get('token');
 
 function show(el, text) {
@@ -13,7 +13,7 @@ function hide(...els) {
   els.forEach(el => { el.style.display = 'none'; });
 }
 
-// ── שלב 1 — בקשת קישור איפוס ──────────────────────────────
+// Step 1 - request a reset link
 async function handleRequest(e) {
   e.preventDefault();
   const errEl = document.getElementById('requestError');
@@ -33,8 +33,8 @@ async function handleRequest(e) {
     const data = await r.json();
     if (!r.ok) throw new Error(data.detail || 'שגיאה בשליחת הקישור');
 
-    // השרת מחזיר תמיד את אותה הודעה, גם אם הכתובת לא רשומה —
-    // כדי לא לחשוף אילו כתובות קיימות במערכת.
+    // The server always returns the same message, registered address
+    // or not, so it does not reveal who has an account.
     show(okEl, 'אם הכתובת רשומה במערכת, נשלח אליה קישור לאיפוס. הקישור תקף ל-30 דקות.');
     btn.style.display = 'none';
 
@@ -45,7 +45,7 @@ async function handleRequest(e) {
   }
 }
 
-// ── שלב 2 — בחירת סיסמה חדשה ──────────────────────────────
+// Step 2 - choose a new password
 async function handleReset(e) {
   e.preventDefault();
   const errEl = document.getElementById('resetError');
@@ -88,7 +88,7 @@ async function handleReset(e) {
   }
 }
 
-// ── בחירת השלב לפי הכתובת ─────────────────────────────────
+// Which step to show, decided by the URL
 document.addEventListener('DOMContentLoaded', () => {
   const requestForm = document.getElementById('requestForm');
   const resetForm   = document.getElementById('resetForm');

@@ -1,11 +1,11 @@
 """
-בדיקה מהירה שהצינור חי — מול השרת שרץ.
+A quick check that the pipeline is alive, against the running server.
 
-תיבה נקייה שכל המיילים בה מקבלים 0% נראית בדיוק כמו מערכת מקולקלת
-שמחזירה אפס לכל דבר. הסקריפט הזה מפריד בין השניים: הוא שולח לשרת מייל
-פישינג מובהק ומייל תמים, ומראה מה חזר על כל אחד מהם.
+A clean inbox where everything scores 0% looks exactly like a broken
+system that returns zero for everything. This tells the two apart: it
+sends one obvious phishing message and one harmless one, and shows what
+came back for each.
 
-הרצה (מתוך backend/, כשהשרת פועל):
     python check_pipeline.py
     python check_pipeline.py --url http://localhost:8000
 """
@@ -20,15 +20,13 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# The real thresholds, not a copy. These were written out here as 57 and
-# 34 and went stale the moment the threshold was calibrated, so the
-# check started passing samples it should have failed.
+# The real thresholds, not a copy - they went stale here once already.
 from config import PHISHING_THRESHOLD, LOW_RISK_THRESHOLD   # noqa: E402
 
 SAMPLES = [
     dict(
-        expect="גבוה",
-        note="פישינג מובהק באנגלית",
+        expect="high",
+        note="obvious phishing, English",
         sender="security-rn@paypal-verify.xyz",
         subject="URGENT: verify your account",
         content=(
@@ -38,8 +36,8 @@ SAMPLES = [
         ),
     ),
     dict(
-        expect="גבוה",
-        note="התחזות לבנק בעברית",
+        expect="high",
+        note="bank impersonation, Hebrew",
         sender="service@bank-leumi-secure.com",
         subject="חשבונך ייחסם",
         content=(
@@ -48,8 +46,8 @@ SAMPLES = [
         ),
     ),
     dict(
-        expect="נמוך",
-        note="ניוזלטר תמים",
+        expect="low",
+        note="harmless newsletter",
         sender="newsletter@company.com",
         subject="עדכון חודשי",
         content="שלום, הנה הניוזלטר החודשי שלנו עם עדכונים ומידע על מוצרים.",
@@ -74,26 +72,26 @@ def get(url: str, path: str) -> dict:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="בדיקת שפיות לצינור החי")
+    ap = argparse.ArgumentParser(description="sanity check for the live pipeline")
     ap.add_argument("--url", default="http://localhost:8000")
     ap.add_argument("--email", default="pipeline-check@example.com",
-                    help="כתובת נפרדת, כדי לא ללכלך את החשבון האמיתי")
+                    help="a separate address, to keep the real account clean")
     args = ap.parse_args()
 
     try:
         state = get(args.url, "/health/model")
     except urllib.error.URLError as exc:
-        raise SystemExit(f"השרת אינו מגיב ב-{args.url}\n{exc}")
+        raise SystemExit(f"no answer at {args.url}\n{exc}")
 
-    print(f"\nמצב המודל: {state.get('state', 'לא ידוע')}")
+    print(f"\nmodel state: {state.get('state', 'unknown')}")
     if state.get("state") != "ready":
-        print("  המודל טרם נטען — הציונים למטה מגיעים ממנוע החוקים בלבד.")
-        print("  זו התנהגות תקינה, אבל כדאי לחזור לבדיקה אחרי שהוא מוכן.")
+        print("  not loaded yet - the scores below come from the rules alone.")
+        print("  that is normal; worth running again once it is ready.")
     print()
 
-    print("═" * 72)
-    print(f"  {'צפוי':<6} {'ציון':>6}  {'רמה':<12} הערה")
-    print("═" * 72)
+    print("=" * 72)
+    print(f"  {'expect':<8} {'score':>6}  {'level':<14} note")
+    print("=" * 72)
 
     ok = True
     for s in SAMPLES:
@@ -105,25 +103,25 @@ def main() -> None:
                 "content": s["content"],
             })
         except urllib.error.HTTPError as exc:
-            print(f"  {s['expect']:<6} {'שגיאה':>6}  HTTP {exc.code}   {s['note']}")
+            print(f"  {s['expect']:<8} {'error':>6}  HTTP {exc.code}   {s['note']}")
             ok = False
             continue
 
         score = r.get("risk_score", 0)
-        good = (score >= PHISHING_THRESHOLD) if s["expect"] == "גבוה" \
+        good = (score >= PHISHING_THRESHOLD) if s["expect"] == "high" \
             else (score < LOW_RISK_THRESHOLD)
         ok &= good
-        mark = "" if good else "   ← לא כצפוי"
-        print(f"  {s['expect']:<6} {score:>6.1f}  {r.get('risk_level', ''):<12} "
+        mark = "" if good else "   <- not as expected"
+        print(f"  {s['expect']:<8} {score:>6.1f}  {r.get('risk_level', ''):<14} "
               f"{s['note']}{mark}")
 
-    print("═" * 72)
+    print("=" * 72)
     if ok:
-        print("\n  הצינור עובד. אם כל המיילים בתיבה מקבלים ציון נמוך —")
-        print("  זו התיבה, לא המערכת.\n")
+        print("\n  The pipeline works. If everything in your inbox still scores")
+        print("  low, that is the inbox, not the system.\n")
     else:
-        print("\n  משהו לא מסתדר. שווה לבדוק שהמודל נטען ושהסף ב-config.py")
-        print("  הוא זה שכוילנו אליו.\n")
+        print("\n  Something is off. Check that the model loaded and that the")
+        print("  threshold in config.py is what you expect.\n")
 
 
 if __name__ == "__main__":

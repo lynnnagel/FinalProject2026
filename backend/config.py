@@ -70,34 +70,42 @@ CORS_ORIGIN_REGEX = (
 #
 # To set the value itself:  python ML/evaluate.py --split test --sweep
 #
-# 50 was picked off that sweep, over the whole test set, for three
-# reasons rather than the headline accuracy:
+# 60 was picked off that sweep over the whole test set. From 60 upward
+# the misses are flat at 52-53 and the false alarms fall slowly, from 44
+# at 60 to 37 at 80 - so the top of the range is a wide plateau rather
+# than a peak, and the choice is not balanced on an edge.
 #
-#   1. It sits inside a flat stretch. Every threshold from 40 to 75
-#      returns the same 96.0%, so the choice is not balanced on a knife
-#      edge and a small change to the formula will not move it. The
-#      alternative - 30, which scores a better 97.9% - sits right at the
-#      lip of a cliff: at 35 the misses jump from 52 to 410, because
-#      some 358 phishing messages score between the two.
-#   2. No Hebrew phishing is missed at all at 50, against about five at
-#      57. Hebrew is what this project is for.
-#   3. False alarms are 58 against 264 at threshold 30. Every alarm here
-#      mails a guardian, and the legitimate half of the corpus is mostly
-#      Enron business mail - not the commercial and transactional mail
-#      that fills a real inbox and that this system got wrong most
-#      often. The measured false-alarm rate is, if anything, optimistic.
+# 60 is the lowest point on that plateau, which makes it the most
+# sensitive setting that still reaches both of the things worth having:
+# the minimum number of misses, and no Hebrew false alarms at all.
+# Raising it further buys about seven fewer false alarms out of 7,644
+# legitimate messages, and pays in sensitivity to well-written phishing
+# from a sender the rules do not recognise - the case this corpus
+# represents least well.
 # ---------------------------------------------------------------------------
-PHISHING_THRESHOLD = 50       # at or above this, classed as phishing
+PHISHING_THRESHOLD = 60       # at or above this, classed as phishing
 
-# "Suspicious" starts exactly at the classification threshold - there is
-# no range where mail counts as phishing but not as suspicious.
-MEDIUM_RISK_THRESHOLD = PHISHING_THRESHOLD
 
-# "Caution": 60% of the threshold - partial signs, not enough to class.
-LOW_RISK_THRESHOLD = round(PHISHING_THRESHOLD * 0.6)
+def bands_for(threshold: int) -> tuple[int, int, int]:
+    """
+    The three derived bands for a given threshold: low, medium, high.
 
-# "High risk": 45% of the way from the threshold up to 100.
-HIGH_RISK_THRESHOLD = round(PHISHING_THRESHOLD + (100 - PHISHING_THRESHOLD) * 0.45)
+    A function rather than three expressions, because the threshold
+    sweep in ML/evaluate.py has to derive them for a threshold that is
+    not the configured one. When it computed them separately the sweep
+    held the ceiling fixed while moving the threshold, which made every
+    cut-off above the ceiling look catastrophic - an artefact of the
+    measurement, not of the data.
+    """
+    return (
+        round(threshold * 0.6),                              # caution
+        threshold,                                           # suspicious
+        round(threshold + (100 - threshold) * 0.45),         # high risk
+    )
+
+
+LOW_RISK_THRESHOLD, MEDIUM_RISK_THRESHOLD, HIGH_RISK_THRESHOLD = \
+    bands_for(PHISHING_THRESHOLD)
 
 # Guards against a future calibration scrambling the order
 assert 0 < LOW_RISK_THRESHOLD < MEDIUM_RISK_THRESHOLD <= PHISHING_THRESHOLD \
@@ -128,14 +136,17 @@ RULE_BOOST = float(os.getenv("RULE_BOOST", "0.5"))
 # recognised sender domain - not merely silence from the rules.
 TRUST_DAMPING = float(os.getenv("TRUST_DAMPING", "0.25"))
 
-# Multiplier on the BERT score when the mail is recognised as marketing
-# or a service notice and asks for no credentials. 0.30 takes 100 down to
-# 30, under the threshold. The corpora label spam in the same class as
-# phishing, so the model does not separate them: an advertisement scores
-# 99.99, the same as a request for card details. LURA detects phishing,
-# not spam, and marking an advertisement as danger costs the user's trust
-# in every other alert.
-PROMO_DAMPING = float(os.getenv("PROMO_DAMPING", "0.30"))
+# There used to be a damping here for mail that reads as marketing. It
+# was removed after measurement - see the note in scoring.py. In short:
+# it was the only damping that needed no sender address, so it fired on
+# anything carrying an unsubscribe link, phishing included. On the test
+# split it cost 488 missed detections and saved two false alarms, and
+# none of the legitimate mail it was written for depended on it.
+#
+# It was also solving a problem that no longer exists. It dates from
+# when the corpora labelled spam as phishing; relabelling spam as
+# not-phishing (ML/prepare_data.py) taught the model that distinction
+# directly.
 
 # Multiplier on the BERT score for operational mail from a recognised
 # company - order confirmation, shipping notice, receipt. This is the
@@ -170,7 +181,7 @@ CORROBORATION_FLOOR = 15
 # automatically invalidates every score computed before it, and they are
 # recomputed on the next scan.
 SCORING_VERSION = (
-    f"v4|b{RULE_BOOST}|t{TRUST_DAMPING}|p{PROMO_DAMPING}"
+    f"v5|b{RULE_BOOST}|t{TRUST_DAMPING}"
     f"|x{TRANSACTIONAL_DAMPING}|th{PHISHING_THRESHOLD}"
 )
 

@@ -7,12 +7,11 @@ LURA.db is never touched.
 import os
 import sys
 
-# חייב להיקבע לפני שמייבאים את config — הבדיקות של איפוס הסיסמה
-# קוראות ל-/auth/forgot-password, וכשהדגל דלוק נשלחים מיילים אמיתיים
-# לכתובות הבדיקה (known@example.com וכדומה). התוצאה היא מיילי איפוס
-# והודעות bounce שמגיעים לתיבה האמיתית בכל הרצת pytest.
-#
-# load_dotenv אינו דורס משתני סביבה קיימים, ולכן קביעה כאן גוברת על .env
+# Must be set before config is imported. The reset tests call
+# /auth/forgot-password, and with the flag on that sends real mail to
+# the test addresses - so every pytest run would bounce messages into a
+# real inbox. load_dotenv does not override an existing variable, so
+# setting it here wins over .env.
 os.environ["EMAIL_ENABLED"] = "false"
 os.environ.setdefault("SECRET_KEY", "test-secret-not-used-in-production-0123456789")
 
@@ -73,8 +72,8 @@ def client(reset_db):
 # ---------------------------------------------------------------------------
 # Authentication helpers
 #
-# /stats ו-/guardian דורשים טוקן. הפיקסצ'רים כאן רושמים משתמש
-# ומחזירים את כותרת ההזדהות שלו.
+# /stats and /guardian need a token. These fixtures register a user and
+# return their authorization header.
 # ---------------------------------------------------------------------------
 @pytest.fixture
 def make_user(client):
@@ -83,7 +82,7 @@ def make_user(client):
             "/auth/register",
             json={"email": email, "password": password, "name": name},
         )
-        if r.status_code == 400:          # המשתמש כבר קיים – התחבר במקום
+        if r.status_code == 400:          # already exists - log in instead
             r = client.post("/auth/login", json={"email": email, "password": password})
         assert r.status_code == 200, r.text
         return {"Authorization": f"Bearer {r.json()['token']}"}
@@ -93,13 +92,13 @@ def make_user(client):
 
 @pytest.fixture
 def auth_headers(make_user):
-    """המשתמש הראשי בבדיקות — test@example.com."""
+    """The main test user."""
     return make_user("test@example.com")
 
 
 @pytest.fixture
 def parent_headers(make_user):
-    """משתמש המשמש כמפקח — parent@example.com."""
+    """A user acting as a guardian."""
     return make_user("parent@example.com")
 
 

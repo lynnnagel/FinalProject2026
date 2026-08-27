@@ -1,27 +1,24 @@
 """
-הגדלת הדאטה העברי בתרגום מכונה
-==============================
+Grow the Hebrew data by machine translation.
 
-הבעיה: המאגר מכיל ~300 מיילים בעברית מתוך ~132,000 — כ-0.2%.
-המודל למעשה לא רואה עברית, ולכן הטענה על "תמיכה בעברית" נשענת על
-מדגם קטן מדי מכדי להיות מדיד.
+The corpus holds only a few hundred Hebrew messages out of ~132,000, so
+the model barely sees the language and any claim about Hebrew support
+rests on too small a sample. This translates a slice of the English
+corpus, which is real phishing with real attack structure.
 
-הפתרון כאן: לתרגם פרוסה מהקורפוס האנגלי הקיים. מיילי הפישינג
-באנגלית הם דוגמאות אמיתיות עם מבנה תקיפה אמיתי — התרגום שומר על
-המבנה הזה ונותן אלפי דוגמאות בעברית במקום מאות תבניות שנכתבו ביד.
+Known limitation: translated phishing is not the same as phishing
+written in Hebrew - the phrasing is too clean, with no slang or typical
+mistakes. An improvement on what was there, not a substitute for
+authentic data.
 
-מגבלה שכדאי להכיר: פישינג מתורגם אינו זהה לפישינג שנכתב מלכתחילה
-בעברית — הניסוח נקי מדי, ואין בו סלנג או שגיאות אופייניות. זה שיפור
-משמעותי על המצב הקיים, לא תחליף לדאטה אותנטי.
-
-התקנה:
+Install:
     pip install deep-translator
 
-הרצה (מתוך backend/):
+Usage:
     python ML/augment_hebrew.py --n 3000
-    python ML/augment_hebrew.py --n 500 --dry-run    # בדיקה מהירה
+    python ML/augment_hebrew.py --n 500 --dry-run    # quick check
 
-הפלט נשמר ל-ML/data/hebrew_translated.csv. אחרי ההרצה:
+Output goes to ML/data/hebrew_translated.csv. Afterwards:
     python ML/prepare_data.py
     python ML/train.py --epochs 6
 """
@@ -36,20 +33,20 @@ import pandas as pd
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-MAX_CHARS = 4500          # מגבלת אורך לבקשת תרגום בודדת
-SLEEP_BETWEEN = 0.12      # השהיה קלה כדי לא להיחסם
+MAX_CHARS = 4500          # length limit for one translation request
+SLEEP_BETWEEN = 0.12      # a small pause, to avoid being blocked
 
 
 def load_source(data_dir: str, n: int, seed: int) -> pd.DataFrame:
-    """דוגם מיילים באנגלית מהסטים המעובדים, מאוזן בין פישינג ללגיטימי."""
+    """Sample English messages from the processed splits, class-balanced."""
     path = os.path.join(data_dir, "processed", "train.csv")
     if not os.path.exists(path):
-        sys.exit(f"לא נמצא {path}\nהריצי קודם:  python ML/prepare_data.py")
+        sys.exit(f"{path} not found\nrun first:  python ML/prepare_data.py")
 
     df = pd.read_csv(path).dropna(subset=["text", "label"])
     df["label"] = df["label"].astype(int)
 
-    # מדלגים על מה שכבר בעברית
+    # Skip anything already in Hebrew
     df = df[~df["text"].str.contains(r"[֐-׿]", na=False, regex=True)]
     df = df[df["text"].str.len().between(40, MAX_CHARS)]
 
@@ -70,8 +67,8 @@ def translate_batch(texts: list[str]) -> list[str | None]:
         from deep_translator import GoogleTranslator
     except ImportError:
         sys.exit(
-            "חסרה הספרייה deep-translator.\n"
-            "התקיני:  pip install deep-translator"
+            "deep-translator is not installed.\n"
+            "install it:  pip install deep-translator"
         )
 
     translator = GoogleTranslator(source="en", target="iw")
@@ -85,31 +82,31 @@ def translate_batch(texts: list[str]) -> list[str | None]:
             failures += 1
             out.append(None)
             if failures <= 3:
-                print(f"    שגיאת תרגום ({failures}): {exc}")
+                print(f"    translation error ({failures}): {exc}")
             if failures > 50:
-                print("    יותר מדי שגיאות — עוצר. ייתכן חסימה זמנית.")
+                print("    too many errors - stopping. Possibly rate limited.")
                 out.extend([None] * (len(texts) - i))
                 break
         if i % 25 == 0:
             done = sum(1 for t in out if t)
-            print(f"    {i}/{len(texts)}  (הצליחו: {done})", flush=True)
+            print(f"    {i}/{len(texts)}  (done: {done})", flush=True)
         time.sleep(SLEEP_BETWEEN)
 
     return out
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="הגדלת דאטה עברי בתרגום")
+    ap = argparse.ArgumentParser(description="grow the Hebrew data by translation")
     ap.add_argument("--data_dir", default="ML/data")
-    ap.add_argument("--n", type=int, default=3000, help="כמה מיילים לתרגם")
+    ap.add_argument("--n", type=int, default=3000, help="how many messages to translate")
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--dry-run", action="store_true",
-                    help="מתרגם 5 דוגמאות ומדפיס אותן, בלי לשמור")
+                    help="translate 5 examples and print them, without saving")
     args = ap.parse_args()
 
-    print(f"דוגם {args.n} מיילים באנגלית ...")
+    print(f"sampling {args.n} English messages ...")
     df = load_source(args.data_dir, args.n, args.seed)
-    print(f"  נבחרו {len(df)}  |  פישינג: {int(df.label.sum())}  |  "
+    print(f"  selected {len(df)}  |  phishing: {int(df.label.sum())}  |  "
           f"לגיטימי: {int((df.label == 0).sum())}\n")
 
     if args.dry_run:

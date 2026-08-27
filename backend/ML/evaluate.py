@@ -1,18 +1,16 @@
 """
-הערכת המערכת — כללית ובפילוח לפי שפה
-=====================================
+Evaluation - overall and broken out by language.
 
-הדוח הנוכחי מציג מספר דיוק אחד. מכיוון ש-99.8% מהמאגר באנגלית,
-המספר הזה כמעט לא מושפע מהביצועים בעברית — שהיא הבידול של הפרויקט.
+One accuracy number hides what matters here: most of the corpus is
+English, so it barely reflects Hebrew, which is the point of the
+project. This runs the full pipeline over a split and reports each
+language separately.
 
-הסקריפט מריץ את הצינור המלא (חוקים + BERT, אם קיים checkpoint) על
-סט הבדיקה, ומדווח בנפרד על עברית ועל אנגלית.
-
-הרצה (מתוך backend/):
-    python ML/evaluate.py                  # סט הבדיקה, אנסמבל מלא
+    python ML/evaluate.py                  # test split, full ensemble
     python ML/evaluate.py --split val
-    python ML/evaluate.py --no-bert        # חוקים בלבד, להשוואה
-    python ML/evaluate.py --limit 2000     # דגימה מהירה
+    python ML/evaluate.py --no-bert        # rules only, for comparison
+    python ML/evaluate.py --sweep          # score once, try every threshold
+    python ML/evaluate.py --limit 2000     # quick sample
 """
 from __future__ import annotations
 
@@ -25,7 +23,10 @@ import pandas as pd
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from detector import detector                                     # noqa: E402
-from config import PHISHING_THRESHOLD, RULE_BOOST, TRUST_DAMPING  # noqa: E402
+from config import (                                              # noqa: E402
+    PHISHING_THRESHOLD, RULE_BOOST, TRUST_DAMPING, bands_for,
+    UNCORROBORATED_CEILING, CORROBORATION_FLOOR,
+)
 from scoring import combine                                       # noqa: E402
 from ML.calibrate import metrics, load_split                      # noqa: E402
 
@@ -33,13 +34,21 @@ HEBREW_CHARS = r"[֐-׿]"
 
 
 def score_rows(df: pd.DataFrame, use_bert: bool,
-               bert_only: bool = False) -> list[float]:
+               bert_only: bool = False,
+               uncapped: bool = False) -> tuple[list[float], list[float]]:
+    """
+    Returns (scores, rule_scores).
+
+    With uncapped=True the scores come back before the corroboration
+    ceiling is applied, so the sweep can apply the ceiling belonging to
+    each threshold it tries.
+    """
     model = None
     if use_bert:
         from ML.bert_model import load_now
         model = load_now()
         if model is None:
-            print("  אין checkpoint — ממשיך עם חוקים בלבד\n")
+            print("  no checkpoint - continuing with rules only\n")
 
     rows = list(df.itertuples(index=False))
 
@@ -50,13 +59,13 @@ def score_rows(df: pd.DataFrame, use_bert: bool,
                 row.sender, row.subject, row.content
             )["risk_score"]
             if i % 2000 == 0:
-                print(f"    חוקים: {i}/{len(rows)}", flush=True)
+                print(f"    rules: {i}/{len(rows)}", flush=True)
 
     if model is None:
-        return heur
+        return heur, heur
 
-    # במקבצים ולא שורה-שורה: forward אחד לכל מייל על 16,137 שורות
-    # לוקח עשרות דקות על CPU, ורוב הזמן הוא overhead ולא חישוב.
+    # In batches: one forward per message over the whole split takes
+    # tens of minutes on CPU, mostly overhead rather than computation.
     scores = []
     BATCH = 32
     for start in range(0, len(rows), BATCH):
@@ -67,58 +76,59 @@ def score_rows(df: pd.DataFrame, use_bert: bool,
         for row, h, b in zip(chunk, heur[start:start + BATCH], bert):
             scores.append(
                 b if bert_only
-                else combine(b, h, row.sender, row.subject, row.content)
+                else combine(b, h, row.sender, row.subject, row.content,
+                             ceiling=None if uncapped else UNCORROBORATED_CEILING)
             )
         done = min(start + BATCH, len(rows))
         if done % 512 < BATCH:
             print(f"    BERT: {done}/{len(rows)}", flush=True)
-    return scores
+    return scores, heur
 
 
 def report(title: str, y_true: list[int], y_pred: list[int]) -> None:
     n = len(y_true)
     if n == 0:
-        print(f"  {title:<12} — אין דוגמאות")
+        print(f"  {title:<12} - no examples")
         return
     m = metrics(y_true, y_pred)
     pos = sum(y_true)
-    print(f"  {title:<12} {n:>6} דוגמאות ({pos} פישינג)")
-    print(f"               דיוק {m['accuracy']*100:5.1f}%  |  F1 {m['f1']:.3f}  |  "
-          f"פספוסים {m['fnr']*100:4.1f}%  |  TP={m['tp']} FP={m['fp']} FN={m['fn']}")
+    print(f"  {title:<12} {n:>6} examples ({pos} phishing)")
+    print(f"               acc {m['accuracy']*100:5.1f}%  |  F1 {m['f1']:.3f}  |  "
+          f"missed {m['fnr']*100:4.1f}%  |  TP={m['tp']} FP={m['fp']} FN={m['fn']}")
     if n < 200:
-        print(f"               ⚠  מדגם קטן — המספרים כאן לא יציבים")
+        print(f"               !  small sample - these numbers are unstable")
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="הערכה בפילוח לפי שפה")
+    ap = argparse.ArgumentParser(description="evaluation, broken out by language")
     ap.add_argument("--data_dir", default="ML/data")
     ap.add_argument("--split", default="test", choices=["val", "test"])
-    ap.add_argument("--no-bert", action="store_true", help="חוקים בלבד")
+    ap.add_argument("--no-bert", action="store_true", help="rules only")
     ap.add_argument("--bert-only", action="store_true",
-                    help="BERT בלבד, בלי מנוע החוקים ובלי משקלול")
+                    help="BERT only, no rules and no combining")
     ap.add_argument("--with-sender", action="store_true",
-                    help="רק שורות שיש בהן כתובת שולח")
-    ap.add_argument("--limit", type=int, default=0, help="הגבלת מספר דוגמאות (0 = הכל)")
+                    help="only rows that carry a sender address")
+    ap.add_argument("--limit", type=int, default=0, help="cap the number of examples (0 = all)")
     ap.add_argument("--threshold", type=int, default=PHISHING_THRESHOLD)
     ap.add_argument("--sweep", action="store_true",
                     help="score once, then report every threshold from 20 to 80")
     args = ap.parse_args()
 
     if args.no_bert and args.bert_only:
-        sys.exit("--no-bert ו---bert-only סותרים זה את זה")
+        sys.exit("--no-bert and --bert-only contradict each other")
 
     df = load_split(args.data_dir, args.split)
 
-    # רוב הקורפוסים באנגלית מספקים גוף מייל בלבד, בלי שורת From. שלוש
-    # מתשע בדיקות מנוע החוקים קוראות את כתובת השולח — ובהן בדיקת
-    # ההתחזות למותג, שנותנת את הניקוד הגבוה ביותר. על שורות בלי שולח
-    # המנוע רץ משותק, וכל מדד של האנסמבל עליהן מודד מערכת אחרת מזו
-    # שרצה בתוסף, שם Gmail תמיד מספק את השולח.
+    # Most English corpora give the body only, with no From line. Three
+    # of the nine rules read the sender - including brand impersonation,
+    # the highest-scoring one - so on those rows the engine runs
+    # crippled, and the ensemble measured there is not the system that
+    # runs in Gmail, where a sender is always present.
     has_sender = df["sender"].str.strip() != ""
     if args.with_sender:
         df = df[has_sender].reset_index(drop=True)
         if df.empty:
-            sys.exit("אין שורות עם שולח בסט הזה.")
+            sys.exit("No rows with a sender in this split.")
 
     if args.limit:
         df = df.sample(min(args.limit, len(df)), random_state=42).reset_index(drop=True)
@@ -129,43 +139,59 @@ def main() -> None:
 
     n_sender = int((df["sender"].str.strip() != "").sum())
 
-    print(f"\nסט: {args.split}  |  {len(df)} דוגמאות")
-    print(f"  עברית: {int(is_hebrew.sum())}  |  אנגלית: {int((~is_hebrew).sum())}")
-    print(f"  עם שולח: {n_sender} ({n_sender / len(df) * 100:.1f}%)")
+    print(f"\nsplit: {args.split}  |  {len(df)} examples")
+    print(f"  Hebrew: {int(is_hebrew.sum())}  |  English: {int((~is_hebrew).sum())}")
+    print(f"  with a sender: {n_sender} ({n_sender / len(df) * 100:.1f}%)")
     if args.no_bert:
-        mode = "חוקים בלבד"
+        mode = "rules only"
     elif args.bert_only:
-        mode = "BERT בלבד"
+        mode = "BERT only"
     else:
-        mode = f"אנסמבל (boost={RULE_BOOST}, trust={TRUST_DAMPING})"
-    print(f"  מצב: {mode}  |  סף: {args.threshold}\n")
+        mode = f"ensemble (boost={RULE_BOOST}, trust={TRUST_DAMPING})"
+    print(f"  mode: {mode}  |  threshold: {args.threshold}\n")
 
-    # הסף כוון לציון האנסמבל. על ציון BERT גולמי, שנע בין 0 ל-100
-    # בפני עצמו, אין לו משמעות — לכן 50.
+    # The threshold was calibrated for the ensemble score. It means
+    # nothing against a raw BERT probability, so use 50 there.
     threshold = 50 if args.bert_only else args.threshold
     if args.bert_only:
-        print("  (סף 50 על הציון הגולמי — סף האנסמבל אינו חל כאן)\n")
+        print("  (threshold 50 on the raw score - the ensemble's does not apply)\n")
 
-    print("מחשב ציונים ...")
-    scores = score_rows(df, use_bert=not args.no_bert, bert_only=args.bert_only)
+    print("scoring ...")
+    scores, rule_scores = score_rows(
+        df, use_bert=not args.no_bert, bert_only=args.bert_only,
+        uncapped=args.sweep and not args.bert_only and not args.no_bert,
+    )
     y = df["label"].tolist()
-    pred = [1 if s >= threshold else 0 for s in scores]
 
-    # Scoring is the expensive part - one pass over 14,862 messages
-    # through BERT. Trying thresholds one run at a time repeats that
-    # pass for a decision that only reads the scores, so the sweep
-    # scores once and then evaluates every cut-off over the same list.
+    def at(t: int) -> list[int]:
+        """
+        Predictions at threshold t, with the ceiling that threshold
+        implies. Holding the ceiling fixed while moving the threshold
+        made every cut-off above it look like a collapse.
+        """
+        if args.bert_only or args.no_bert or not args.sweep:
+            return [1 if s_ >= t else 0 for s_ in scores]
+        cap = bands_for(t)[2] - 1
+        return [
+            1 if (min(s_, cap) if h_ < CORROBORATION_FLOOR else s_) >= t else 0
+            for s_, h_ in zip(scores, rule_scores)
+        ]
+
+    pred = at(threshold)
+
+    # Scoring is the expensive part. Trying thresholds one run at a
+    # time repeats it for a decision that only reads the scores.
     if args.sweep:
         heb = set(i for i, v in enumerate(is_hebrew) if v)
-        print("\n" + "═" * 72)
-        print("  סריקת ספים — ניקוד אחד, כל הספים")
-        print("═" * 72)
-        print(f"  {'סף':>4} {'דיוק':>7} {'F1':>7} {'שווא':>7} {'פספוס':>7}"
-              f" {'שווא-עב':>9} {'פספוס-עב':>9}")
-        print("  " + "─" * 62)
+        print("\n" + "=" * 72)
+        print("  Threshold sweep - scored once, every cut-off")
+        print("=" * 72)
+        print(f"  {'thr':>4} {'acc':>7} {'F1':>7} {'FP':>7} {'FN':>7}"
+              f" {'FP-heb':>9} {'FN-heb':>9}")
+        print("  " + "-" * 62)
         best = None
         for t in range(20, 81, 5):
-            pred_t = [1 if s_ >= t else 0 for s_ in scores]
+            pred_t = at(t)
             m = metrics(y, pred_t)
             hy = [y[i] for i in heb]
             hp = [pred_t[i] for i in heb]
@@ -174,39 +200,37 @@ def main() -> None:
                   f" {m['fp']:>7} {m['fn']:>7} {hm['fp']:>9} {hm['fn']:>9}")
             if best is None or m["f1"] > best[1]:
                 best = (t, m["f1"], m)
-        print("  " + "─" * 62)
-        print(f"\n  F1 הגבוה ביותר: סף {best[0]}  (F1={best[1]:.3f})")
-        print("  אבל F1 מתייחס לשני סוגי הטעויות כשווים. בתיבה אמיתית")
-        print("  התרעת שווא שוחקת אמון מהר יותר מפספוס בודד, ולכן כדאי")
-        print("  לבחור סף שבו עמודת 'שווא' עדיין נמוכה.\n")
+        print("  " + "-" * 62)
+        print(f"\n  Highest F1: threshold {best[0]}  (F1={best[1]:.3f})")
+        print("  But F1 treats both kinds of error as equal. In a real inbox a")
+        print("  false alarm costs more trust than a single miss, so prefer a")
+        print("  threshold where the FP column is still low.\n")
         return
 
-    print("\n" + "═" * 72)
-    print("  תוצאות")
-    print("═" * 72)
-    report("כללי", y, pred)
+    print("\n" + "=" * 72)
+    print("  Results")
+    print("=" * 72)
+    report("overall", y, pred)
     print()
     heb_idx = [i for i, v in enumerate(is_hebrew) if v]
     eng_idx = [i for i, v in enumerate(is_hebrew) if not v]
-    report("עברית", [y[i] for i in heb_idx], [pred[i] for i in heb_idx])
-    report("אנגלית", [y[i] for i in eng_idx], [pred[i] for i in eng_idx])
-    print("═" * 72)
+    report("Hebrew", [y[i] for i in heb_idx], [pred[i] for i in heb_idx])
+    report("English", [y[i] for i in eng_idx], [pred[i] for i in eng_idx])
+    print("=" * 72)
 
     if len(heb_idx) < 200:
-        print(f"\n  ⚠  רק {len(heb_idx)} דוגמאות בעברית בסט הבדיקה.")
-        print("     זה מעט מדי כדי לטעון טענה על ביצועים בעברית.")
-        print("     כדי להגדיל: python ML/augment_hebrew.py")
+        print(f"\n  !  only {len(heb_idx)} Hebrew examples in this split -")
+        print("     too few to claim anything about Hebrew performance.")
 
-    # הנוסחה הישנה, ממוצע משוקלל, הטילה תקרה של BERT_WEIGHT·100 על
-    # ציון המודל וכך מנעה ממנו לחצות את הסף לבדו. scoring.combine
-    # החליף אותה ב-max, ולכן האזהרה שהייתה כאן אינה רלוונטית עוד:
-    # כל מנוע יכול להגיע ל-100 בכוחות עצמו.
+    # The old weighted average capped the model at BERT_WEIGHT*100 and
+    # kept it from crossing the threshold alone. scoring.combine uses
+    # max now, so that warning no longer applies.
     if n_sender < len(df) * 0.5 and not args.bert_only:
         missing = len(df) - n_sender
-        print(f"\n  ℹ  ב-{missing} שורות ({missing / len(df) * 100:.0f}%) אין כתובת שולח,")
-        print("     ולכן שלוש מתשע בדיקות מנוע החוקים — כולל התחזות למותג —")
-        print("     לא יכולות לרוץ עליהן. בתוסף Gmail תמיד מספק שולח.")
-        print("     להשוואה על שורות שבהן המנוע כן עובד:")
+        print(f"\n  i  {missing} rows ({missing / len(df) * 100:.0f}%) carry no sender, so three")
+        print("     of the nine rules - brand impersonation among them - cannot")
+        print("     run. In Gmail a sender is always there. To compare on rows")
+        print("     where the engine does work:")
         print("       python ML/evaluate.py --split test --with-sender")
     print()
 

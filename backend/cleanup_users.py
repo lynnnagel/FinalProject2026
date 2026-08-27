@@ -1,21 +1,18 @@
 """
-ניקוי חשבונות שנוצרו בטעות מכתובות של שולחים.
+Clear accounts that were created by mistake from sender addresses.
 
-הרקע: סקריפט התוכן של התוסף זיהה את בעל התיבה על ידי חיפוש
-`[data-hovercard-id]` ו-`[email]` בכל הדף. גוגל תולה את המאפיינים האלה
-על כל שבב של אדם, כולל שולחי המיילים, ולכן הכתובת שנבחרה הייתה בדרך
-כלל של שולח כלשהו. /scan יוצר משתמש חדש לכל כתובת שאינה מוכרת, וכך
-נוצרו במסד חשבונות בשמות noreply@discord.com ו-info@wolt.com, עם
-הסריקות רשומות תחתיהם.
+The extension used to identify the mailbox owner by scanning the page
+for [data-hovercard-id] and [email]. Google hangs those on every person
+chip, senders included, so the address picked was usually a sender's -
+and /scan creates a user for any address it does not know. The bug is
+fixed in content.js; this clears what it left behind.
 
-הבאג תוקן ב-content.js. הסקריפט הזה מנקה את מה שכבר נוצר.
+    python cleanup_users.py                    # list only, changes nothing
+    python cleanup_users.py --delete           # delete, after confirming
+    python cleanup_users.py --delete --yes     # no confirmation
 
-הרצה (מתוך backend/):
-    python cleanup_users.py                    # מציג בלבד, לא משנה דבר
-    python cleanup_users.py --delete           # מוחק אחרי אישור
-    python cleanup_users.py --delete --yes     # בלי לשאול
-
-למחיקת חשבונות ששמם ידוע, כולל רשומים — למשל אלה שנוצרו ב-check_demo.py:
+To delete named accounts, registered ones included - the ones
+check_demo.py creates, for instance:
     python cleanup_users.py --emails demo-user@example.com --delete
 """
 from __future__ import annotations
@@ -28,10 +25,11 @@ from models import User, EmailRecord, Alert
 
 def suspect_users(db) -> list[User]:
     """
-    חשבונות ללא סיסמה שאינם משמשים כמפקח על אף אחד.
+    Accounts with no password that are nobody's guardian.
 
-    היעדר סיסמה פירושו שהחשבון לא נוצר בהרשמה אלא אוטומטית בסריקה.
-    חשבון שמשמש כמפקח נשמר בכל מקרה — הקישור אליו נעשה במפורש.
+    No password means the account came from a scan rather than a
+    registration. A guardian is kept regardless - that link was made
+    deliberately.
     """
     guardian_ids = {
         gid for (gid,) in db.query(User.guardian_id).filter(User.guardian_id.isnot(None))
@@ -43,14 +41,13 @@ def suspect_users(db) -> list[User]:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="ניקוי חשבונות שנוצרו מכתובות שולחים")
-    ap.add_argument("--delete", action="store_true", help="למחוק בפועל")
-    ap.add_argument("--yes", action="store_true", help="לא לשאול לאישור")
+    ap = argparse.ArgumentParser(description="clear accounts created from sender addresses")
+    ap.add_argument("--delete", action="store_true", help="actually delete")
+    ap.add_argument("--yes", action="store_true", help="do not ask for confirmation")
     ap.add_argument("--keep", nargs="*", default=[],
-                    help="כתובות לשמור גם אם אין להן סיסמה")
+                    help="addresses to keep even with no password")
     ap.add_argument("--emails", nargs="*", default=[],
-                    help="למחוק כתובות מסוימות, גם אם יש להן סיסמה "
-                         "(למשל חשבונות הבדיקה של check_demo.py)")
+                    help="delete these addresses, password or not")
     args = ap.parse_args()
 
     init_db()
@@ -58,49 +55,46 @@ def main() -> None:
     try:
         keep = {e.strip().lower() for e in args.keep}
 
-        # Named addresses are deleted whether or not they have a
-        # password. The automatic sweep below never touches a registered
-        # account, which is the right default - but the check scripts
-        # register real accounts, and those are worth being able to
-        # clear by name after a rehearsal.
+        # The sweep below never touches a registered account, which is
+        # the right default - but the check scripts register real ones.
         if args.emails:
             wanted = {e.strip().lower() for e in args.emails}
             targets = [u for u in db.query(User).order_by(User.id).all()
                        if u.email.lower() in wanted]
             if not targets:
-                print("\nאף אחת מהכתובות שביקשת אינה במסד.\n")
+                print("\nNone of those addresses are in the database.\n")
                 return
         else:
             targets = [u for u in suspect_users(db) if u.email.lower() not in keep]
 
         registered = db.query(User).filter(User.password_hash.isnot(None)).count()
-        print(f"\n{registered} חשבונות רשומים (עם סיסמה) — הם לא ייגעו.\n")
+        print(f"\n{registered} registered account(s) - untouched.\n")
 
         if not targets:
-            print("אין חשבונות למחיקה.\n")
+            print("Nothing to delete.\n")
             return
 
-        print(f"{len(targets)} חשבונות "
-              f"{'שביקשת למחוק' if args.emails else 'שנוצרו אוטומטית'}:\n")
+        print(f"{len(targets)} account(s) "
+              f"{'you named' if args.emails else 'created automatically'}:\n")
         total_emails = 0
         for u in targets:
             n = db.query(EmailRecord).filter(EmailRecord.user_id == u.id).count()
             total_emails += n
-            print(f"  {u.email:<40} {n:>4} סריקות")
+            print(f"  {u.email:<40} {n:>4} scans")
 
-        print(f"\nסך הכול {total_emails} רשומות סריקה ישויכו למחיקה.")
+        print(f"\n{total_emails} scan record(s) will go with them.")
 
         if not args.delete:
-            print("\nלא נמחק דבר. להרצה בפועל:")
+            print("\nNothing was deleted. To do it:")
             print("    python cleanup_users.py --delete")
-            print("לשמירת כתובת מסוימת:")
+            print("To keep one address:")
             print("    python cleanup_users.py --delete --keep me@example.com\n")
             return
 
         if not args.yes:
-            answer = input("\nלמחוק? הקלידי כן לאישור: ").strip()
-            if answer not in ("כן", "yes", "y"):
-                print("בוטל.\n")
+            answer = input("\nDelete? type yes to confirm: ").strip().lower()
+            if answer not in ("yes", "y", "כן"):
+                print("Cancelled.\n")
                 return
 
         for u in targets:
@@ -110,7 +104,7 @@ def main() -> None:
             )
             db.delete(u)
         db.commit()
-        print(f"\nנמחקו {len(targets)} חשבונות ו-{total_emails} רשומות סריקה.\n")
+        print(f"\nDeleted {len(targets)} account(s) and {total_emails} scan record(s).\n")
     finally:
         db.close()
 

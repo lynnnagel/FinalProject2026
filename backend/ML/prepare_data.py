@@ -31,16 +31,12 @@ logger = logging.getLogger(__name__)
 
 def clean_text(text: str) -> str:
     """
-    ניקוי טקסט לפני אימון.
+    Clean the text before training.
 
-    הערה חשובה: בעבר עמד כאן  re.sub(r"http\\S+", " URL ", text)  שהחליף
-    כל קישור במילה "URL". זה מחק את אחד הסיגנלים החזקים ביותר לזיהוי
-    פישינג — 'paypal-verify.tk' ו-'netflix.com' הפכו שניהם לאותה מחרוזת,
-    והמודל לא יכול היה ללמוד להבדיל ביניהם. נשארו לו בעיקר מילות דחיפות,
-    שקיימות גם במיילים שיווקיים לגיטימיים, ולכן הוא סימן כמעט הכל כפישינג.
-
-    כעת הקישור נשמר, אך נחתך ל-80 תווים כדי שנתיבים ארוכים לא יבלעו את
-    תקציב הטוקנים על חשבון גוף המייל.
+    Links used to be replaced with the word "URL", which erased one of
+    the strongest signals there is: paypal-verify.tk and netflix.com
+    became the same string. The link is kept now, cut to 80 characters
+    so long paths do not eat the token budget.
     """
     if not isinstance(text, str):
         return ""
@@ -51,24 +47,21 @@ def clean_text(text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# ספאם אינו פישינג
+# Spam is not phishing.
 #
-# הקורפוסים הציבוריים מתייגים אותם יחד: SpamAssassin מסמן ספאם ב-1,
-# ומיפוי התוויות של Kaggle העביר גם "spam" וגם "phishing" ל-1. המשמעות
-# היא שהמודל **מעולם לא נדרש להבחין ביניהם** — ומדידה בתיבה אמיתית
-# הראתה בדיוק את זה: פרסומת מסחרית קיבלה 99.99, אותו ציון כמו בקשה
-# לפרטי אשראי.
+# The public corpora label them together, so the model was never asked
+# to tell them apart - and it showed: an advertisement scored 99.99,
+# the same as a request for card details. LURA detects phishing, and
+# marking an advertisement as danger costs trust in every other alert.
 #
-# אבל LURA מזהה פישינג ולא ספאם. פרסומת מעצבנת אינה איום, וסימונה
-# כסכנה שוחק את אמון המשתמש בכל שאר ההתרעות.
+# SPAM_LABEL decides what happens to those rows:
+#   0     - spam is not phishing. The default, and what the product does.
+#   1     - the old behaviour, for comparison.
+#   None  - drop them entirely.
 #
-# SPAM_LABEL קובע מה לעשות עם השורות האלה:
-#   0     – ספאם הוא לא פישינג. ברירת המחדל, ומה שהמוצר באמת עושה.
-#   1     – ההתנהגות הישנה, לצורך השוואה.
-#   None  – להשמיט לגמרי; המודל לא רואה ספאם כלל.
-#
-# הערה למדידה: SPAM_LABEL=0 מוריד את הדיוק המדווח על קורפוס שמתייג
-# ספאם כפישינג. זה צפוי — המספר החדש מודד משימה אחרת, וצרה יותר.
+# Note for measurement: 0 lowers the reported accuracy on a corpus that
+# labels spam as phishing. That is expected - it measures a different,
+# narrower task.
 # ---------------------------------------------------------------------------
 SPAM_LABEL: int | None = 0
 
@@ -91,8 +84,8 @@ def load_kaggle(path: str) -> pd.DataFrame:
             {"spam": SPAM_LABEL, "phishing": 1, "ham": 0, "legitimate": 0}
         )
         if spam_rows:
-            logger.info("Kaggle: %d שורות ספאם תויגו כ-%s",
-                        spam_rows, "הושמטו" if SPAM_LABEL is None else SPAM_LABEL)
+            logger.info("Kaggle: %d spam rows labelled %s",
+                        spam_rows, "dropped" if SPAM_LABEL is None else SPAM_LABEL)
         if SPAM_LABEL is None:
             df = df.dropna(subset=["label"])
     df["label"] = pd.to_numeric(df["label"], errors="coerce").fillna(0).astype(int)
@@ -131,16 +124,16 @@ def load_spamassassin(path: str) -> pd.DataFrame:
     df.columns = ["text", "label"]
     df["label"] = pd.to_numeric(df["label"], errors="coerce").fillna(0).astype(int).clip(0, 1)
 
-    # ב-SpamAssassin, 1 פירושו ספאם ולא פישינג. הקורפוס הזה נאסף
-    # בשנות ה-2000 כאוסף ham/spam, ואין בו פישינג כלל.
+    # In SpamAssassin 1 means spam, not phishing - it is a ham/spam
+    # collection from the 2000s with no phishing in it.
     spam_rows = int((df["label"] == 1).sum())
     if spam_rows:
         if SPAM_LABEL is None:
             df = df[df["label"] == 0]
-            logger.info("SpamAssassin: %d שורות ספאם הושמטו", spam_rows)
+            logger.info("SpamAssassin: %d spam rows dropped", spam_rows)
         else:
             df.loc[df["label"] == 1, "label"] = SPAM_LABEL
-            logger.info("SpamAssassin: %d שורות ספאם תויגו כ-%d",
+            logger.info("SpamAssassin: %d spam rows labelled %d",
                         spam_rows, SPAM_LABEL)
     return df
 
@@ -154,10 +147,9 @@ def load_hebrew(path: str) -> pd.DataFrame:
     df = df[[text_col, label_col]].dropna()
     df.columns = ["text", "label"]
     df["label"] = pd.to_numeric(df["label"], errors="coerce").fillna(0).astype(int).clip(0, 1)
-    # ההכפלה נעשית אחרי החלוקה, על סט האימון בלבד (ראה oversample_hebrew).
-    # כשהיא נעשתה כאן, חמשת העותקים של כל מייל התפזרו בין train/val/test,
-    # כך שכמעט כל מייל עברי בסט הבדיקה הופיע גם באימון — והדיוק המדווח
-    # היה מנופח.
+    # Oversampling happens after the split, on train only. When it ran
+    # here, the copies of each message scattered across train/val/test
+    # and nearly every Hebrew test message had been seen in training.
     logger.info("Hebrew: %d samples", len(df))
     return df
 
@@ -167,17 +159,15 @@ HEBREW_CHARS = r"[֐-׿]"
 
 def balance_sources(df: pd.DataFrame, max_single_frac: float) -> pd.DataFrame:
     """
-    מגביל את משקלם של מקורות חד-מחלקתיים.
+    Cap how much of the corpus comes from single-class sources.
 
-    Enron הוא 100% לגיטימי ו-PhishTank 100% פישינג. כשהם מהווים חלק
-    גדול מהמאגר, המודל יכול לקבל דיוק גבוה בקיצור דרך: ללמוד לזהות את
-    סגנון המאגר ולהסיק ממנו את התווית, בלי ללמוד מה מאפיין פישינג.
-    בדיקת leave-one-source-out הראתה שזה בדיוק מה שקרה — הדיוק צנח
-    מ-99.6% ל-65.9% על מקור שלא נראה באימון.
+    Enron is 100% legitimate and PhishTank 100% phishing. When they
+    dominate, the model can score well by recognising the corpus rather
+    than the phishing - leave-one-source-out showed exactly that, with
+    accuracy falling from 99.6% to 65.9% on an unseen source.
 
-    ההגבלה כאן אינה פותרת את הבעיה לגמרי; היא מקטינה את התגמול על
-    קיצור הדרך ומאלצת את המודל להישען יותר על המקורות שמכילים את שתי
-    המחלקות, שם ההבחנה חייבת להיות מהותית.
+    This does not solve it; it reduces the reward for the shortcut and
+    pushes the model toward sources that carry both classes.
     """
     if max_single_frac >= 1.0:
         return df
@@ -193,17 +183,17 @@ def balance_sources(df: pd.DataFrame, max_single_frac: float) -> pd.DataFrame:
 
     mixed_rows = int((~df["source"].isin(single_sources)).sum())
     if mixed_rows == 0:
-        logger.warning("כל המקורות חד-מחלקתיים — אין על מה לאזן")
+        logger.warning("every source is single-class - nothing to balance")
         return df
 
-    # התקציב הכולל למקורות החד-מחלקתיים, מחולק שווה ביניהם
+    # The budget for single-class sources, split evenly between them
     budget_total = int(mixed_rows * max_single_frac / (1 - max_single_frac))
     per_source = max(budget_total // len(single_sources), 100)
 
     kept = []
     for src, g in df.groupby("source"):
         if is_single.get(src) and len(g) > per_source:
-            logger.info("איזון מקורות: %s  %d → %d שורות", src, len(g), per_source)
+            logger.info("source balance: %s  %d -> %d rows", src, len(g), per_source)
             g = g.sample(per_source, random_state=42)
         kept.append(g)
 
@@ -212,7 +202,7 @@ def balance_sources(df: pd.DataFrame, max_single_frac: float) -> pd.DataFrame:
 
     single_after = int(out["source"].isin(single_sources).sum())
     logger.info(
-        "מקורות חד-מחלקתיים: %.1f%% מהמאגר (היה %.1f%%)",
+        "single-class sources: %.1f%% of the corpus (was %.1f%%)",
         single_after / len(out) * 100,
         int(df["source"].isin(single_sources).sum()) / len(df) * 100,
     )
@@ -221,11 +211,11 @@ def balance_sources(df: pd.DataFrame, max_single_frac: float) -> pd.DataFrame:
 
 def oversample_hebrew(df: pd.DataFrame, factor: int = 5) -> pd.DataFrame:
     """
-    מכפיל את הדוגמאות בעברית פי *factor* — על סט האימון בלבד.
+    Repeat the Hebrew examples *factor* times, on train only.
 
-    הדאטה העברי קטן ביחס לאנגלי, ובלי הכפלה המודל כמעט לא לומד את
-    השפה. ההכפלה בטוחה כאן כי היא קורית אחרי החלוקה: העותקים נשארים
-    כולם ב-train ולא מגיעים לסטי ההערכה.
+    Hebrew is small next to English, and without this the model barely
+    sees the language. It is safe here because it happens after the
+    split - every copy stays in train.
     """
     if factor <= 1:
         return df
@@ -233,7 +223,7 @@ def oversample_hebrew(df: pd.DataFrame, factor: int = 5) -> pd.DataFrame:
     is_hebrew = df["text"].str.contains(HEBREW_CHARS, na=False, regex=True)
     hebrew = df[is_hebrew]
     if hebrew.empty:
-        logger.warning("לא נמצאו דוגמאות בעברית בסט האימון")
+        logger.warning("no Hebrew examples in the training split")
         return df
 
     extra = pd.concat([hebrew] * (factor - 1), ignore_index=True)
@@ -241,7 +231,7 @@ def oversample_hebrew(df: pd.DataFrame, factor: int = 5) -> pd.DataFrame:
     out = out.sample(frac=1, random_state=42).reset_index(drop=True)
 
     logger.info(
-        "Hebrew oversample x%d on train only: %d → %d rows (%d Hebrew originals)",
+        "Hebrew oversample x%d on train only: %d -> %d rows (%d Hebrew originals)",
         factor, len(df), len(out), len(hebrew),
     )
     return out
@@ -291,9 +281,9 @@ def prepare(args: argparse.Namespace):
     else:
         logger.warning("Hebrew dataset not found - run: python ML/create_hebrew_dataset.py")
 
-    # מקורות עבריים נוספים, שניהם אופציונליים:
-    #   hebrew_generated.csv  – ML/generate_hebrew.py (מחולל קומבינטורי)
-    #   hebrew_translated.csv – ML/augment_hebrew.py  (תרגום מכונה)
+    # Extra Hebrew sources, both optional:
+    #   hebrew_generated.csv  - ML/generate_hebrew.py (combinatorial)
+    #   hebrew_translated.csv - ML/augment_hebrew.py (machine translation)
     for fname, source in (("hebrew_generated.csv", "generated"),
                           ("hebrew_translated.csv", "translated")):
         path = os.path.join(args.data_dir, fname)
@@ -301,22 +291,22 @@ def prepare(args: argparse.Namespace):
             continue
         df = pd.read_csv(path).dropna(subset=["text", "label"])
         df["label"] = df["label"].astype(int).clip(0, 1)
-        # sender ו-subject נשמרים כשהם קיימים. שלוש מבדיקות מנוע החוקים
-        # קוראות את כתובת השולח, ובלעדיה אי אפשר לכייל את האנסמבל —
-        # calibrate.py היה מודד מנוע משותק וממליץ להעביר את כל המשקל ל-BERT.
+        # sender and subject are kept when present. Three of the rules
+        # read the sender, and without it the ensemble cannot be
+        # calibrated - it would measure a crippled engine.
         df["source"] = f"hebrew_{source}"
         keep = [c for c in ("sender", "subject", "text", "label", "source")
                 if c in df.columns]
         frames.append(df[keep])
         logger.info("Hebrew (%s): %d samples (legitimate=%d, phishing=%d)%s",
                     source, len(df), int((df["label"] == 0).sum()), int(df["label"].sum()),
-                    "  [עם שולח ונושא]" if "sender" in df.columns else "")
+                    "  [with sender and subject]" if "sender" in df.columns else "")
 
-    # ── דואר תפעולי לגיטימי ──────────────────────────────────────────
-    # הקטגוריה שחסרה בקורפוסים לגמרי: אישור הזמנה, חידוש מנוי, קבלה,
-    # התראת כניסה, איפוס סיסמה יזום. המודל נתן להם 99.99 פשוט מפני
-    # שלא ראה אותם מעולם — הם דומים לפישינג בכל מאפיין שטחי, וההבדל
-    # היחיד הוא שהם אמיתיים.
+    # -- legitimate operational mail --------------------------------
+    # The category missing from the corpora entirely: order
+    # confirmations, renewals, receipts, sign-in alerts, requested
+    # password resets. The model scored them 99.99 simply because it had
+    # never seen one - they look like phishing in every shallow way.
     #     ML/generate_legitimate.py --n 2000
     legit_path = os.path.join(args.data_dir, "legitimate_generated.csv")
     if os.path.exists(legit_path):
@@ -326,18 +316,19 @@ def prepare(args: argparse.Namespace):
         keep = [c for c in ("sender", "subject", "text", "label", "source")
                 if c in df.columns]
         frames.append(df[keep])
-        logger.info("דואר תפעולי לגיטימי: %d דוגמאות", len(df))
+        logger.info("legitimate operational mail: %d examples", len(df))
     else:
         logger.warning(
-            "אין דואר תפעולי לגיטימי. המודל ייתן ציון גבוה לאישורי הזמנה "
-            "ולאיפוסי סיסמה. ליצירה:  python ML/generate_legitimate.py --n 2000"
+            "No legitimate operational mail. The model will score order "
+            "confirmations and password resets high. To generate some:  "
+            "python ML/generate_legitimate.py --n 2000"
         )
 
     if not any(os.path.exists(os.path.join(args.data_dir, f))
                for f in ("hebrew_generated.csv", "hebrew_translated.csv")):
         logger.warning(
-            "אין מקור עברי מורחב. המאגר יכיל ~300 מיילים בעברית בלבד (0.2%%). "
-            "להרחבה:  python ML/generate_hebrew.py --n 3000"
+            "No extended Hebrew source. The corpus will hold only ~300 Hebrew "
+            "messages (0.2%%). To extend:  python ML/generate_hebrew.py --n 3000"
         )
 
     if not frames:
@@ -347,30 +338,30 @@ def prepare(args: argparse.Namespace):
     combined["text"] = combined["text"].apply(clean_text)
     combined = combined[combined["text"].str.len() > 10].reset_index(drop=True)
 
-    # רוב המקורות מספקים גוף מייל אחד בלבד. השדות מולאו כדי ששלוש
-    # בדיקות מנוע החוקים שקוראות את השולח לא ייפלו על עמודה חסרה.
+    # Most sources give a body only. These columns are filled so the
+    # three sender-reading rules do not fail on a missing column.
     for col in ("sender", "subject"):
         if col not in combined.columns:
             combined[col] = ""
         combined[col] = combined[col].fillna("").astype(str)
 
-    # מקור הקורפוס נשמר כדי שאפשר יהיה לבדוק אם המחלקות ניתנות
-    # להפרדה לפי מקור — מצב שבו המודל לומד "מאיזה מאגר זה הגיע"
-    # במקום "האם זה פישינג". ראה ML/source_check.py.
+    # The source is kept so we can test whether the classes are
+    # separable by corpus - the case where the model learns "which
+    # dataset is this" instead of "is this phishing". See source_check.py.
     if "source" not in combined.columns:
         combined["source"] = "unknown"
     combined["source"] = combined["source"].fillna("unknown").astype(str)
 
     with_sender = int((combined["sender"] != "").sum())
     logger.info(
-        "שורות עם שולח ונושא: %d מתוך %d (%.1f%%) — רק הן מאפשרות "
-        "להעריך את מנוע החוקים במלואו",
+        "rows with a sender and subject: %d of %d (%.1f%%) - only these "
+        "allow the rule engine to be evaluated in full",
         with_sender, len(combined), with_sender / len(combined) * 100,
     )
 
-    # ── הסרת כפילויות — חייבת לקרות לפני החלוקה ────────────────────────
-    # מייל שמופיע פעמיים ומתפצל בין train ל-test גורם למודל להיבחן על
-    # טקסט שהוא כבר שינן, וכל מדד שיתקבל יהיה גבוה מהאמת.
+    # -- dedup, which has to happen before the split ------------------
+    # A message that appears twice and lands in both train and test
+    # means the model is tested on text it memorised.
     before = len(combined)
     combined = combined.drop_duplicates(subset="text").reset_index(drop=True)
     removed = before - len(combined)
@@ -390,7 +381,7 @@ def prepare(args: argparse.Namespace):
     train, tmp = train_test_split(combined, test_size=0.30, stratify=combined["label"], random_state=42)
     val, test = train_test_split(tmp, test_size=0.50, stratify=tmp["label"], random_state=42)
 
-    # ── הכפלת העברית — אחרי החלוקה, ורק על סט האימון ───────────────────
+    # -- Hebrew oversampling: after the split, train only -------------
     train = oversample_hebrew(train, factor=args.hebrew_factor)
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -398,13 +389,13 @@ def prepare(args: argparse.Namespace):
     val.to_csv(os.path.join(args.output_dir, "val.csv"), index=False)
     test.to_csv(os.path.join(args.output_dir, "test.csv"), index=False)
 
-    # אימות: אחרי התיקון החפיפה חייבת להיות אפס
+    # There must be no overlap left
     leak_val = len(set(train["text"]) & set(val["text"]))
     leak_test = len(set(train["text"]) & set(test["text"]))
     if leak_val or leak_test:
-        logger.error("דליפה! train∩val=%d, train∩test=%d", leak_val, leak_test)
+        logger.error("LEAK! train/val=%d, train/test=%d", leak_val, leak_test)
     else:
-        logger.info("אימות: אין חפיפה בין סטי האימון, הוולידציה והבדיקה ✓")
+        logger.info("verified: no overlap between train, val and test")
 
     logger.info("Saved: train=%d | val=%d | test=%d", len(train), len(val), len(test))
     logger.info("Output: %s", args.output_dir)
@@ -418,13 +409,13 @@ if __name__ == "__main__":
     parser.add_argument("--output_dir", default="ML/data/processed")
     parser.add_argument(
         "--hebrew_factor", type=int, default=5,
-        help="פי כמה להכפיל את הדוגמאות בעברית בסט האימון (1 = ללא הכפלה)",
+        help="how many times to repeat the Hebrew examples in train (1 = none)",
     )
     parser.add_argument(
         "--max-single-class-frac", dest="max_single_class_frac",
         type=float, default=0.15,
-        help="חלקם המרבי של מקורות חד-מחלקתיים (Enron, PhishTank) במאגר. "
-             "ערך נמוך מקטין את התגמול על לימוד המאגר במקום לימוד פישינג. "
-             "1.0 מבטל את האיזון.",
+        help="maximum share of single-class sources (Enron, PhishTank). "
+             "A lower value reduces the reward for learning the corpus "
+             "instead of the phishing. 1.0 disables the balancing.",
     )
     prepare(parser.parse_args())

@@ -33,9 +33,10 @@ import os
 import random
 
 # ---------------------------------------------------------------------------
-# חברות והדומיינים שמהם הן באמת שולחות.
-# הכתובות כאן הן בדיוק אלה שמנוע החוקים מזהה כשולח מוכר, ולכן הדוגמאות
-# מלמדות את המודל את הצירוף שהוא לא ראה: שולח לגיטימי + תוכן תפעולי.
+# Companies and the domains they really send from. These are exactly
+# the addresses the rule engine recognises as a known sender, so these
+# examples teach the model the combination it never saw: a legitimate
+# sender with operational content.
 # ---------------------------------------------------------------------------
 BRANDS_EN = [
     ("Netflix", "netflix.com"), ("Spotify", "spotify.com"),
@@ -64,11 +65,11 @@ MAILBOXES = ["noreply", "no-reply", "orders", "service", "info",
 SUBDOMAINS = ["", "", "", "mail.", "e.", "email.", "news."]
 
 # ---------------------------------------------------------------------------
-# תבניות. {brand} {order} {amount} {date} {link} מוחלפים.
+# Templates. {brand} {order} {amount} {date} {link} are substituted.
 #
-# חלקן מכילות במכוון את המילים שמפילות את המודל — password, account,
-# verify, חשבון, סיסמה — כי בדיוק שם הוא טועה. דוגמה תפעולית בלי
-# המילים האלה לא מלמדת אותו דבר.
+# Some deliberately carry the words the model trips on - password,
+# account, verify - because that is exactly where it errs. An
+# operational example without them teaches it nothing.
 # ---------------------------------------------------------------------------
 TEMPLATES_EN = [
     ("Your {brand} order #{order} has shipped",
@@ -182,13 +183,13 @@ def make_row(rng: random.Random, hebrew: bool) -> dict:
 
 def main() -> None:
     ap = argparse.ArgumentParser(
-        description="מחולל דואר תפעולי לגיטימי")
-    ap.add_argument("--n", type=int, default=2000, help="כמה דוגמאות")
+        description="generator for legitimate operational mail")
+    ap.add_argument("--n", type=int, default=2000, help="how many examples")
     ap.add_argument("--hebrew-share", type=float, default=0.4,
-                    help="חלק העברית מתוך הסך הכול")
+                    help="Hebrew share of the total")
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--preview", type=int, default=0,
-                    help="להדפיס כמה דוגמאות ולצאת")
+                    help="print a few examples and exit")
     ap.add_argument("--out", default="ML/data/legitimate_generated.csv")
     args = ap.parse_args()
 
@@ -197,16 +198,15 @@ def main() -> None:
     if args.preview:
         for i in range(args.preview):
             row = make_row(rng, hebrew=i % 2 == 0)
-            print(f"\n{'─' * 66}")
-            print(f"מאת:   {row['sender']}")
-            print(f"נושא:  {row['subject']}")
+            print(f"\n{'-' * 66}")
+            print(f"from:     {row['sender']}")
+            print(f"subject:  {row['subject']}")
             print(f"\n{row['content']}")
         print()
         return
 
-    # ייחוד לפי (נושא, גוף): התבניות חוזרות, וכפילויות מנפחות את הקורפוס
-    # בלי להוסיף מידע. השילוב של 16 מותגים × 10 תבניות × פרטים אקראיים
-    # נותן מגוון גדול, אבל לא אינסופי.
+    # Unique by (subject, body): the templates repeat, and duplicates
+    # inflate the corpus without adding information.
     seen, rows = set(), []
     attempts = 0
     while len(rows) < args.n and attempts < args.n * 50:
@@ -226,12 +226,12 @@ def main() -> None:
         writer.writerows(rows)
 
     heb = sum(1 for r in rows if r["lang"] == "he")
-    print(f"\nנכתבו {len(rows):,} דוגמאות ל-{args.out}")
-    print(f"  עברית: {heb:,}  |  אנגלית: {len(rows) - heb:,}")
-    print(f"  כולן מתויגות 0 — דואר תפעולי לגיטימי\n")
+    print(f"\nwrote {len(rows):,} examples to {args.out}")
+    print(f"  Hebrew: {heb:,}  |  English: {len(rows) - heb:,}")
+    print(f"  all labelled 0 - legitimate operational mail\n")
     if len(rows) < args.n:
-        print(f"  ⚠  התבקשו {args.n:,} אך התקבלו {len(rows):,} ייחודיות.")
-        print("     התבניות מוצו; להרחבה יש להוסיף מותגים או תבניות.\n")
+        print(f"  !  {args.n:,} requested, {len(rows):,} unique produced.")
+        print("     The templates ran out; add brands or templates.\n")
 
 
 if __name__ == "__main__":
