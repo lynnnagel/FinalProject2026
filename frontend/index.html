@@ -121,13 +121,14 @@
     <div class="hero-copy">
       <div class="eyebrow"><span class="eyebrow-dot"></span>זיהוי פישינג בזמן אמת</div>
       <h1>הגן על עצמך<br><em>מפני פישינג</em></h1>
-      <p class="hero-sub">LURA סורקת את תיבת הדוא"ל שלך בזמן אמת ומתריעה לפני שתלחץ
-        על קישור מסוכן. תמיכה בעברית ואנגלית, מצב מפקח מובנה, והתקנה בלחיצה אחת.</p>
+      <p class="hero-sub">LURA סורקת כל מייל שנכנס לתיבה שלך ומתריעה לפני שתלחץ
+        על קישור מסוכן — ומסבירה בדיוק למה. עברית ואנגלית, מצב מפקח מובנה,
+        וללא עלות.</p>
       <div class="hero-actions">
-        <a href="#" class="btn btn-primary">התקן את התוסף</a>
-        <a href="#" class="btn btn-secondary">נסה סריקת קישור</a></div>
+        <a href="#install" class="btn btn-primary">התקן את התוסף</a>
+        <a href="#demo" class="btn btn-secondary">ראה איך זה נראה</a></div>
       <div class="hero-stats">
-        <div class="stat"><b>99.4%</b><span>דיוק בזיהוי</span></div>
+        <div class="stat"><b>99.4%</b><span>דיוק על סט הבדיקה</span></div>
         <div class="stat"><b>&lt;2s</b><span>זמן סריקה</span></div>
         <div class="stat"><b>2</b><span>שפות נתמכות</span></div></div>
     </div>
@@ -135,7 +136,7 @@
 </div>
 
 <!-- הדגמה -->
-<section class="sec rv">
+<section class="sec rv" id="demo">
   <div class="container">
     <div class="sec-head">
       <div class="sec-tag">הדגמה</div>
@@ -229,7 +230,7 @@
         <div class="step-ico"><svg viewBox="0 0 24 24">
           <path d="M20.5 6.5l-8.5 6-8.5-6"/><rect x="3.5" y="5" width="17" height="14" rx="2.5"/></svg></div>
         <h4>מייל נכנס</h4>
-        <p>ברגע שמייל מגיע לתיבה, LURA קוראת את השולח, הנושא והתוכן — הכל במחשב שלך.</p></div>
+        <p>ברגע שמייל מופיע בתיבה, התוסף קורא את השולח, הנושא והתוכן ושולח אותם לסריקה.</p></div>
       <div class="step">
         <div class="step-ico"><svg viewBox="0 0 24 24">
           <circle cx="11" cy="11" r="7"/><path d="M16.2 16.2L21 21"/></svg></div>
@@ -240,7 +241,7 @@
           <path d="M12 2.6l7.5 3.2v5.9c0 4.5-3.1 8.2-7.5 9.1-4.4-.9-7.5-4.6-7.5-9.1V5.8L12 2.6z"/>
           <path d="M9.2 12l2.1 2.1 4-4.3"/></svg></div>
         <h4>סימון והתראה</h4>
-        <p>המייל מקבל צבע לפי רמת הסיכון. אם הוגדר מפקח — נשלחת אליו התראה אוטומטית.</p></div>
+        <p>המייל מקבל צבע לפי רמת הסיכון, עם רשימת הסיבות. אם הוגדר מפקח — נשלחת אליו התראה.</p></div>
     </div>
   </div>
 </section>
@@ -254,11 +255,11 @@
     <div class="catch">
       <div class="ct"><span class="ct-ic"><svg viewBox="0 0 24 24">
         <circle cx="11" cy="11" r="7"/><path d="M16.2 16.2L21 21"/></svg></span>
-        <div><h4>ניסוחים חשודים</h4><p>מעל 50 ביטויים בעברית ובאנגלית</p></div></div>
+        <div><h4>ניסוחים חשודים</h4><p>84 ביטויים בעברית ובאנגלית</p></div></div>
       <div class="ct"><span class="ct-ic"><svg viewBox="0 0 24 24">
         <path d="M12 2.6l7.5 3.2v5.9c0 4.5-3.1 8.2-7.5 9.1-4.4-.9-7.5-4.6-7.5-9.1V5.8L12 2.6z"/>
         <path d="M12 9v4M12 16v.2"/></svg></span>
-        <div><h4>התחזות לארגון</h4><p>בנק, ביטוח או חברה מוכרת</p></div></div>
+        <div><h4>התחזות לארגון</h4><p>100 מותגים והדומיינים האמיתיים שלהם</p></div></div>
       <div class="ct"><span class="ct-ic"><svg viewBox="0 0 24 24">
         <path d="M20.5 6.5l-8.5 6-8.5-6"/><rect x="3.5" y="5" width="17" height="14" rx="2.5"/></svg></span>
         <div><h4>שולח מזויף</h4><p>כתובת שמחקה שם אמיתי</p></div></div>
@@ -303,7 +304,8 @@
         <li class="gstep"><span class="gnum">3</span>
           <span><b>וזהו</b><span>המפקח לא צריך להתקין דבר — ההתראות מגיעות למייל שלו.</span></span></li>
       </ul>
-      <a href="#" class="btn btn-primary">הפעל מצב מפקח</a>
+      <a href="dashboard.html#guardian" class="btn btn-primary"
+         onclick="goGuardian();return false">הפעל מצב מפקח</a>
     </div>
 
     <div class="alert-mock">
@@ -335,13 +337,36 @@
   </div>
 </section>
 
+<!-- התקנה -->
+<section class="sec rv" id="install" style="padding-top:0">
+  <div class="container">
+    <div class="sec-head"><div class="sec-tag">התקנה</div>
+      <h2>ארבעה שלבים, פעם אחת</h2>
+      <p>התוסף עדיין אינו בחנות של Chrome, ולכן ההתקנה היא במצב מפתח — קובץ אחד שמורידים ופותחים.</p></div>
+    <div class="install">
+      <div class="instep"><div class="innum">1</div>
+        <b>הורדת התוסף</b><p>פותחים את תיקיית <code>extension</code> של הפרויקט על המחשב.</p></div>
+      <div class="instep"><div class="innum">2</div>
+        <b>מצב מפתח</b><p>ב-Chrome נכנסים ל-<code>chrome://extensions</code> ומדליקים
+          את "מצב מפתח" בפינה.</p></div>
+      <div class="instep"><div class="innum">3</div>
+        <b>טעינת התיקייה</b><p>לוחצים על "טען תוסף לא ארוז" ובוחרים את התיקייה.</p></div>
+      <div class="instep"><div class="innum">4</div>
+        <b>התחברות</b><p>נכנסים לחשבון דרך התוסף, פותחים את Gmail — והתגים מופיעים.</p></div>
+    </div>
+    <div class="hero-actions">
+      <a href="login.html" id="installCta" class="btn btn-primary">צור חשבון</a>
+    </div>
+  </div>
+</section>
+
 <section class="cta">
   <div class="cta-in">
     <h2>אל תיקח את <em>הפיתיון</em></h2>
     <p>התקנה אחת, והתיבה שלך מוגנת. חינם, בעברית, ובלי שתצטרך לעשות כלום.</p>
     <div class="cta-actions">
       <a href="#install" class="btn btn-primary">התקן את התוסף</a>
-      <a href="login.html" class="btn btn-secondary">כניסה לחשבון</a>
+      <a href="login.html" id="ctaAccount" class="btn btn-secondary">כניסה לחשבון</a>
     </div>
   </div>
 </section>

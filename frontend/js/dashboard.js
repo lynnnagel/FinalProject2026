@@ -21,14 +21,30 @@
       window.location.href = 'login.html';
     }
 
+    const SECTIONS = ['overview', 'scanner', 'alerts', 'trusted', 'guardian'];
+
     function showSection(name) {
-      ['overview','scanner','alerts','trusted','guardian'].forEach(s => {
-        document.getElementById(`sec-${s}`).style.display = s === name ? 'block' : 'none';
+      if (!SECTIONS.includes(name)) name = 'overview';
+      SECTIONS.forEach(s => {
+        const el = document.getElementById(`sec-${s}`);
+        if (el) el.style.display = s === name ? 'block' : 'none';
       });
-      document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
-      event.target.classList.add('active');
+      // Mark the matching sidebar link. This used to read the global
+      // `event`, which only exists inside a click - so calling the
+      // function from code threw and left every section hidden.
+      document.querySelectorAll('.sidebar-link').forEach(l => {
+        l.classList.toggle('active', l.getAttribute('href') === `#${name}`);
+      });
       if (name === 'trusted') loadTrusted();
     }
+
+    // Open the section named in the address. The home page sends a
+    // visitor straight to dashboard.html#guardian, and after a sign-in
+    // that hash has to survive.
+    function openSectionFromHash() {
+      showSection((location.hash || '').replace('#', '') || 'overview');
+    }
+    window.addEventListener('hashchange', openSectionFromHash);
 
     // -- known senders ---------------------------------------------
     async function loadTrusted() {
@@ -331,4 +347,9 @@
     // The bands are fetched before the first render, so a score is
     // never labelled by the fallback list when the server could have
     // said otherwise. A failed fetch resolves and the fallback stands.
+    // Which section is on screen does not depend on any request, so it
+    // is decided first. Hanging it off the data load meant that a failed
+    // load left the visitor on the overview after they had asked for
+    // guardian mode.
+    openSectionFromHash();
     loadBands().then(loadDashboard);

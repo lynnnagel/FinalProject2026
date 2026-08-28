@@ -1,5 +1,9 @@
 """
-POST /scan-url  – ניתוח קישור לזיהוי פישינג
+POST /scan-url - analyse a single link.
+
+The rule engine only: there is no message to give the model. This backs
+the "check a link" box on the home page, which is the one thing a
+visitor can try without installing anything.
 """
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -22,5 +26,6 @@ def scan_url(data: URLInput):
             "indicators": ["הזן כתובת URL תקינה"],
             "recommendation": "",
             "is_dangerous": False,
+            "url": data.url or "",
         }
     return url_detector.analyze_url(data.url.strip())

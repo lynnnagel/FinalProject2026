@@ -241,3 +241,62 @@ class TestBrandImpersonation:
             "Your account has been suspended.",
         )
         assert any("מתיימר" in i for i in r["indicators"])
+
+    def test_known_company_does_not_impersonate_another(self, det):
+        """
+        מייל אמיתי מלינקדין שהכיל את המילה "partner" סומן כמתחזה
+        לפרטנר וקיבל 45. מי ששולח מ-linkedin.com הוא לינקדין —
+        הוא אינו יכול להתחזות לאף אחד.
+        """
+        r = det.analyze_email(
+            "updates-noreply@linkedin.com",
+            "Your network: a partner update",
+            "See what your partner companies posted. https://www.linkedin.com/feed",
+        )
+        assert not any("מתיימר" in i for i in r["indicators"]), r["indicators"]
+
+    def test_ordinary_word_is_not_a_brand_claim(self, det):
+        """
+        "yes", "next" ו-"partner" הם גם שמות מותג וגם מילים רגילות.
+        מילה לבדה אינה טענה להיות המותג — נדרש גם קישור שנושא את
+        השם ליעד שאינו שלו.
+        """
+        r = det.analyze_email(
+            "news@somecompany.com",
+            "Yes, your order shipped - next steps",
+            "Track it at https://somecompany.com/track",
+        )
+        assert not any("מתיימר" in i for i in r["indicators"]), r["indicators"]
+
+    def test_ambiguous_brand_flagged_when_the_sender_carries_it(self, det):
+        """
+        אבל דומיין ששולח את השם — partner-il-secure.net — כן הופך את
+        המילה לטענה, גם בלי שום קישור בגוף.
+        """
+        r = det.analyze_email(
+            "billing@partner-il-secure.net",
+            "partner - חשבונית לתשלום",
+            "החשבונית החודשית מצורפת.",
+        )
+        assert any("מתיימר" in i for i in r["indicators"]), r["indicators"]
+
+    def test_ambiguous_brand_flagged_when_a_link_carries_it(self, det):
+        """גם קישור שנושא את השם ליעד שאינו שלו מספיק."""
+        r = det.analyze_email(
+            "noreply@mailer.net",
+            "partner - חשבונית",
+            "לתשלום: https://partner-pay.info/x",
+        )
+        assert any("מתיימר" in i for i in r["indicators"]), r["indicators"]
+
+    def test_free_mailbox_is_still_checked(self, det):
+        """
+        gmail.com מופיע בטבלה כדומיין של גוגל, אבל כל אחד יכול לפתוח
+        שם תיבה — ולכן מייל ממנו עדיין נבדק להתחזות.
+        """
+        r = det.analyze_email(
+            "service@gmail.com",
+            "בנק לאומי - אימות חשבון",
+            "אמת את חשבונך: https://leumi-verify.net/x",
+        )
+        assert any("מתיימר" in i for i in r["indicators"]), r["indicators"]

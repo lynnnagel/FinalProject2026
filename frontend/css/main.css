@@ -649,3 +649,68 @@
   .sidebar { width: 100%; flex-direction: row; flex-wrap: wrap; padding: 16px; }
   .sidebar-nav { flex-direction: row; }
 }
+/* ===========================================================================
+   מקטע ההתקנה, ותוצאת סריקת קישור בלוח הבקרה — שהוצגה עד כה בלי שום
+   עיצוב. אותה שפה: רדיוסים 8 ו-14, טוקנים מלמעלה, בלי צבע חדש.
+   =========================================================================== */
+
+.result-card{border:1px solid var(--border);border-right-width:4px;
+  border-radius:var(--r);padding:16px 18px;background:var(--bg)}
+.result-card.r-danger {border-right-color:var(--danger)}
+.result-card.r-warn   {border-right-color:#EF4444}
+.result-card.r-caution{border-right-color:var(--warn)}
+.result-card.r-safe   {border-right-color:var(--safe)}
+.result-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.result-level{font-size:15px;font-weight:600}
+.result-url{font-size:12.5px;color:var(--text-3);direction:ltr;text-align:right;
+  word-break:break-all;margin-top:2px}
+.result-score{font-size:26px;font-weight:700;letter-spacing:-.02em;flex-shrink:0}
+.r-danger .result-score,.r-danger .result-level {color:var(--danger)}
+.r-warn   .result-score,.r-warn   .result-level {color:#EF4444}
+.r-caution .result-score,.r-caution .result-level{color:var(--warn)}
+.r-safe   .result-score,.r-safe   .result-level {color:var(--safe)}
+.result-indicators{display:flex;flex-wrap:wrap;gap:7px;margin-top:14px}
+.indicator-tag{font-size:12.5px;padding:4px 10px;border-radius:99px;
+  background:var(--surface);border:1px solid var(--border);color:var(--text-2)}
+.result-recommendation{margin-top:14px;padding-top:12px;border-top:1px solid var(--border);
+  font-size:14px;color:var(--text-2)}
+.result-error{padding:14px 16px;border-radius:var(--r);font-size:14px;
+  background:#FEF2F2;border:1px solid #FCA5A5;color:#991B1B}
+
+.install{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-bottom:22px}
+.instep{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:20px}
+.instep b{display:block;font-size:15px;margin-bottom:5px}
+.instep p{font-size:13.5px;color:var(--text-2);line-height:1.6}
+.instep code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;
+  background:var(--accent-wash);border:1px solid var(--accent-line);border-radius:5px;
+  padding:1px 5px;direction:ltr;unicode-bidi:embed;display:inline-block}
+.innum{display:grid;place-items:center;width:26px;height:26px;border-radius:7px;
+  background:var(--accent-wash);color:var(--accent);font-size:13px;font-weight:600;margin-bottom:12px}
+
+@media (max-width:900px){
+  .install{grid-template-columns:1fr 1fr}
+  }
+
+/* On the dashboard the action buttons carry class="btn-primary" without
+   the .btn that supplies the padding, so they rendered at the browser's
+   default: no padding, 13px system font, label touching the edges. This
+   gives them the same box as .btn-danger, which they sit next to.
+   flex:none keeps them from being squeezed by the row they share. */
+.dash-section .btn-primary,
+.guardian-box .btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  white-space: nowrap;
+  padding: 9px 16px;
+  border: 1px solid transparent;
+  border-radius: var(--r);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.dash-section .btn-primary svg,
+.guardian-box .btn-primary svg { width: 16px; height: 16px; }
+.guardian-box .btn-danger { flex: none; white-space: nowrap; }

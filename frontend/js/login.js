@@ -67,11 +67,25 @@ async function handleLogin(e) {
     localStorage.setItem('pg_token', data.token);
     localStorage.setItem('pg_email', data.email);
     localStorage.setItem('pg_name',  data.name);
-    window.location.href = 'dashboard.html';
+    window.location.href = afterLogin();
   } catch (err) {
     errEl.textContent = err.message;
     errEl.style.display = 'block';
   }
+}
+
+// Where to land after signing in. A visitor who clicked "Guardian mode"
+// on the home page is not asking to see the dashboard overview - they
+// are asking for that one screen, and the sign-in is in the way. The
+// target is written by the home page and read back here.
+//
+// Only a same-page relative target is accepted: an attacker who can set
+// this key must not be able to bounce the user to another site right
+// after they typed their password.
+function afterLogin() {
+  const want = localStorage.getItem('pg_after_login') || '';
+  localStorage.removeItem('pg_after_login');
+  return /^[a-z_]+\.html(#[a-z]+)?$/i.test(want) ? want : 'dashboard.html';
 }
 
 async function handleRegister(e) {
@@ -107,7 +121,7 @@ async function handleRegister(e) {
     localStorage.setItem('pg_token', data.token);
     localStorage.setItem('pg_email', data.email);
     localStorage.setItem('pg_name',  data.name);
-    window.location.href = 'dashboard.html';
+    window.location.href = afterLogin();
   } catch (err) {
     errEl.textContent = err.message;
     errEl.style.display = 'block';
@@ -115,5 +129,5 @@ async function handleRegister(e) {
 }
 
 if (localStorage.getItem('pg_token')) {
-  window.location.href = 'dashboard.html';
+  window.location.href = afterLogin();
 }

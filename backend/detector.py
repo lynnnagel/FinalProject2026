@@ -233,6 +233,19 @@ class PhishingDetector:
         "תן ביס":           ["10bis.co.il"],
     }
 
+    # Brand keys that are also ordinary words. "next", "yes", "hot" and
+    # "partner" turn up in normal mail constantly, and a bare word match
+    # is not evidence of anything: a LinkedIn digest containing the word
+    # "partner" scored 45 for impersonating Partner.
+    #
+    # They stay in the table because is_trusted_sender needs their
+    # domains. For impersonation they need more than the word - a link
+    # that carries the brand name to a domain that is not the brand's.
+    AMBIGUOUS_BRANDS = frozenset({
+        "partner", "next", "yes", "hot", "golf", "fox", "booking",
+        "steam", "zoom", "slack", "notion", "מקס",
+    })
+
     _URL_RE = re.compile(
         r"https?://(?:[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%])+"
     )
@@ -272,6 +285,32 @@ class PhishingDetector:
             }
         return cls._brand_re_cache
 
+    def _brand_claimed_by_a_domain(self, brand: str, official_domains: list,
+                                   domain: str, urls: list) -> bool:
+        """
+        For an ambiguous brand: does a domain in this message carry the
+        brand name without being the brand's own?
+
+        A word alone says nothing - "our partner programme" is English,
+        not a claim. What makes it a claim is a domain that wears the
+        name: a sender at partner-il-secure.net, or a link to one. That
+        is also the attack itself, not a proxy for it.
+
+        A Hebrew key has no Latin token and so never qualifies here; it
+        stays recognition-only.
+        """
+        token = re.sub(r"[^a-z0-9]+", "", brand.lower())
+        if not token:
+            return False
+        hosts = [domain] + [self._url_domain(u) for u in urls]
+        for host in hosts:
+            if not host or token not in re.sub(r"[^a-z0-9]+", "", host):
+                continue
+            if any(self._domain_matches(host, off) for off in official_domains):
+                continue
+            return True
+        return False
+
     def _check_brand_impersonation(self, sender: str, subject: str,
                                    content: str) -> tuple[str, str, str] | None:
         """
@@ -287,9 +326,20 @@ class PhishingDetector:
         if not domain:
             return None
 
+        # The sender is a recognised company's own domain, so it is not
+        # impersonating anybody: nobody but LinkedIn can send from
+        # linkedin.com. Without this the check ran on the sender's own
+        # mail and matched whichever brand name happened to appear in
+        # it. Free mailboxes are excluded inside is_trusted_sender -
+        # gmail.com sits in the table as Google's, and anyone can open
+        # one, so mail from it is still checked.
+        if self.is_trusted_sender(sender):
+            return None
+
         patterns = self._brand_patterns()
         subject_l = (subject or "").lower()
         body_l = (content or "").lower()
+        urls = self._URL_RE.findall(content or "")
 
         # -- Step 1: the subject line ---------------------------------
         # An attacker puts the brand name in the subject to build trust
@@ -300,6 +350,10 @@ class PhishingDetector:
                 continue
             if any(self._domain_matches(domain, off) for off in official_domains):
                 return None          # נשלח מהדומיין הרשמי — תקין
+            if (brand in self.AMBIGUOUS_BRANDS
+                    and not self._brand_claimed_by_a_domain(
+                        brand, official_domains, domain, urls)):
+                continue             # מילה רגילה, לא שם מותג
             return brand, domain, "subject"
 
         # -- Step 2: the body, under stricter conditions ---------------
@@ -315,31 +369,24 @@ class PhishingDetector:
         # threshold. The impersonation was there, only not in the
         # subject line.
         #
-        # Two conditions separate the two cases:
-        #   1. There is a link, and no link resolves to the brand's own
-        #      domain. A newsletter naming a brand links to it or to its
-        #      own site; a forger links to a domain they control.
-        #   2. The sender is not itself a recognised company. Mail
-        #      genuinely from malwarebytes.com is not impersonating
-        #      Google even if it mentioned Google Chrome - which is
-        #      exactly what caused the false alarm. office365-alert.net,
-        #      by contrast, is nobody's domain in the table.
-        urls = self._URL_RE.findall(content or "")
+        # The condition: there is a link, and no link resolves to the
+        # brand's own domain. A newsletter naming a brand links to it or
+        # to its own site; a forger links to a domain they control.
+        # (The other half of the answer - that mail genuinely from
+        # malwarebytes.com is not impersonating Google - is the
+        # is_trusted_sender guard at the top of this function.)
         if not urls:
             return None
-
-        if any(
-            self._domain_matches(domain, off)
-            for offs in self.BRAND_DOMAINS.values()
-            for off in offs
-        ):
-            return None          # השולח הוא חברה מוכרת בזכות עצמה
 
         for brand, official_domains in self.BRAND_DOMAINS.items():
             if not patterns[brand].search(body_l):
                 continue
             if any(self._domain_matches(domain, off) for off in official_domains):
                 return None          # נשלח מהדומיין הרשמי — תקין
+            if (brand in self.AMBIGUOUS_BRANDS
+                    and not self._brand_claimed_by_a_domain(
+                        brand, official_domains, domain, urls)):
+                continue             # מילה רגילה, לא שם מותג
             # Does any link point at the real brand after all?
             if any(
                 self._domain_matches(url_domain, off)
