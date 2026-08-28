@@ -677,19 +677,20 @@
 .result-error{padding:14px 16px;border-radius:var(--r);font-size:14px;
   background:#FEF2F2;border:1px solid #FCA5A5;color:#991B1B}
 
-.install{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-bottom:22px}
-.instep{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:20px}
-.instep b{display:block;font-size:15px;margin-bottom:5px}
-.instep p{font-size:13.5px;color:var(--text-2);line-height:1.6}
-.instep code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;
-  background:var(--accent-wash);border:1px solid var(--accent-line);border-radius:5px;
-  padding:1px 5px;direction:ltr;unicode-bidi:embed;display:inline-block}
-.innum{display:grid;place-items:center;width:26px;height:26px;border-radius:7px;
-  background:var(--accent-wash);color:var(--accent);font-size:13px;font-weight:600;margin-bottom:12px}
+/* The install steps reuse .gsteps from the guardian section - the site
+   already has one way of drawing a numbered list, and four separate
+   cards for four short lines read as heavier than the content is. */
+/* The navbar is sticky, so an anchored section has to leave room for
+   it or its heading lands underneath. */
+#install, #demo { scroll-margin-top: 78px; }
 
-@media (max-width:900px){
-  .install{grid-template-columns:1fr 1fr}
-  }
+.install-card{background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-lg);padding:10px 26px 26px;max-width:620px;
+  box-shadow:0 1px 2px rgba(20,20,43,.04),0 10px 30px -18px rgba(20,20,43,.16)}
+.install-card .gsteps{margin:0 0 22px;padding:0}
+.install-card code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;
+  background:var(--accent-wash);border:1px solid var(--accent-line);border-radius:5px;
+  padding:1px 5px;direction:ltr;unicode-bidi:embed;display:inline-block;white-space:nowrap}
 
 /* On the dashboard the action buttons carry class="btn-primary" without
    the .btn that supplies the padding, so they rendered at the browser's
