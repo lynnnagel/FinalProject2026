@@ -49,6 +49,7 @@
     {
       "resources": [
         "icons/icon128.png",
+        "icons/logo.svg",
         "fonts/rubik-hebrew.woff2",
         "fonts/rubik-latin.woff2"
       ],

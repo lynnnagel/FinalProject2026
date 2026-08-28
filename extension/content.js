@@ -477,7 +477,7 @@ function showModal(result, sender = '') {
     <div class="pg-overlay">
       <div class="pg-box">
         <div class="pg-head">
-                    <span><img src="${chrome.runtime.getURL('icons/icon128.png')}" style="width:18px;height:18px;vertical-align:middle;margin-left:6px;">ניתוח LURA</span>
+                    <span><img src="${chrome.runtime.getURL('icons/logo.svg')}" style="width:18px;height:18px;vertical-align:middle;margin-left:6px;">ניתוח LURA</span>
           <button class="pg-x" aria-label="סגירה" title="סגירה">✕</button>
         </div>
         <div class="pg-body">

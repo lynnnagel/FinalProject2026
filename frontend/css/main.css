@@ -355,9 +355,14 @@
 }
 
 .auth-brand {
+  /* The mark and the word are one lockup, so they are laid out as a row
+     rather than an image floated next to centred text. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   font-size: 26px;
   font-weight: 900;
-  text-align: center;
   background: var(--brand-gradient);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
