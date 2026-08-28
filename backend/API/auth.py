@@ -146,8 +146,23 @@ def get_optional_user(
 
 @router.post("/register", response_model=TokenResponse)
 def register(data: RegisterRequest, db: Session = Depends(get_db)):
-    if db.query(User).filter(User.email == str(data.email)).first():
+    existing = db.query(User).filter(User.email == str(data.email)).first()
+    if existing and existing.password_hash:
         raise HTTPException(400, "כתובת המייל כבר רשומה במערכת")
+
+    if existing:
+        # A row with no password is a placeholder: guardian mode creates
+        # one for an address it is asked to watch, so that later scans
+        # have somewhere to attach. Nobody has ever signed into it, so
+        # registering claims it rather than colliding with it - without
+        # this, being named as someone's monitored account locked that
+        # address out of ever creating one.
+        existing.name = data.name or existing.name
+        existing.password_hash = hash_password(data.password)
+        db.commit(); db.refresh(existing)
+        return TokenResponse(token=create_token(existing.email),
+                             email=existing.email, name=existing.name)
+
     user = User(
         email=str(data.email),
         name=data.name or get_name_from_email(str(data.email)),

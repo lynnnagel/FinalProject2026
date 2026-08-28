@@ -46,7 +46,11 @@ class UserStats(BaseModel):
 # ---------------------------------------------------------------------------
 class GuardianConnectRequest(BaseModel):
     child_email: EmailStr
-    parent_email: EmailStr
+    # The guardian always comes from the token, never from here. The
+    # field is kept because the extension and the page still send it,
+    # and it is optional so that a stray value cannot turn a working
+    # request into a 422.
+    parent_email: Optional[EmailStr] = None
 
 
 class GuardianData(BaseModel):
@@ -55,6 +59,28 @@ class GuardianData(BaseModel):
     risk_score: float
     recent_alerts: List[dict]
     phishing_blocked_today: int
+
+
+class WatchedAccount(BaseModel):
+    """
+    One account a guardian watches, and how far it is through setup.
+
+    Linking an address is only the first of three steps - the person
+    also has to open an account and sign the extension in - and until
+    now nothing said which of them was still missing. `state` is what
+    the dashboard turns into a sentence.
+    """
+    email: str
+    name: str
+    state: str            # needs_account | needs_extension | active
+    risk_score: float
+    total_scanned: int
+    phishing_blocked_today: int
+    last_scan: Optional[str] = None
+
+
+class WatchedList(BaseModel):
+    accounts: List[WatchedAccount]
 
 
 # /auth

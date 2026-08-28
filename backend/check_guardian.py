@@ -15,6 +15,11 @@ address is already registered, give its password too - the script logs
 in as the guardian and cannot use the throwaway one:
     python check_guardian.py --guardian you@gmail.com
     python check_guardian.py --guardian you@gmail.com --guardian-password ...
+
+Linking also sends a notice to the monitored address, so with sending on
+give one that can receive. Gmail plus-addressing keeps it in your inbox:
+    python check_guardian.py --guardian you@gmail.com \
+        --guardian-password ... --monitored you+lura@gmail.com
 """
 from __future__ import annotations
 

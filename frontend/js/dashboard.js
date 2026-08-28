@@ -36,6 +36,7 @@
         l.classList.toggle('active', l.getAttribute('href') === `#${name}`);
       });
       if (name === 'trusted') loadTrusted();
+      if (name === 'guardian') loadWatched();
     }
 
     // Open the section named in the address. The home page sends a
@@ -246,19 +247,9 @@
             </div>`).join('');
         }
 
-        // Try guardian data
-        const gr = await fetch(`${API}/guardian/${userEmail}`, { headers: authHeaders() });
-        if (gr.ok) {
-          const gd = await gr.json();
-          document.getElementById('guardianData').innerHTML = `
-            <div class="guardian-child-card">
-              <h4>${esc(gd.child_name)} (${esc(gd.child_email)})</h4>
-              <div class="guardian-stats-row">
-                <span>פישינג היום: <b>${esc(gd.phishing_blocked_today)}</b></span>
-                <span>מדד סיכון: <b style="color:${riskColor(gd.risk_score)}">${Math.round(gd.risk_score)}</b></span>
-              </div>
-            </div>`;
-        }
+        // The watched accounts are loaded by the guardian section
+        // itself, from /guardian/watched, which returns all of them
+        // rather than only the busiest one.
 
       } catch (e) {
         console.error(e);
@@ -298,10 +289,76 @@
       }
     }
 
+    // -- guardian mode ---------------------------------------------
+    //
+    // Linking an address is only the first of three steps: the person
+    // also has to open an account and sign the extension in, and until
+    // both happen no alert can ever arrive. The list below names the
+    // step that is still missing instead of leaving a link that looks
+    // done and does nothing.
+    const WATCH_STATE = {
+      needs_account: {
+        label: 'ממתין לפתיחת חשבון',
+        tone: 'wait',
+        next: 'הכתובת עדיין לא פתחה חשבון ב-LURA. עד שתפתח, לא יגיעו התראות.',
+      },
+      needs_extension: {
+        label: 'ממתין לתוסף',
+        tone: 'wait',
+        next: 'יש חשבון, אבל התוסף עוד לא סרק דבר. צריך להתחבר בתוסף בכתובת הזאת ולפתוח את Gmail.',
+      },
+      active: { label: 'פעיל', tone: 'live', next: '' },
+    };
+
+    async function loadWatched() {
+      const el = document.getElementById('watchedList');
+      if (!el) return;
+      try {
+        const r = await fetch(`${API}/guardian/watched`, { headers: authHeaders() });
+        if (r.status === 401) { signOut(); return; }
+        if (!r.ok) throw new Error();
+        const list = (await r.json()).accounts || [];
+        el.innerHTML = list.length === 0
+          ? '<div class="empty-state">עדיין לא חיברת אף חשבון.</div>'
+          : list.map(watchedRow).join('');
+      } catch {
+        el.innerHTML = '<div class="empty-state">לא ניתן לטעון את הרשימה.</div>';
+      }
+    }
+
+    function watchedRow(a) {
+      const st = WATCH_STATE[a.state] || WATCH_STATE.needs_account;
+      const stats = a.state === 'active'
+        ? `<div class="watch-stats">
+             <span>נסרקו: <b>${esc(a.total_scanned)}</b></span>
+             <span>פישינג היום: <b>${esc(a.phishing_blocked_today)}</b></span>
+             <span>מדד סיכון: <b style="color:${riskColor(a.risk_score)}">${Math.round(a.risk_score)}</b></span>
+             ${a.last_scan ? `<span>סריקה אחרונה: ${esc(a.last_scan)}</span>` : ''}
+           </div>`
+        : `<p class="watch-next">${esc(st.next)}</p>`;
+      return `
+        <div class="watch-card">
+          <div class="watch-head">
+            <div>
+              <div class="watch-name">${esc(a.name)}</div>
+              <div class="watch-email">${esc(a.email)}</div>
+            </div>
+            <span class="watch-chip ${st.tone}">${esc(st.label)}</span>
+          </div>
+          ${stats}
+          <button class="btn-danger watch-remove"
+                  onclick="removeWatched('${esc(a.email)}')">הסר מעקב</button>
+        </div>`;
+    }
+
     async function connectGuardian() {
-      const childEmail = document.getElementById('childEmail').value.trim();
-      if (!childEmail) return;
+      const input = document.getElementById('childEmail');
+      const childEmail = (input.value || '').trim();
       const resultEl = document.getElementById('guardianResult');
+      if (!childEmail) {
+        resultEl.innerHTML = '<div class="form-error">נא להזין כתובת מייל</div>';
+        return;
+      }
       try {
         const r = await fetch(`${API}/guardian/connect`, {
           method: 'POST',
@@ -309,23 +366,25 @@
           body: JSON.stringify({ child_email: childEmail, parent_email: userEmail }),
         });
         const data = await r.json();
-        if (r.ok) {
-          resultEl.innerHTML = `<div class="form-success">מצב מפקח הופעל עבור ${esc(childEmail)}</div>`;
-        } else {
-          resultEl.innerHTML = `<div class="form-error">${esc(data.detail)}</div>`;
+        if (!r.ok) {
+          resultEl.innerHTML = `<div class="form-error">${esc(data.detail || 'לא ניתן לחבר')}</div>`;
+          return;
         }
+        // Say what happened and what is still missing, in that order.
+        const st = WATCH_STATE[data.state] || {};
+        const told = data.notified ? ' נשלחה אליו הודעה על כך.' : '';
+        resultEl.innerHTML =
+          `<div class="form-success">${esc(childEmail)} נוסף למעקב.${told}` +
+          (st.next ? `<br><span style="font-weight:400">${esc(st.next)}</span>` : '') +
+          '</div>';
+        input.value = '';
+        loadWatched();
       } catch {
         resultEl.innerHTML = '<div class="form-error">שגיאת חיבור לשרת</div>';
       }
     }
 
-    async function disconnectGuardian() {
-      const childEmail = document.getElementById('childEmail').value.trim();
-      if (!childEmail) {
-        document.getElementById('guardianResult').innerHTML =
-          '<div class="form-error">נא להזין כתובת מייל של הילד</div>';
-        return;
-      }
+    async function removeWatched(childEmail) {
       const resultEl = document.getElementById('guardianResult');
       try {
         const r = await fetch(`${API}/guardian/disconnect`, {
@@ -334,16 +393,15 @@
           body: JSON.stringify({ child_email: childEmail, parent_email: userEmail }),
         });
         const data = await r.json();
-        if (r.ok) {
-          resultEl.innerHTML = `<div class="form-success">השיוך של ${esc(childEmail)} הוסר בהצלחה</div>`;
-          document.getElementById('guardianData').innerHTML = '';
-        } else {
-          resultEl.innerHTML = `<div class="form-error">${esc(data.detail)}</div>`;
-        }
+        resultEl.innerHTML = r.ok
+          ? `<div class="form-success">${esc(childEmail)} הוסר מהמעקב</div>`
+          : `<div class="form-error">${esc(data.detail || 'לא ניתן להסיר')}</div>`;
+        loadWatched();
       } catch {
         resultEl.innerHTML = '<div class="form-error">שגיאת חיבור לשרת</div>';
       }
     }
+
     // The bands are fetched before the first render, so a score is
     // never labelled by the fallback list when the server could have
     // said otherwise. A failed fetch resolves and the fallback stands.

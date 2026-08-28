@@ -388,9 +388,32 @@ def check_trusted(url: str, rep: Report, token: str, email: str) -> None:
               f"removal failed ({status})", "removing a trusted sender failed")
 
 
+# Addresses reserved by RFC 2606 for documentation. Mail to them bounces,
+# and the bounce lands in the mailbox the server sends from - which is
+# how a run of this script once put two failure notices in a real inbox.
+RESERVED_SUFFIXES = ("example.com", "example.org", "example.net",
+                     ".invalid", ".test", ".localhost")
+
+
+def is_reserved(address: str) -> bool:
+    low = address.lower()
+    return any(low.endswith(suffix) for suffix in RESERVED_SUFFIXES)
+
 def check_guardian(url: str, rep: Report, guardian_email: str,
-                   monitored_email: str, keep: bool) -> None:
+                   monitored_email: str, keep: bool, mail_enabled: bool) -> None:
     section(6, "Guardian mode")
+
+    # Linking now sends a notice to the monitored address. With sending
+    # on, that address has to be one that can actually receive.
+    if mail_enabled and is_reserved(monitored_email):
+        rep.note(f"skipped: sending is on, and linking would mail "
+                 f"{monitored_email}, which bounces back into your own inbox.")
+        rep.note("to check it for real, use an address you own - Gmail "
+                 "plus-addressing works:")
+        rep.note("    python check_demo.py --monitored you+lura@gmail.com "
+                 "--guardian you@gmail.com")
+        return
+
     guardian = account(url, rep, guardian_email)
     monitored = account(url, rep, monitored_email)
     if not (guardian and monitored):
@@ -409,6 +432,36 @@ def check_guardian(url: str, rep: Report, guardian_email: str,
               "the guardian comes from the token, not from a request field",
               "anyone could make themselves guardian of someone else's inbox",
               "guardian taken from the request body")
+
+    # Only the guardian can create the link, so the monitored person has
+    # to be told it happened - and told only once, or the form becomes a
+    # way to mail them repeatedly.
+    rep.check(link.get("notified") is True,
+              "the monitored account was told about the link",
+              "nobody told the monitored account it is being watched",
+              "no notice sent to the monitored account")
+    _, again = call(url, "/guardian/connect", "POST",
+                    {"child_email": monitored_email,
+                     "parent_email": "ignored@example.com"},
+                    token=guardian)
+    rep.check(again.get("notified") is False,
+              "re-linking does not send the notice again",
+              "the notice is sent on every link, which allows mail flooding",
+              "guardian notice repeats on every link")
+
+    # Linking is one of three steps. The list has to name the one that
+    # is still missing, or a link that sends no alerts looks finished.
+    _, watched = call(url, "/guardian/watched", token=guardian)
+    rows = watched.get("accounts", [])
+    row = next((a for a in rows if a.get("email") == monitored_email), None)
+    if rep.check(row is not None,
+                 "the watched account appears in the guardian's list",
+                 "the watched account is missing from the list",
+                 "watched list does not show the account"):
+        rep.check(row.get("state") in ("needs_account", "needs_extension", "active"),
+                  f"its setup state is reported: {row.get('state')}",
+                  f"unknown setup state: {row.get('state')}",
+                  "unknown setup state")
 
     call(url, "/scan", "POST",
          {"user_email": monitored_email, **PHISHING}, token=monitored)
@@ -444,14 +497,29 @@ def check_guardian(url: str, rep: Report, guardian_email: str,
               f"another user's dashboard was exposed ({status})",
               "guardian dashboard is readable by others")
 
-    if not keep:
-        call(url, "/guardian/disconnect", "POST",
-             {"child_email": monitored_email, "parent_email": guardian_email},
+    # The monitored account can end the link itself. Without this, the
+    # only person who could undo it is the one who started it.
+    status, _ = call(url, "/guardian/disconnect", "POST",
+                     {"child_email": monitored_email,
+                      "parent_email": guardian_email},
+                     token=monitored)
+    rep.check(status == 200,
+              "the monitored account can remove its own guardian",
+              f"the monitored account cannot unlink itself ({status})",
+              "monitored account cannot unlink itself")
+
+    if keep:
+        call(url, "/guardian/connect", "POST",
+             {"child_email": monitored_email,
+              "parent_email": "ignored@example.com"},
              token=guardian)
+        rep.note("the link was restored because --keep was given")
+    else:
         rep.note("the link was removed at the end of the check")
 
     rep.note("to test the mail itself:  python check_guardian.py "
-             "--guardian YOUR_ADDRESS --guardian-password YOUR_PASSWORD")
+             "--guardian you@gmail.com --guardian-password ... "
+             "--monitored you+lura@gmail.com")
 
 
 def check_dashboard(url: str, rep: Report, token: str, email: str) -> None:
@@ -542,6 +610,11 @@ def main() -> None:
     ap.add_argument("--url", default="http://localhost:8000")
     ap.add_argument("--keep", action="store_true",
                     help="leave the guardian link in place")
+    ap.add_argument("--guardian", default="demo-guardian@example.com",
+                    help="the guardian account to test with")
+    ap.add_argument("--monitored", default="demo-monitored@example.com",
+                    help="the watched account. With mail on this has to be "
+                         "an address you can receive at")
     args = ap.parse_args()
 
     rep = Report()
@@ -557,8 +630,8 @@ def main() -> None:
     if token:
         check_scanning(args.url, rep, token, user_email)
         check_trusted(args.url, rep, token, user_email)
-    check_guardian(args.url, rep, "demo-guardian@example.com",
-                   "demo-monitored@example.com", args.keep)
+    check_guardian(args.url, rep, args.guardian, args.monitored,
+                   args.keep, mail_enabled)
     if token:
         check_dashboard(args.url, rep, token, user_email)
     check_pages(args.url, rep)

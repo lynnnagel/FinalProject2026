@@ -237,7 +237,7 @@ class TestGuardianEndpoint:
             "child_email": safe_email["user_email"],
             "parent_email": "parent@example.com",
         }, headers=stranger)
-        assert r.status_code == 404
+        assert r.status_code == 403
 
         r = client.post("/guardian/disconnect", json={
             "child_email": safe_email["user_email"],
@@ -404,6 +404,7 @@ class TestGuardianFlow:
             headers=parent_headers,
         )
         assert r.status_code == 200, r.text
+        return r
 
     def test_phishing_reaches_guardian_dashboard(
         self, client, phishing_email, parent_headers
@@ -507,4 +508,108 @@ class TestGuardianFlow:
                   "parent_email": "stranger@example.com"},
             headers=stranger,
         )
-        assert r.status_code == 404
+        assert r.status_code == 403
+
+    def test_monitored_user_can_remove_their_own_guardian(
+            self, client, phishing_email, parent_headers, make_user):
+        """
+        רק המפקח יכול להגדיר שיוך, ולכן הוא חייב להיות ניתן להסרה גם
+        על ידי המנוטר — אחרת אפשר לנטר מישהו בלי שתהיה לו דרך לעצור.
+        """
+        monitored = phishing_email["user_email"]
+        child = make_user(monitored)
+        self._connect(client, parent_headers, monitored)
+
+        r = client.post(
+            "/guardian/disconnect",
+            json={"child_email": monitored, "parent_email": "parent@example.com"},
+            headers=child,
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["guardian"] == "parent@example.com"
+
+        # And the guardian's dashboard no longer shows that account.
+        dash = client.get("/guardian/parent@example.com", headers=parent_headers)
+        assert dash.json()["child_email"] == ""
+
+    def test_watched_list_names_the_missing_step(
+            self, client, phishing_email, parent_headers, make_user):
+        """
+        שלושה שלבים: לחבר, לפתוח חשבון, להתחבר בתוסף. הרשימה חייבת
+        להגיד באיזה מהם החשבון נמצא — אחרת נראה שהחיבור עובד בזמן
+        שלא תגיע אף התראה.
+        """
+        target = phishing_email["user_email"]
+        self._connect(client, parent_headers, target)
+
+        # 1. linked, but no account yet
+        r = client.get("/guardian/watched", headers=parent_headers)
+        assert r.status_code == 200, r.text
+        rows = r.json()["accounts"]
+        assert [a["email"] for a in rows] == [target]
+        assert rows[0]["state"] == "needs_account"
+
+        # 2. the account exists, but nothing has been scanned
+        make_user(target)
+        rows = client.get("/guardian/watched", headers=parent_headers).json()["accounts"]
+        assert rows[0]["state"] == "needs_extension"
+
+        # 3. a scan arrives
+        client.post("/scan", json=phishing_email)
+        rows = client.get("/guardian/watched", headers=parent_headers).json()["accounts"]
+        assert rows[0]["state"] == "active"
+        assert rows[0]["total_scanned"] >= 1
+        assert rows[0]["last_scan"]
+
+    def test_watched_list_holds_several_accounts(
+            self, client, parent_headers, make_user):
+        """המפתח הזר תמך תמיד בכמה מנוטרים; רק מבנה התשובה הגביל לאחד."""
+        for addr in ("kid-a@example.com", "kid-b@example.com"):
+            self._connect(client, parent_headers, addr)
+        rows = client.get("/guardian/watched", headers=parent_headers).json()["accounts"]
+        assert sorted(a["email"] for a in rows) == ["kid-a@example.com", "kid-b@example.com"]
+
+    def test_watched_list_is_private(self, client, parent_headers, make_user):
+        """הרשימה נגזרת מהטוקן, ולכן זר רואה רשימה ריקה ולא את שלי."""
+        self._connect(client, parent_headers, "kid-c@example.com")
+        stranger = make_user("nosy@example.com")
+        rows = client.get("/guardian/watched", headers=stranger).json()["accounts"]
+        assert rows == []
+
+    def test_monitored_account_can_still_register(self, client, parent_headers):
+        """
+        חיבור לכתובת שאין לה חשבון יוצר רשומה ריקה בלי סיסמה. אסור
+        שהרשומה הזאת תחסום את בעל הכתובת מלפתוח חשבון בעצמו — אחרת
+        אי אפשר להתחבר בתוסף, ולכן אי אפשר לסרוק, ומצב מפקח מת.
+        """
+        target = "watched-newcomer@example.com"
+        client.post("/guardian/connect",
+                    json={"child_email": target, "parent_email": "x@example.com"},
+                    headers=parent_headers)
+
+        r = client.post("/auth/register",
+                        json={"email": target, "password": "RealPass123", "name": "דנה"})
+        assert r.status_code == 200, r.text
+        assert r.json()["email"] == target
+
+        # And the guardian link survives claiming the account.
+        dash = client.get("/guardian/parent@example.com", headers=parent_headers)
+        assert dash.json()["child_email"] == target
+
+        # A second attempt is a genuine collision and is refused.
+        again = client.post("/auth/register",
+                            json={"email": target, "password": "Other12345"})
+        assert again.status_code == 400
+
+    def test_connect_reports_that_the_monitored_user_was_told(
+            self, client, phishing_email, parent_headers):
+        """
+        המנוטר מקבל הודעה על השיוך — אבל רק בפעם הראשונה, אחרת אפשר
+        להשתמש בטופס כדי לשלוח לו מיילים שוב ושוב.
+        """
+        monitored = phishing_email["user_email"]
+        first = self._connect(client, parent_headers, monitored)
+        assert first.json()["notified"] is True
+
+        again = self._connect(client, parent_headers, monitored)
+        assert again.json()["notified"] is False

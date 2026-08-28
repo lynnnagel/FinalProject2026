@@ -155,6 +155,73 @@ def _attach_icon(msg: MIMEMultipart) -> None:
     msg.attach(img)
 
 
+# ---------------------------------------------------------------------------
+# One shell for every message we send.
+#
+# Mail clients strip <style> and most modern CSS, so everything here is a
+# table with inline styles - the only layout that renders the same in
+# Gmail, Outlook and Apple Mail.
+#
+# The look is deliberately plain: a white page, one hairline frame, the
+# wordmark, and the text. Colour appears once, on the risk score, where
+# it carries meaning.
+# ---------------------------------------------------------------------------
+
+INK, INK_SOFT, INK_FAINT, RULE = "#16141F", "#4A4660", "#8B87A0", "#E6E3EE"
+
+
+def _shell(*, eyebrow: str, body: str) -> str:
+    return f"""\
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#F7F6FA;">
+<table width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="background:#F7F6FA;padding:32px 16px;">
+  <tr><td align="center">
+    <table width="520" cellpadding="0" cellspacing="0" border="0"
+           style="max-width:520px;width:100%;background:#FFFFFF;
+                  border:1px solid {RULE};border-radius:10px;">
+      <tr><td style="padding:26px 32px 20px;border-bottom:1px solid {RULE};">
+        <table cellpadding="0" cellspacing="0" border="0"><tr>
+          <td style="font:600 15px/1 -apple-system,'Segoe UI',Arial,sans-serif;
+                     color:{INK};letter-spacing:.06em;padding-left:9px;">LURA</td>
+          <td><img src="cid:{ICON_CID}" width="22" height="22"
+              alt="" style="display:block;width:22px;height:22px;"></td>
+        </tr></table>
+      </td></tr>
+      <tr><td style="padding:28px 32px 32px;direction:rtl;text-align:right;
+                     font-family:-apple-system,'Segoe UI',Arial,sans-serif;">
+        <p style="margin:0 0 18px;font-size:12px;letter-spacing:.09em;
+                  color:{INK_FAINT};text-transform:uppercase;">{eyebrow}</p>
+        {body}
+      </td></tr>
+      <tr><td style="padding:0 32px 26px;direction:rtl;text-align:right;">
+        <p style="margin:0;font:12px/1.6 -apple-system,'Segoe UI',Arial,sans-serif;
+                  color:{INK_FAINT};">LURA · זיהוי פישינג בזמן אמת</p>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>
+"""
+
+
+def _facts(rows: list[tuple[str, str]]) -> str:
+    """A short label/value list. Two columns on one hairline grid."""
+    cells = "".join(
+        f'<tr><td style="padding:11px 0;border-top:1px solid {RULE};'
+        f'font:12.5px/1.5 -apple-system,Arial,sans-serif;color:{INK_FAINT};'
+        f'white-space:nowrap;vertical-align:top;width:96px;">{label}</td>'
+        f'<td style="padding:11px 0 11px 12px;border-top:1px solid {RULE};'
+        f'font:14.5px/1.55 -apple-system,Arial,sans-serif;color:{INK};'
+        f'word-break:break-word;">{value}</td></tr>'
+        for label, value in rows
+    )
+    return (f'<table width="100%" cellpadding="0" cellspacing="0" border="0" '
+            f'style="margin:0 0 22px;">{cells}</table>')
+
 def _build_message(
     *,
     to_email: str,
@@ -204,6 +271,7 @@ def _build_message(
     return msg
 
 
+
 def _build_plain_text(
     *,
     monitored_name: str,
@@ -215,22 +283,14 @@ def _build_plain_text(
 ) -> str:
     now = datetime.now().strftime("%d/%m/%Y %H:%M")
     return (
-        f"LURA – התראת פישינג\n"
-        f"{'=' * 40}\n\n"
-        f"שלום,\n\n"
-        f"LURA זיהה מייל פישינג שנשלח אל {monitored_name} ({monitored_email}).\n\n"
-        f"פרטי האיום:\n"
-        f"  ציון סיכון : {risk_score:.0f}%\n"
-        f"  רמת סיכון  : {risk_level}\n"
-        f"  שולח חשוד  : {phishing_sender}\n"
-        f"  נושא       : {phishing_subject or '(ללא נושא)'}\n"
-        f"  זמן זיהוי  : {now}\n\n"
-        f"כדאי לפנות ל-{monitored_name} ולוודא שלא נלחץ קישור במייל הזה\n"
-        f"ושלא נמסרו פרטים אישיים.\n\n"
-        f"{'─' * 40}\n"
-        f"LURA – מערכת הגנה מפישינג\n"
-        f"הודעה זו נשלחה אוטומטית כי החשבון של {monitored_name} מוגדר\n"
-        f"במעקב במצב מפקח."
+        f"LURA\n\n"
+        f"זוהה מייל פישינג בתיבה של {monitored_name} ({monitored_email}).\n\n"
+        f"שולח    {phishing_sender}\n"
+        f"נושא     {phishing_subject or '(ללא נושא)'}\n"
+        f"סיכון    {risk_score:.0f}% · {risk_level}\n"
+        f"זמן      {now}\n\n"
+        f"כדאי לוודא מולו שלא נלחץ קישור ושלא נמסרו פרטים.\n\n"
+        f"LURA · זיהוי פישינג בזמן אמת"
     )
 
 
@@ -244,131 +304,23 @@ def _build_html(
     risk_level: str,
 ) -> str:
     color = _risk_color(risk_score)
-    now = datetime.now().strftime("%d/%m/%Y %H:%M")
-    subject_display = phishing_subject or "(ללא נושא)"
-
-    return f"""\
-<!DOCTYPE html>
-<html dir="rtl" lang="he">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>התראת LURA</title>
-</head>
-<body style="margin:0;padding:0;background:#0f172a;font-family:'Segoe UI',Arial,sans-serif;direction:rtl;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a;padding:40px 20px;">
-  <tr>
-    <td align="center">
-      <table width="600" cellpadding="0" cellspacing="0"
-             style="max-width:600px;width:100%;border-radius:16px;overflow:hidden;
-                    box-shadow:0 25px 50px rgba(0,0,0,0.5);">
-
-        <!-- HEADER -->
-        <tr>
-          <td style="background:linear-gradient(135deg,#1e293b 0%,#0f172a 100%);
-                     padding:32px;text-align:center;border-bottom:3px solid {color};">
-            <img src="cid:{ICON_CID}" alt="LURA" style="width:48px;height:48px;margin-bottom:8px;">
-            <h1 style="color:#fff;margin:0;font-size:26px;font-weight:800;">LURA</h1>
-            <p style="color:#94a3b8;margin:6px 0 0;font-size:13px;">מערכת הגנה מפישינג</p>
-          </td>
-        </tr>
-
-        <!-- ALERT BANNER -->
-        <tr>
-          <td style="background:{color};padding:14px 32px;text-align:center;">
-            <p style="margin:0;color:#fff;font-size:18px;font-weight:700;">
-              זוהה מייל פישינג
-            </p>
-          </td>
-        </tr>
-
-        <!-- BODY -->
-        <tr>
-          <td style="background:#1e293b;padding:32px;text-align:right;direction:rtl;">
-
-            <p style="color:#e2e8f0;font-size:16px;margin:0 0 8px;">שלום,</p>
-            <p style="color:#e2e8f0;font-size:15px;margin:0 0 28px;line-height:1.7;">
-              LURA זיהה מייל פישינג שנשלח אל
-              <strong style="color:#60a5fa;">{monitored_name}</strong>
-              <span style="color:#64748b;font-size:13px;"> ({monitored_email})</span>.
-              להלן פרטי האיום:
-            </p>
-
-            <!-- Risk Score Card -->
-            <table width="100%" cellpadding="0" cellspacing="0"
-                   style="background:#0f172a;border-radius:12px;margin-bottom:24px;">
-              <tr>
-                <td style="padding:24px;text-align:center;">
-                  <div style="font-size:56px;font-weight:900;color:{color};line-height:1;">{risk_score:.0f}%</div>
-                  <div style="color:#94a3b8;font-size:13px;margin-top:6px;">ציון סיכון</div>
-                  <div style="display:inline-block;background:{color};color:#fff;
-                               border-radius:20px;padding:4px 18px;margin-top:10px;
-                               font-size:14px;font-weight:700;">{risk_level}</div>
-                </td>
-              </tr>
-            </table>
-
-            <!-- Details -->
-            <table width="100%" cellpadding="0" cellspacing="0"
-                   style="border-radius:10px;overflow:hidden;margin-bottom:24px;">
-              <tr>
-                <td style="background:#0f172a;padding:13px 18px;border-bottom:1px solid #1e293b;text-align:right;direction:rtl;">
-                  <span style="color:#94a3b8;font-size:12px;display:block;margin-bottom:3px;">שולח חשוד</span>
-                  <span style="color:#f87171;font-weight:700;font-size:14px;word-break:break-all;">{phishing_sender}</span>
-                </td>
-              </tr>
-              <tr>
-                <td style="background:#0f172a;padding:13px 18px;border-bottom:1px solid #1e293b;text-align:right;direction:rtl;">
-                  <span style="color:#94a3b8;font-size:12px;display:block;margin-bottom:3px;">נושא המייל</span>
-                  <span style="color:#e2e8f0;font-size:14px;">{subject_display}</span>
-                </td>
-              </tr>
-              <tr>
-                <td style="background:#0f172a;padding:13px 18px;text-align:right;direction:rtl;">
-                  <span style="color:#94a3b8;font-size:12px;display:block;margin-bottom:3px;">זמן זיהוי</span>
-                  <span style="color:#e2e8f0;font-size:14px;">{now}</span>
-                </td>
-              </tr>
-            </table>
-
-            <!-- Recommendation -->
-            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
-              <tr>
-                <td style="background:#172554;border-right:4px solid #3b82f6;
-                           border-radius:0 10px 10px 0;padding:16px 20px;text-align:right;direction:rtl;">
-                  <p style="color:#93c5fd;margin:0 0 6px;font-size:14px;font-weight:700;">מה כדאי לעשות עכשיו</p>
-                  <p style="color:#dbeafe;margin:0;font-size:14px;line-height:1.7;">
-                    כדאי לפנות ל-<strong>{monitored_name}</strong> ולוודא ש:<br>
-                    • לא נלחץ אף קישור במייל הזה<br>
-                    • לא הוזנו סיסמאות או פרטי כרטיס אשראי<br>
-                    • המייל נמחק מתיבת הדואר
-                  </p>
-                </td>
-              </tr>
-            </table>
-
-            <hr style="border:none;border-top:1px solid #334155;margin:0 0 20px;">
-            <p style="color:#475569;font-size:12px;text-align:center;margin:0;line-height:1.6;">
-              הודעה זו נשלחה אוטומטית ממערכת LURA<br>
-              היא נשלחה כי החשבון של
-              <strong style="color:#64748b;">{monitored_name}</strong>
-              מוגדר במעקב במצב מפקח
-            </p>
-
-          </td>
-        </tr>
-
-      </table>
-    </td>
-  </tr>
-</table>
-</body>
-</html>
-"""
-
-# ---------------------------------------------------------------------------
-# Password reset
-# ---------------------------------------------------------------------------
+    body = f"""
+        <p style="margin:0 0 22px;font-size:16px;line-height:1.65;color:{INK};">
+          זוהה מייל פישינג בתיבה של <strong>{monitored_name}</strong>
+          <span style="color:{INK_FAINT};font-size:14px;">({monitored_email})</span>.
+        </p>
+        {_facts([
+            ("שולח", f'<span style="direction:ltr;unicode-bidi:embed;">{phishing_sender}</span>'),
+            ("נושא", phishing_subject or "(ללא נושא)"),
+            ("סיכון", f'<span style="color:{color};font-weight:700;">{risk_score:.0f}%</span>'
+                      f'<span style="color:{INK_FAINT};"> · {risk_level}</span>'),
+            ("זמן", f'<span style="direction:ltr;unicode-bidi:embed;">'
+                    f'{datetime.now().strftime("%d/%m/%Y %H:%M")}</span>'),
+        ])}
+        <p style="margin:0;font-size:14.5px;line-height:1.7;color:{INK_SOFT};">
+          כדאי לוודא מולו שלא נלחץ קישור במייל הזה ושלא נמסרו פרטים אישיים.
+        </p>"""
+    return _shell(eyebrow="התראת פישינג", body=body)
 
 def send_password_reset(*, to_email: str, name: str, token: str) -> bool:
     """
@@ -421,95 +373,125 @@ def send_password_reset(*, to_email: str, name: str, token: str) -> bool:
     return False
 
 
+
 def _reset_plain_text(name: str, link: str) -> str:
     return (
-        f"LURA – איפוס סיסמה\n"
-        f"{'=' * 40}\n\n"
+        f"LURA\n\n"
         f"שלום {name},\n\n"
-        f"קיבלנו בקשה לאיפוס הסיסמה של החשבון שלך.\n"
-        f"אפשר לאפס דרך הקישור הבא:\n\n"
-        f"{link}\n\n"
-        f"הקישור תקף ל-30 דקות ומיועד לשימוש חד-פעמי.\n\n"
-        f"אם לא ביקשת לאפס את הסיסמה — אפשר להתעלם מהודעה זו,\n"
-        f"הסיסמה הנוכחית שלך תישאר בתוקף.\n\n"
-        f"{'─' * 40}\n"
-        f"LURA – מערכת הגנה מפישינג"
+        f"לאיפוס הסיסמה:\n{link}\n\n"
+        f"הקישור תקף 30 דקות ולשימוש אחד.\n"
+        f"אם לא ביקשת לאפס — אפשר להתעלם.\n\n"
+        f"LURA · זיהוי פישינג בזמן אמת"
     )
 
 
 def _reset_html(name: str, link: str) -> str:
-    return f"""\
-<!DOCTYPE html>
-<html dir="rtl" lang="he">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>איפוס סיסמה – LURA</title>
-</head>
-<body style="margin:0;padding:0;background:#0f172a;
-             font-family:'Segoe UI',Arial,sans-serif;direction:rtl;">
-<table width="100%" cellpadding="0" cellspacing="0"
-       style="background:#0f172a;padding:40px 20px;">
-  <tr>
-    <td align="center">
-      <table width="560" cellpadding="0" cellspacing="0"
-             style="max-width:560px;width:100%;border-radius:16px;overflow:hidden;
-                    box-shadow:0 25px 50px rgba(0,0,0,0.5);">
+    body = f"""
+        <p style="margin:0 0 24px;font-size:16px;line-height:1.65;color:{INK};">
+          שלום {name}, אפשר לבחור סיסמה חדשה כאן:
+        </p>
+        <table cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;">
+          <tr><td style="border-radius:8px;background:#6B3FE0;">
+            <a href="{link}" style="display:inline-block;padding:12px 26px;
+               font:600 15px -apple-system,'Segoe UI',Arial,sans-serif;
+               color:#FFFFFF;text-decoration:none;">בחירת סיסמה חדשה</a>
+          </td></tr>
+        </table>
+        <p style="margin:0;font-size:14px;line-height:1.7;color:{INK_SOFT};">
+          הקישור תקף 30 דקות ולשימוש אחד.
+          אם לא ביקשת לאפס — אפשר להתעלם מההודעה, הסיסמה הנוכחית נשארת בתוקף.
+        </p>"""
+    return _shell(eyebrow="איפוס סיסמה", body=body)
 
-        <tr>
-          <td style="background:linear-gradient(135deg,#1e293b 0%,#0f172a 100%);
-                     padding:32px;text-align:center;border-bottom:3px solid #7c4dff;">
-            <img src="cid:{ICON_CID}" alt="LURA"
-                 style="width:48px;height:48px;margin-bottom:8px;">
-            <h1 style="color:#fff;margin:0;font-size:26px;font-weight:800;">LURA</h1>
-            <p style="color:#94a3b8;margin:6px 0 0;font-size:13px;">איפוס סיסמה</p>
-          </td>
-        </tr>
+def send_guardian_link_notice(*, to_email: str, monitored_name: str,
+                              guardian_email: str, guardian_name: str) -> bool:
+    """
+    Tell someone that an account named them as the one it watches over.
 
-        <tr>
-          <td style="background:#1e293b;padding:32px;text-align:right;direction:rtl;">
-            <p style="color:#e2e8f0;font-size:16px;margin:0 0 8px;">שלום {name},</p>
-            <p style="color:#e2e8f0;font-size:15px;margin:0 0 28px;line-height:1.7;">
-              קיבלנו בקשה לאיפוס הסיסמה של החשבון שלך.
-              אפשר לבחור סיסמה חדשה כאן:
-            </p>
+    Guardian mode is set up by the guardian alone, so without this the
+    monitored person is never told it happened. The link itself shares
+    nothing on its own - alerts only start once the extension is
+    installed and signed in on this address - and saying that plainly
+    is most of what this message is for.
 
-            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
-              <tr>
-                <td align="center">
-                  <a href="{link}"
-                     style="display:inline-block;background:#7c4dff;color:#fff;
-                            padding:14px 34px;border-radius:10px;text-decoration:none;
-                            font-size:15px;font-weight:700;">בחר סיסמה חדשה</a>
-                </td>
-              </tr>
-            </table>
+    Sent from a background task: a mail that cannot go out must not fail
+    the request that created the link.
+    """
+    if not EMAIL_ENABLED:
+        logger.info("[Email] mail off - would have told %s that %s is watching",
+                    to_email, guardian_email)
+        return False
 
-            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
-              <tr>
-                <td style="background:#172554;border-right:4px solid #3b82f6;
-                           border-radius:0 10px 10px 0;padding:16px 20px;
-                           text-align:right;direction:rtl;">
-                  <p style="color:#dbeafe;margin:0;font-size:14px;line-height:1.7;">
-                    הקישור תקף ל-<strong>30 דקות</strong> בלבד.
-                    <br>אם לא ביקשת לאפס את הסיסמה — אפשר להתעלם מהודעה זו,
-                    והסיסמה הנוכחית שלך תישאר בתוקף.
-                  </p>
-                </td>
-              </tr>
-            </table>
+    if not SMTP_USER or not SMTP_PASSWORD:
+        logger.warning("[Email] SMTP not configured - skipping guardian notice")
+        return False
 
-            <hr style="border:none;border-top:1px solid #334155;margin:0 0 20px;">
-            <p style="color:#475569;font-size:12px;text-align:center;margin:0;line-height:1.6;">
-              הודעה זו נשלחה אוטומטית ממערכת LURA
-            </p>
-          </td>
-        </tr>
+    msg = MIMEMultipart("related")
+    msg["Subject"] = "LURA – הוגדר מפקח על התיבה שלך"
+    msg["From"] = f"{EMAIL_FROM_NAME} <{SMTP_USER}>"
+    msg["To"] = to_email
 
-      </table>
-    </td>
-  </tr>
-</table>
-</body>
-</html>
-"""
+    alt_part = MIMEMultipart("alternative")
+    alt_part.attach(MIMEText(
+        _link_notice_plain(monitored_name, guardian_name, guardian_email),
+        "plain", "utf-8"))
+    alt_part.attach(MIMEText(
+        _link_notice_html(monitored_name, guardian_name, guardian_email),
+        "html", "utf-8"))
+    msg.attach(alt_part)
+
+    _attach_icon(msg)
+
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.sendmail(SMTP_USER, to_email, msg.as_string())
+        logger.info("[Email] guardian notice sent to %s", to_email)
+        return True
+
+    except smtplib.SMTPAuthenticationError:
+        logger.error("[Email] SMTP auth failed - check SMTP_USER and SMTP_PASSWORD")
+    except smtplib.SMTPException as exc:
+        logger.error("[Email] SMTP error sending guardian notice: %s", exc)
+    except OSError as exc:
+        logger.error("[Email] network error sending guardian notice: %s", exc)
+    except Exception as exc:
+        logger.error("[Email] unexpected error sending guardian notice: %s", exc)
+
+    return False
+
+
+
+def _link_notice_plain(name: str, guardian_name: str, guardian_email: str) -> str:
+    return (
+        f"LURA\n\n"
+        f"שלום {name},\n\n"
+        f"החשבון של {guardian_name} ({guardian_email}) הוגדר כמפקח על\n"
+        f"כתובת המייל הזאת.\n\n"
+        f"כשיזוהה מייל פישינג בתיבה שלך, תישלח אליו התראה עם השולח,\n"
+        f"הנושא וציון הסיכון. תוכן המיילים אינו נשלח.\n\n"
+        f"עד שתתקין את התוסף ותתחבר בו בכתובת הזאת — לא נשלח דבר.\n"
+        f"אפשר להסיר את השיוך בכל רגע מלוח הבקרה.\n\n"
+        f"LURA · זיהוי פישינג בזמן אמת"
+    )
+
+
+def _link_notice_html(name: str, guardian_name: str, guardian_email: str) -> str:
+    body = f"""
+        <p style="margin:0 0 20px;font-size:16px;line-height:1.65;color:{INK};">
+          שלום {name}, החשבון של <strong>{guardian_name}</strong>
+          <span style="color:{INK_FAINT};font-size:14px;">({guardian_email})</span>
+          הוגדר כמפקח על כתובת המייל הזאת.
+        </p>
+        {_facts([
+            ("נשלח אליו", "השולח, הנושא וציון הסיכון של מיילים שזוהו כפישינג"),
+            ("לא נשלח", "תוכן המיילים, ומיילים שלא זוהו"),
+        ])}
+        <p style="margin:0;font-size:14.5px;line-height:1.7;color:{INK_SOFT};">
+          עד שתתקין את התוסף ותתחבר בו בכתובת הזאת לא נשלח דבר,
+          ואפשר להסיר את השיוך בכל רגע מלוח הבקרה.
+        </p>"""
+    return _shell(eyebrow="הוגדר מפקח על התיבה שלך", body=body)
+

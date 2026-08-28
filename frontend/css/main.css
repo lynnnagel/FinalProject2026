@@ -720,3 +720,78 @@
 .dash-section .btn-primary svg,
 .guardian-box .btn-primary svg { width: 16px; height: 16px; }
 .guardian-box .btn-danger { flex: none; white-space: nowrap; }
+
+/* ===========================================================================
+   מצב מפקח — רשימת החשבונות במעקב.
+   קישור כתובת הוא רק השלב הראשון מתוך שלושה, ולכן כל שורה אומרת באיזה
+   שלב היא נמצאת ומה חסר. אותה שפה: רדיוסים 8 ו-14, טוקנים מלמעלה.
+   =========================================================================== */
+
+.connect-row { display: flex; gap: 8px; align-items: stretch; }
+.connect-row input { flex: 1; min-width: 0; }
+.connect-row .btn-primary { flex: none; white-space: nowrap; }
+
+.watch-title {
+  margin: 30px 0 12px;
+  padding-top: 22px;
+  border-top: 1px solid var(--border);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.watch-card {
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 16px 18px;
+  margin-bottom: 10px;
+  background: var(--surface);
+}
+.watch-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.watch-name  { font-weight: 600; font-size: 15px; }
+.watch-email { font-size: 13px; color: var(--text-3); direction: ltr; text-align: right; }
+
+.watch-chip {
+  flex: none;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 11px;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+.watch-chip.live { background: #E9F5EF; color: #1B6E4D; border: 1px solid #BFE3D2; }
+.watch-chip.wait { background: #FCF3E3; color: #A96A05; border: 1px solid #F0DDB8; }
+
+.watch-next {
+  margin: 12px 0 0;
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--text-2);
+}
+.watch-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  margin-top: 12px;
+  font-size: 13.5px;
+  color: var(--text-2);
+}
+.watch-remove { margin-top: 14px; }
+
+/* The state chip is what the row is for; the remove button should not
+   compete with it. Quiet until hovered. */
+.watch-remove {
+  padding: 6px 13px;
+  font-size: 13px;
+  border-color: var(--border-strong);
+  color: var(--text-2);
+}
+.watch-remove:hover { border-color: var(--danger); }
+
+/* No dividers between the stats: the row wraps, and a divider on a
+   wrapped item hangs in the air at the start of the next line. */
+.watch-stats { gap: 4px 22px; }
