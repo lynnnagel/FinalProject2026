@@ -21,9 +21,15 @@ import argparse
 import logging
 import os
 import re
+import sys
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
+
+# Runnable from backend/ and from backend/ML/
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from ML.senders import extract_sender  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -93,10 +99,46 @@ def load_kaggle(path: str) -> pd.DataFrame:
     return df
 
 
+CONTENT_COLUMNS = ("message", "body", "content", "text", "email", "raw")
+
+
+def pick_text_column(df: pd.DataFrame, source: str) -> str:
+    """
+    The column holding the message, chosen by content rather than position.
+
+    Taking df.columns[0] cost this project 40,000 rows. The Enron export
+    is ('file', 'message'): the first column is the path the message was
+    read from, so every Enron row entered the corpus as a filename like
+    "allen-p/_sent_mail/1." labelled legitimate mail. It had no headers
+    to extract a sender from, no body for the model to read, and it made
+    the source trivially separable from every other - which is exactly
+    the corpus fingerprint source_check.py measures.
+
+    A known content name wins. Otherwise the widest column does: a path
+    column averages tens of characters and a message column thousands.
+    """
+    named = [c for c in df.columns if c.strip().lower() in CONTENT_COLUMNS]
+    if named:
+        chosen = max(named, key=lambda c: df[c].astype(str).str.len().mean())
+    else:
+        text_like = [c for c in df.columns if df[c].dtype == object] or list(df.columns)
+        chosen = max(text_like, key=lambda c: df[c].astype(str).str.len().mean())
+
+    width = df[chosen].astype(str).str.len().mean()
+    if width < 80:
+        logger.warning(
+            "%s: text column %r averages %.0f characters - that is too short "
+            "for a message body. Check the file has one.", source, chosen, width)
+    else:
+        logger.info("%s: reading text from %r (mean %.0f chars)",
+                    source, chosen, width)
+    return chosen
+
+
 def load_enron(path: str) -> pd.DataFrame:
     df = pd.read_csv(path)
     logger.info("Enron raw columns: %s", list(df.columns))
-    text_col = df.columns[0]
+    text_col = pick_text_column(df, "Enron")
     df = df[[text_col]].dropna()
     df.columns = ["text"]
     df["label"] = 0
@@ -335,6 +377,26 @@ def prepare(args: argparse.Namespace):
         raise FileNotFoundError(f"No CSV files found in {args.data_dir}")
 
     combined = pd.concat(frames, ignore_index=True)
+
+    # Recover the sender BEFORE cleaning, because clean_text destroys it
+    # three separate ways: it deletes <addr@host> along with the HTML
+    # tags, it collapses the newlines that separate one header from the
+    # next, and it truncates to 1,000 characters. Run afterwards,
+    # extraction found a sender in 0% of the Kaggle and Enron rows.
+    #
+    # Three of the nine rule checks read this field, including brand
+    # impersonation, which carries the highest score in the engine.
+    if "sender" not in combined.columns:
+        combined["sender"] = ""
+    combined["sender"] = combined["sender"].fillna("").astype(str)
+    missing = combined["sender"].str.strip() == ""
+    if missing.any():
+        combined.loc[missing, "sender"] = (
+            combined.loc[missing, "text"].apply(extract_sender))
+        recovered = int((combined.loc[missing, "sender"] != "").sum())
+        logger.info("senders recovered from raw headers: %d of %d rows without one",
+                    recovered, int(missing.sum()))
+
     combined["text"] = combined["text"].apply(clean_text)
     combined = combined[combined["text"].str.len() > 10].reset_index(drop=True)
 
