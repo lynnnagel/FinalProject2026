@@ -358,13 +358,21 @@ def main() -> None:
           f"recall {operating['recall'] * 100:.2f}%, "
           f"precision {operating['precision'] * 100:.1f}%")
 
+    # The cheapest cut-off that still reaches each recall target. On a
+    # bimodal score distribution most targets land on the same point, so
+    # repeats are dropped - six identical rows say less than two
+    # different ones.
     print(f"\n  {'recall':>8} {'precision':>10} {'threshold':>10}")
     print("  " + "-" * 30)
-    for target in (0.50, 0.80, 0.90, 0.95, 0.99, 0.993):
+    shown = set()
+    for target in (0.50, 0.80, 0.90, 0.95, 0.98, 0.99, 0.992, 0.993, 0.994):
         point = next((p for p in curve if p["recall"] >= target), None)
-        if point:
-            print(f"  {point['recall'] * 100:>7.1f}% {point['precision'] * 100:>9.1f}%"
+        if point and point["threshold"] not in shown:
+            shown.add(point["threshold"])
+            print(f"  {point['recall'] * 100:>7.2f}% {point['precision'] * 100:>9.1f}%"
                   f" {point['threshold']:>10}")
+    if len(shown) < 3:
+        print("  (recall is nearly constant, so most targets share one cut-off)")
 
     if args.csv:
         os.makedirs(os.path.dirname(os.path.abspath(args.csv)), exist_ok=True)

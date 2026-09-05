@@ -66,6 +66,15 @@ class EmailRecord(Base):
     # the full body is scanned after the preview.
     content_hash = Column(String, default="")
 
+    # The reasons the score was given, as a JSON array of strings.
+    #
+    # Stored because the cache returns a saved verdict without rerunning
+    # the engines, and without this the explanation was replaced by the
+    # placeholder "נסרק בעבר" - so a message scanned once showed a score
+    # with no reasons behind it, which is the one thing this product is
+    # supposed to do.
+    indicators = Column(String, default="")
+
     user = relationship("User", back_populates="emails")
     alerts = relationship(
         "Alert", back_populates="email", cascade="all, delete-orphan"

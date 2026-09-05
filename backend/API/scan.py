@@ -20,6 +20,7 @@ from config import (
 )
 from API.auth import get_optional_user
 import hashlib
+import json
 
 from API.trusted import is_trusted_by_user
 import risk_levels
@@ -172,11 +173,20 @@ def scan_email(
     if (existing
             and existing.scoring_version == SCORING_VERSION
             and existing.content_hash == content_hash):
+        # The reasons come back with the score. They were once replaced
+        # by a placeholder here, which meant a message scanned a second
+        # time showed a number and no explanation - and the explanation
+        # is the point of the product. Older records predate the column
+        # and fall back to the placeholder until they are rescored.
+        try:
+            saved = json.loads(existing.indicators) if existing.indicators else []
+        except (ValueError, TypeError):
+            saved = []
         return RiskAnalysis(
             risk_score=existing.risk_score,
             is_phishing=existing.is_phishing,
             risk_level=risk_levels.risk_level(existing.risk_score),
-            indicators=["נסרק בעבר"],
+            indicators=saved or ["נסרק בעבר"],
             recommendation=risk_levels.recommendation(existing.risk_score),
             response_time=0.0,
         )
@@ -195,6 +205,7 @@ def scan_email(
         existing.scoring_version = SCORING_VERSION
         existing.content_hash = content_hash
         existing.content = email_data.content[:500]
+        existing.indicators = json.dumps(analysis["indicators"], ensure_ascii=False)
         email_record = existing
         # The counter counts unique messages, not scans. A
         # recomputation that changes the verdict should correct it
@@ -214,6 +225,7 @@ def scan_email(
             is_phishing=analysis["is_phishing"],
             scoring_version=SCORING_VERSION,
             content_hash=content_hash,
+            indicators=json.dumps(analysis["indicators"], ensure_ascii=False),
         )
         db.add(email_record)
         user.total_scanned += 1

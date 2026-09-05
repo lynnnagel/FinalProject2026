@@ -57,6 +57,7 @@ _EXPECTED_COLUMNS = {
     "emails": {
         "scoring_version": "VARCHAR DEFAULT ''",
         "content_hash": "VARCHAR DEFAULT ''",
+        "indicators": "VARCHAR DEFAULT ''",
     },
 }
 

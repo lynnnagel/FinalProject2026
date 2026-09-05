@@ -90,6 +90,14 @@ logger = logging.getLogger(__name__)
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data", "processed")
 SPLITS = ("train", "val", "test")
 
+# Sources whose senders our own generators wrote. Their addresses are
+# real strings in the file but they are not evidence about real mail:
+# the generator chose them to match the label. They are reported apart
+# from headers parsed out of genuine messages.
+SYNTHETIC_SOURCES = frozenset({
+    "hebrew_generated", "legitimate_generated", "hebrew_translated",
+})
+
 
 # ---------------------------------------------------------------------------
 # 1. Extraction - real senders, wherever the corpus still has them
@@ -426,30 +434,55 @@ def audit(df: pd.DataFrame, column: str, title: str) -> float:
     auc = cross_val_score(pipeline, rows[column], rows["label"],
                           cv=4, scoring="roc_auc").mean()
     majority = max(rows["label"].mean(), 1 - rows["label"].mean())
+
+    # A bucket that is nearly one class cannot serve as a reference. Its
+    # AUC rests on a handful of minority rows, and any domain appearing
+    # only in the majority class predicts it perfectly - so the number
+    # measures the composition of the bucket, not what real senders
+    # reveal. Marked rather than quietly compared against.
+    flag = "  << one-class, AUC uninformative" if majority > 0.90 else ""
     print(f"  {title:<34} AUC {auc:5.3f}   (n={len(rows):,}, "
-          f"majority {majority:.1%})")
-    return auc
+          f"majority {majority:.1%}){flag}")
+    return float("nan") if majority > 0.90 else auc
 
 
-def verdict(auc_generated: float, auc_extracted: float) -> None:
+def verdict(auc_generated: float, auc_reference: float,
+            auc_corpus: float = float("nan")) -> None:
     print()
-    if auc_generated != auc_generated:            # NaN
-        return
-    if auc_generated < 0.65:
-        print("  Generated senders carry little label information. Numbers")
-        print("  measured on them are not inflated by the generator.")
-    elif auc_generated < 0.80:
-        print("  Generated senders carry some label information. Report any")
-        print("  metric on them separately and say so; do not merge them")
-        print("  into the headline numbers.")
-    else:
-        print("  LEAKAGE. The label is recoverable from the address alone.")
-        print("  Any detection result on these rows measures the generator.")
-        print("  Widen the shared pools before using this data.")
-    if auc_extracted == auc_extracted:
-        print(f"  Reference: real extracted headers score {auc_extracted:.3f}.")
-        print("  That is the separation genuine mail carries; generated")
+    if auc_generated == auc_generated:            # not NaN
+        if auc_generated < 0.65:
+            print("  Senders filled in by this script carry little label")
+            print("  information. Numbers measured on them are not inflated")
+            print("  by the generator.")
+        elif auc_generated < 0.80:
+            print("  Senders filled in by this script carry some label")
+            print("  information. Report any metric on them separately and")
+            print("  say so; do not merge them into the headline numbers.")
+        else:
+            print("  LEAKAGE in this script's generator. Widen the shared")
+            print("  pools in POOL_WEIGHTS before using this data.")
+
+    if auc_reference == auc_reference:
+        print(f"\n  Reference: parsed headers score {auc_reference:.3f}. That is")
+        print("  the separation genuine mail carries, and the filled-in")
         print("  senders should not score meaningfully above it.")
+    else:
+        print("\n  No usable reference: the parsed-header rows are nearly all")
+        print("  one class, so their AUC says nothing. Chance (0.500) is the")
+        print("  only floor available - judge the number above against that.")
+
+    # The corpus generators are a separate matter and a louder one: those
+    # rows ship in the training data, so leakage there is not a
+    # measurement artefact but a property of what the model learns.
+    if auc_corpus == auc_corpus and auc_corpus >= 0.95:
+        print(f"\n  WARNING - our own corpus generators score {auc_corpus:.3f}.")
+        print("  Their senders encode the label almost perfectly: a legitimate")
+        print("  row always gets the brand's real domain and a phishing row")
+        print("  never does. Real mail overlaps - attackers send from Gmail and")
+        print("  so do real people - so a sender-reading result on those rows")
+        print("  reflects the generator's rule, not detection. Either report")
+        print("  them apart, or give both classes shared pools in")
+        print("  generate_hebrew.py:rnd_sender and regenerate.")
 
 
 # ---------------------------------------------------------------------------
@@ -516,6 +549,16 @@ def report(df: pd.DataFrame, split: str) -> None:
     print(f"    after extraction       {extr:>7,}  {extr / n:6.1%}"
           f"   (+{extr - orig:,} recovered from the body)")
     print(f"    after generation       {fill_:>7,}  {fill_ / n:6.1%}")
+
+    # The number that actually matters: addresses from genuine messages,
+    # as opposed to ones our own corpus generators wrote. Reporting the
+    # two as one figure overstates how much of this is real data.
+    if "source" in df.columns:
+        genuine = df[(df["sender_extracted"] != "")
+                     & (~df["source"].astype(str).isin(SYNTHETIC_SOURCES))]
+        print(f"    of those, from real headers "
+              f"{len(genuine):>4,}  {len(genuine) / n:6.1%}"
+              f"   (the rest our generators wrote)")
 
     if "source" in df.columns:
         print(f"    {'source':<22}{'rows':>8}{'extracted':>11}")
@@ -596,13 +639,30 @@ def main() -> None:
         print("  Leakage audit - can the label be read from the address alone?")
         print("=" * 74)
         combined = pd.concat(frames.values(), ignore_index=True)
-        extracted = combined[combined["sender_extracted"] != ""].copy()
-        generated = combined[(combined["sender_extracted"] == "")
+
+        # "Already present" covers two different things and they must not
+        # be audited together. Enron and SpamAssassin senders were parsed
+        # out of real headers by prepare_data.py. The Hebrew and
+        # legitimate corpora are written by our own generators, which
+        # give phishing rows phishing-shaped addresses on purpose - so
+        # they carry label information by construction.
+        #
+        # Averaged into one bucket they inflate the reference this audit
+        # compares against, and the comparison stops meaning anything.
+        source = combined.get("source", pd.Series("", index=combined.index))
+        is_synthetic = source.astype(str).isin(SYNTHETIC_SOURCES)
+
+        has_address = combined["sender_extracted"] != ""
+        real = combined[has_address & ~is_synthetic].copy()
+        ours = combined[has_address & is_synthetic].copy()
+        generated = combined[(~has_address)
                              & (combined["sender_generated"] != "")].copy()
-        auc_e = audit(extracted, "sender_extracted", "real, extracted headers")
-        auc_g = audit(generated, "sender_generated", "synthetic, generated")
+
+        auc_r = audit(real, "sender_extracted", "real headers (parsed)")
+        auc_c = audit(ours, "sender_extracted", "our own corpus generators")
+        auc_g = audit(generated, "sender_generated", "filled in by this script")
         audit(combined, "sender_filled", "everything together")
-        verdict(auc_g, auc_e)
+        verdict(auc_g, auc_r, auc_c)
 
     if args.write:
         for split, df in frames.items():

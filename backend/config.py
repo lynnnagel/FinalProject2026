@@ -83,7 +83,7 @@ CORS_ORIGIN_REGEX = (
 # from a sender the rules do not recognise - the case this corpus
 # represents least well.
 # ---------------------------------------------------------------------------
-PHISHING_THRESHOLD = 60       # at or above this, classed as phishing
+PHISHING_THRESHOLD = 70     # at or above this, classed as phishing
 
 
 def bands_for(threshold: int) -> tuple[int, int, int]:
@@ -180,8 +180,9 @@ CORROBORATION_FLOOR = 15
 # safe: it is derived from the parameters, so any change to them
 # automatically invalidates every score computed before it, and they are
 # recomputed on the next scan.
+
 SCORING_VERSION = (
-    f"v5|b{RULE_BOOST}|t{TRUST_DAMPING}"
+    f"v7|b{RULE_BOOST}|t{TRUST_DAMPING}"
     f"|x{TRANSACTIONAL_DAMPING}|th{PHISHING_THRESHOLD}"
 )
 

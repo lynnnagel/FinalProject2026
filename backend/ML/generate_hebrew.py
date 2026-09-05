@@ -261,6 +261,17 @@ REAL_MAILBOXES = ["noreply", "no-reply", "service", "info", "billing",
                   "support", "updates", "notifications"]
 FAKE_MAILBOXES = ["no-reply", "security", "alert", "verify", "service-il",
                   "account-security", "support"]
+
+# Mailboxes that sound alarming but that real organisations genuinely
+# use: a bank's fraud alert really does come from security@ or alerts@.
+#
+# Before this existed, "security", "verify" and "alert" appeared only in
+# phishing rows, so the word before the @ predicted the label on its own.
+# Overlapping the domains was not enough - a classifier reading the whole
+# address still scored 0.985, because the mailbox vocabularies were
+# disjoint. Both classes now draw from this list.
+ALERTING_MAILBOXES = ["security", "alerts", "fraud-alert", "account-notice",
+                      "verification", "secure-messages"]
 FREE_PROVIDERS = ["gmail.com", "outlook.com", "hotmail.com", "walla.co.il"]
 
 # Legitimate subdomains. A real organisation also sends from
@@ -282,21 +293,78 @@ def deceptive_domain(real_domain: str, rng: random.Random) -> str:
 
 def rnd_sender(brand: tuple, legit: bool, rng: random.Random,
                hard: bool = False) -> str:
+    """
+    A sender for one generated message.
+
+    The classes overlap on purpose. An earlier version gave every
+    legitimate row the brand's real domain and every phishing row a
+    lookalike or a free provider, with no exceptions either way, so the
+    address determined the label: a classifier reading nothing but the
+    sender scored AUC 1.000 on these rows (ML/senders.py --audit).
+
+    That is not what real mail looks like, and because these rows are in
+    the training data it is not only a measurement problem - it taught
+    the model that an official domain is proof of safety. Real senders
+    overlap: small businesses and sole traders write from Gmail, and
+    attackers send from compromised accounts on ordinary domains.
+
+    The overlap is deliberately modest. Impersonation from a lookalike
+    domain is still most of what phishing draws, because that is what
+    the impersonation rule exists to catch.
+    """
     name, real_domain, fake_domains = brand
+
+    # The mailbox is drawn from the same two lists for both classes. What
+    # separates a phishing row is the domain it is paired with, which is
+    # the thing the impersonation rule actually reads.
+    def mailbox() -> str:
+        return (rng.choice(ALERTING_MAILBOXES) if rng.random() < 0.22
+                else rng.choice(REAL_MAILBOXES))
+
     if legit:
-        if hard and rng.random() < 0.5:
+        roll = rng.random()
+        # There is deliberately no free-provider branch here.
+        #
+        # An earlier version gave 18% of legitimate rows a Gmail or Walla
+        # address, to stop the sender predicting the label. Measured, it
+        # was a mistake: every template in this file presents the message
+        # as the brand ("הודעת חיוב | בנק הפועלים"), so a brand-claiming
+        # message from gmail.com labelled legitimate is a mislabelled
+        # impersonation. The rule engine flagged 34 of them and was right
+        # to - they turned into Hebrew false alarms at every threshold,
+        # where there had been none.
+        #
+        # The wider lesson: for brand transactional mail the sender is
+        # genuinely what makes it legitimate, so a sender that predicts
+        # the label here is the subject matter, not leakage. Overlapping
+        # the classes is the right move only where the message makes no
+        # claim about who sent it - which is what ML/senders.py does for
+        # the rows that have no sender at all.
+        if hard and roll < 0.60:
             # An official subdomain - looks unusual, entirely valid
             sub = rng.choice(LEGIT_SUBDOMAINS)
-            return f"{rng.choice(REAL_MAILBOXES)}@{sub}.{real_domain}"
-        return f"{rng.choice(REAL_MAILBOXES)}@{real_domain}"
+            return f"{mailbox()}@{sub}.{real_domain}"
+        return f"{mailbox()}@{real_domain}"
+
+    roll = rng.random()
+    # A compromised account on the brand's own domain. Rare, and the
+    # hardest case there is - the sender is genuinely theirs, so only the
+    # message body gives it away.
+    if roll < 0.06:
+        return f"{mailbox()}@{real_domain}"
     if hard:
         # A plausible domain and a plain mailbox - no "security" or "alert"
         return f"{rng.choice(REAL_MAILBOXES)}@{deceptive_domain(real_domain, rng)}"
-    if rng.random() < 0.22:
-        # Impersonation through a free mail provider
-        slug = re.sub(r"[^a-z]", "", name.lower()) or "service"
-        return f"{slug}.{rng.choice(['security', 'support', 'alert'])}{rng.randint(1, 99)}@{rng.choice(FREE_PROVIDERS)}"
-    return f"{rng.choice(FAKE_MAILBOXES)}@{rng.choice(fake_domains)}"
+    if roll < 0.28:
+        # Impersonation through a free mail provider. The brand slug is
+        # kept for a minority of these - it is a real phishing habit, but
+        # as the default it made the local part a giveaway on its own.
+        if rng.random() < 0.35:
+            slug = re.sub(r"[^a-z]", "", name.lower()) or "service"
+            return (f"{slug}.{rng.choice(['security', 'support', 'alert'])}"
+                    f"{rng.randint(1, 99)}@{rng.choice(FREE_PROVIDERS)}")
+        return f"{mailbox()}{rng.randint(1, 99)}@{rng.choice(FREE_PROVIDERS)}"
+    return f"{mailbox()}@{rng.choice(fake_domains)}"
 
 
 def rnd_link(domain: str, legit: bool, rng: random.Random) -> str:
