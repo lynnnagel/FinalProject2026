@@ -679,10 +679,17 @@ style.textContent = `
     display:flex;align-items:center;justify-content:center;
     animation:lura-in .2s ease;
   }
+  /* A light surface, the same one the site and the guardian mail use
+     (--surface / --border in frontend/css/main.css). The card used to be
+     the dark --ink surface: the overlay behind it is already dark and
+     blurred, so a dark card on top of it read as one heavy mass, and the
+     risk colour - the only thing on the card that carries meaning - had
+     to compete with it. */
   .lura-box {
-    background:#0E1020;
-    border:1px solid #282C44;border-radius:14px;
-    width:420px;max-width:92vw;color:#fff;overflow:hidden;
+    background:#FFFFFF;
+    border:1px solid #E9EAF0;border-radius:14px;
+    box-shadow:0 18px 50px rgba(20,20,43,.22);
+    width:420px;max-width:92vw;color:#14142B;overflow:hidden;
     font-family:'Rubik',-apple-system,'Segoe UI',sans-serif;direction:rtl;
     animation:lura-slide .3s cubic-bezier(.34,1.56,.64,1);
   }
@@ -693,61 +700,63 @@ style.textContent = `
   .lura-head {
     padding:16px 20px;display:flex;justify-content:space-between;
     align-items:center;font-size:15px;font-weight:700;
-    border-bottom:1px solid rgba(255,255,255,.1);
-    background:rgba(255,255,255,.05);
+    border-bottom:1px solid #E9EAF0;
+    background:#FAFAFB;
   }
-  .lura-x { background:rgba(255,255,255,.1);border:none;color:#fff;
+  .lura-x { background:#F1F2F6;border:none;color:#565673;
     width:26px;height:26px;border-radius:7px;cursor:pointer;font-size:13px; }
-  .lura-x:hover { background:rgba(255,255,255,.2); }
+  .lura-x:hover { background:#E4E6EC;color:#14142B; }
   .lura-body { padding:20px; }
   .lura-score-row { display:flex;justify-content:space-between;align-items:center;margin-bottom:12px; }
-  .lura-lbl  { font-size:11px;color:rgba(255,255,255,.4);margin-bottom:4px; }
+  .lura-lbl  { font-size:11px;color:#8E8EA8;margin-bottom:4px; }
   .lura-num  { font-size:50px;font-weight:800;line-height:1; }
-  .lura-sub  { font-size:11px;color:rgba(255,255,255,.35); }
+  .lura-sub  { font-size:11px;color:#8E8EA8; }
   .lura-lvl  { padding:6px 14px;border-radius:20px;font-size:13px;font-weight:700; }
   /* The fill carries the band's colour. It used to be a fixed rainbow
      gradient, so a score of 95 still began in green and the length of
      the bar was the only thing saying anything. */
-  .lura-bar-t { height:8px;background:rgba(255,255,255,.1);border-radius:4px;overflow:hidden;margin-bottom:16px; }
+  .lura-bar-t { height:8px;background:#EDEEF3;border-radius:4px;overflow:hidden;margin-bottom:16px; }
   .lura-bar-f { height:100%;border-radius:4px;transition:width .3s ease; }
   .lura-from {
     display:flex;align-items:baseline;gap:6px;margin-bottom:14px;
     font-size:12px;overflow:hidden;
   }
-  .lura-from-lbl { color:rgba(255,255,255,.4);flex-shrink:0; }
-  .lura-from-val { color:#E7E9F2;direction:ltr;unicode-bidi:embed;
+  .lura-from-lbl { color:#8E8EA8;flex-shrink:0; }
+  .lura-from-val { color:#14142B;direction:ltr;unicode-bidi:embed;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
   /* No uppercase and no letter-spacing: the label is Hebrew, which has
      no capitals, and spacing only pulls the letters apart. */
-  .lura-stitle { font-size:11px;font-weight:600;color:rgba(255,255,255,.4);
+  .lura-stitle { font-size:11px;font-weight:600;color:#8E8EA8;
     margin-bottom:8px; }
   .lura-chips { margin-bottom:14px; }
   /* On a clean message the whole section is dropped. The heading used
      to stay, with a single chip under it reading "none found" - a
      section announcing findings and then denying them - and the line
      below it says the same thing anyway. */
+  /* The brand wash rather than a neutral grey: these are the findings,
+     the one part of the card worth reading twice. */
   .lura-chip {
     display:inline-flex;align-items:center;gap:4px;
-    background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);
-    border-radius:20px;padding:4px 10px;font-size:12px;margin:3px;color:#fff;
+    background:#F4F0FF;border:1px solid #E4DAFF;
+    border-radius:20px;padding:4px 10px;font-size:12px;margin:3px;color:#4A3A8C;
   }
   .lura-rec {
-    background:#181B2E;border:1px solid #282C44;border-radius:8px;
+    background:#FAFAFB;border:1px solid #E9EAF0;border-radius:8px;
     padding:12px;font-size:13px;line-height:1.5;margin-bottom:12px;
   }
-  .lura-time { font-size:11px;color:rgba(255,255,255,.3);text-align:center; }
+  .lura-time { font-size:11px;color:#A8A8BC;text-align:center; }
   .lura-foot {
-    padding:14px 20px;border-top:1px solid rgba(255,255,255,.1);
+    padding:14px 20px;border-top:1px solid #E9EAF0;
     display:flex;flex-direction:column;gap:8px;
   }
   .lura-trust-btn {
     width:100%;padding:10px;
-    background:transparent;color:#9BA1B8;
-    border:1px solid #282C44;border-radius:8px;
+    background:transparent;color:#565673;
+    border:1px solid #D9DCE5;border-radius:8px;
     font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;
     transition:color .15s,border-color .15s;
   }
-  .lura-trust-btn:hover:not(:disabled) { color:#E7E9F2;border-color:#3A3F5C; }
+  .lura-trust-btn:hover:not(:disabled) { color:#14142B;border-color:#B9BCC9; }
   .lura-trust-btn:disabled { cursor:default;opacity:.7; }
   .lura-close-btn {
     width:100%;padding:11px;
