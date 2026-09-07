@@ -15,18 +15,12 @@ async function init() {
 }
 
 // ---------------------------------------------------------------------------
-// Identifying the mailbox owner.
-//
-// This used to search the page for [data-hovercard-id] and [email] -
-// attributes Google hangs on every person chip, senders included - so
-// the address picked was whoever appeared first in the DOM, usually a
-// sender. Accounts named noreply@discord.com and info@wolt.com ended up
-// in the database with the scans recorded under them, and the real
-// user's dashboard stayed empty.
-//
-// The order here is the other way round: the account signed in to LURA
-// first, which is known rather than guessed, and only then Google's
-// account button - one well-defined element, not a search of the page.
+// Identifying the mailbox owner. Searching the page for
+// [data-hovercard-id] picked whoever appeared first in the DOM, usually a
+// sender: accounts named noreply@discord.com ended up in the database
+// with the scans under them, and the real user's dashboard stayed empty.
+// So: the account signed in to LURA first, which is known rather than
+// guessed, then Google's account button - one element, not a search.
 // ---------------------------------------------------------------------------
 const EMAIL_RE = /[\w.+-]+@[\w-]+\.[\w.-]+/;
 
@@ -51,10 +45,10 @@ function emailFromAccountButton() {
 async function getUserEmail() {
   // 1. The account signed in to LURA. Exact, and what the server will
   //    rely on anyway once the token is sent.
-  const { pg_email, userEmail: cached } = await chrome.storage.local.get(
-    ['pg_email', 'userEmail']
+  const { lura_email, userEmail: cached } = await chrome.storage.local.get(
+    ['lura_email', 'userEmail']
   );
-  if (pg_email) return pg_email;
+  if (lura_email) return lura_email;
 
   // 2. Google's account button, with a short wait for the UI to load.
   for (let i = 0; i < 20; i++) {
@@ -71,17 +65,14 @@ async function getUserEmail() {
 }
 
 // ---------------------------------------------------------------------------
-// The authorization header for a scan.
-//
-// The popup stores the token in chrome.storage.local, which both halves
-// of the extension share. When it is there the server takes the user's
-// identity from it and ignores the address in the body, so scans are
-// recorded under the account signed in rather than one guessed from the
-// DOM.
+// The authorization header for a scan. The popup stores the token in
+// chrome.storage.local, shared by both halves of the extension. When it
+// is there the server takes identity from it and ignores the address in
+// the body, so scans are recorded under the account signed in.
 // ---------------------------------------------------------------------------
 function getAuthToken() {
   return new Promise(resolve =>
-    chrome.storage.local.get(['pg_token'], r => resolve(r.pg_token || null))
+    chrome.storage.local.get(['lura_token'], r => resolve(r.lura_token || null))
   );
 }
 
@@ -133,7 +124,7 @@ function hashRow(row) {
   const str = `${sender}|${subject}|${pos}`;
   let h = 5381;
   for (const c of str) { h = ((h << 5) + h) ^ c.charCodeAt(0); h |= 0; }
-  return 'pg_' + Math.abs(h).toString(36);
+  return 'lura_' + Math.abs(h).toString(36);
 }
 
 function extractEmailData(row) {
@@ -150,11 +141,11 @@ function extractEmailData(row) {
 async function scanVisibleEmails() {
   const rows = getEmailRows();
   if (!rows.length) return;
-  console.log(`PhishGuard: found ${rows.length} rows`);
+  console.log(`LURA: found ${rows.length} rows`);
 
   for (const row of rows) {
     const id = getRowId(row);
-    if (row.querySelector('.pg-badge')) continue;
+    if (row.querySelector('.lura-badge')) continue;
     if (resultCache.has(id)) {
       addBadge(row, resultCache.get(id));
       continue;
@@ -186,13 +177,10 @@ async function scanEmail(row, id) {
     const currentRow = findRowById(id) || row;
     addBadge(currentRow, result);
   } catch (err) {
-    // A failed scan used to come back as risk_score 0, so it got a
-    // green "safe" badge - exactly like a message that was checked and
-    // found clean. Mail the server never saw looked approved. -2 marks
-    // a failure and gets its own grey badge.
-    //
-    // The result is not cached either, so the scan retries by itself
-    // once the server is back.
+    // A failed scan used to return risk_score 0 and get a green "safe"
+    // badge, so mail the server never saw looked approved. -2 marks a
+    // failure and gets a grey badge, and is not cached, so the scan
+    // retries by itself once the server is back.
     console.warn('LURA scan error:', err.message);
     scannedEmails.delete(id);
     addBadge(row, { risk_score: -2, risk_level: 'לא נסרק', indicators: [], recommendation: '' });
@@ -200,21 +188,12 @@ async function scanEmail(row, id) {
 }
 
 // ---------------------------------------------------------------------------
-// Scanning the open message, with the full body.
-//
-// A row in Gmail's list holds only a preview - about a hundred
-// characters. That was all the server ever saw, so most of the pipeline
-// ran blind:
-//
-//   - the marketing check looks for an unsubscribe link, which sits
-//     in the footer.
-//   - the link, IP and shortener checks read URLs from the body.
-//   - the brand-in-body check, likewise.
-//   - BERT was trained on whole bodies and asked to classify an
-//     opening fragment.
-//
-// When the user opens a message the pane holds the full text, so the
-// scan runs again with the real content and the badge updates.
+// Scanning the open message, with the full body. A row in Gmail's list
+// holds ~100 characters of preview, and that was all the server ever saw,
+// so most of the pipeline ran blind: the unsubscribe link sits in the
+// footer, the link/IP/shortener and brand-in-body checks read the body,
+// and BERT was trained on whole messages but given an opening fragment.
+// Opening a message re-scans it with the real text and updates the badge.
 // ---------------------------------------------------------------------------
 const fullyScanned = new Set();
 
@@ -288,7 +267,7 @@ async function scanOpenEmail() {
 }
 
 function showOpenBadge(result) {
-  document.querySelector('.pg-open-badge')?.remove();
+  document.querySelector('.lura-open-badge')?.remove();
   const subjectEl = document.querySelector('h2.hP');
   if (!subjectEl) return;
 
@@ -296,7 +275,7 @@ function showOpenBadge(result) {
   const { color, bg, label } = badgeStyle(s);
 
   const b = document.createElement('span');
-  b.className = 'pg-badge pg-open-badge';
+  b.className = 'lura-badge lura-open-badge';
   b.style.cssText = `
     display:inline-flex;align-items:center;gap:6px;
     padding:4px 12px;margin-inline-start:10px;vertical-align:middle;
@@ -320,15 +299,14 @@ function findRowById(id) {
 }
 
 // ---------------------------------------------------------------------------
-// The risk bands. These must match backend/config.py, where they are
-// derived from PHISHING_THRESHOLD. They were written out here as
-// 80/50/30 and went stale after calibration, so mail the server called
-// phishing was shown to the user in yellow.
+// The risk bands. Must match backend/config.py, where they are derived
+// from PHISHING_THRESHOLD. Hard-coded here as 80/50/30 they went stale
+// after calibration, and mail the server called phishing showed yellow.
 // ---------------------------------------------------------------------------
 const BADGE_BANDS = [
-  { min: 78, label: 'סכנה',   level: 'סכנה גבוהה', color: '#EF4444', bg: '#450A0A', pulse: true  },
-  { min: 60, label: 'חשוד',   level: 'חשוד',       color: '#F97316', bg: '#431407', pulse: false },
-  { min: 36, label: 'זהירות', level: 'זהירות',     color: '#EAB308', bg: '#422006', pulse: false },
+  { min: 84, label: 'סכנה',   level: 'סכנה גבוהה', color: '#EF4444', bg: '#450A0A', pulse: true  },
+  { min: 70, label: 'חשוד',   level: 'חשוד',       color: '#F97316', bg: '#431407', pulse: false },
+  { min: 42, label: 'זהירות', level: 'זהירות',     color: '#EAB308', bg: '#422006', pulse: false },
   { min: -1, label: 'בטוח',   level: 'בטוח',       color: '#34D399', bg: '#022C22', pulse: false },
 ];
 
@@ -336,13 +314,10 @@ function badgeStyle(score) {
   return BADGE_BANDS.find(b => score >= b.min);
 }
 
-// The band for a whole result, not just its number.
-//
-// The server already decided which band a score falls in and sends the
-// name back in risk_level. Matching on that name keeps the extension
-// right even when the thresholds move, and the numbers above are only
-// the fallback for a result that arrived without a level - a cached
-// entry from an older version, or the offline path.
+// The band for a whole result, not just its number. The server already
+// decided and sends the name in risk_level, so matching on that keeps the
+// extension right when thresholds move. The numbers above are only the
+// fallback for a result with no level - an old cache entry, or offline.
 function bandFor(result) {
   const byLevel = BADGE_BANDS.find(b => b.level === result.risk_level);
   return byLevel || badgeStyle(Math.round(result.risk_score || 0));
@@ -356,12 +331,12 @@ function fade(hex, alpha) {
 }
 
 function addBadge(row, result) {
-  row.querySelector('.pg-badge')?.remove();
+  row.querySelector('.lura-badge')?.remove();
   const score = result.risk_score;
 
   if (score === -2) {
     const b = document.createElement('span');
-    b.className = 'pg-badge';
+    b.className = 'lura-badge';
     b.style.cssText = `
       display:inline-flex;align-items:center;gap:4px;direction:rtl;
       padding:3px 10px;margin:0 6px;vertical-align:middle;
@@ -378,7 +353,7 @@ function addBadge(row, result) {
 
   if (score === -1) {
     const b = document.createElement('span');
-    b.className = 'pg-badge';
+    b.className = 'lura-badge';
     b.style.cssText = `
       display:inline-flex;align-items:center;gap:4px;direction:ltr;
       padding:3px 10px;margin:0 6px;vertical-align:middle;
@@ -396,7 +371,7 @@ function addBadge(row, result) {
   const { color, bg: bgColor, label, pulse } = bandFor(result);
 
   const b = document.createElement('span');
-  b.className = 'pg-badge';
+  b.className = 'lura-badge';
   b.style.cssText = `
     display:inline-flex;align-items:center;gap:5px;direction:ltr;
     padding:3px 10px 3px 6px;margin:0 6px;vertical-align:middle;
@@ -405,8 +380,8 @@ function addBadge(row, result) {
     cursor:pointer;white-space:nowrap;font-family:'Rubik',-apple-system,sans-serif;
     box-shadow:0 1px 6px rgba(0,0,0,.4);
     animation:${pulse
-      ? 'pg-in .3s ease,pg-pulse 1.5s ease-in-out .3s infinite'
-      : 'pg-in .4s cubic-bezier(.34,1.56,.64,1)'};
+      ? 'lura-in .3s ease,lura-pulse 1.5s ease-in-out .3s infinite'
+      : 'lura-in .4s cubic-bezier(.34,1.56,.64,1)'};
   `;
   b.innerHTML = `
     <span style="font-size:11px">${label}</span>
@@ -442,7 +417,7 @@ function insertBadge(row, badge) {
 }
 
 function showModal(result, sender = '') {
-  document.getElementById('pg-modal')?.remove();
+  document.getElementById('lura-modal')?.remove();
   const s = Math.round(result.risk_score || 0);
   // The same band as the badge that was clicked. This window kept its
   // own copy of the cut-offs (80/50/30), left over from before the
@@ -452,18 +427,13 @@ function showModal(result, sender = '') {
   const color = band.color;
   const bg = fade(band.color, 0.2);
 
-  const chips = (result.indicators || []).map(i => `<span class="pg-chip">${escapeHtml(i)}</span>`).join('');
+  const chips = (result.indicators || []).map(i => `<span class="lura-chip">${escapeHtml(i)}</span>`).join('');
 
-  // The "I know this sender" button is shown only when there is
-  // something to mark and the message was flagged at all. On mail that
-  // already came back clean it does nothing and only adds noise.
-  //
-  // It is hidden entirely when the rule engine found real evidence. The
-  // server would refuse the request anyway, and offering an action that
-  // will be refused is an invitation to frustration - but the real
-  // reason is worse than that: on a message that looks like
-  // impersonation, a button reading "I know this sender" is exactly the
-  // thing an attacker wants the victim to press.
+  // Shown only when there is something to mark and the message was
+  // flagged; on clean mail it does nothing and adds noise. Hidden
+  // entirely when the rules found real evidence: the server would refuse
+  // anyway, and on a message that looks like impersonation a button
+  // reading "I know this sender" is what the attacker wants pressed.
   const hasHardEvidence = (result.indicators || []).some(i =>
     i.includes('מתיימר להיות') || i.includes('דומיין לא תקני') ||
     i.includes('כתובת IP') || i.includes('קיצור URL') ||
@@ -472,40 +442,40 @@ function showModal(result, sender = '') {
   const canTrust = Boolean(sender) && band.level !== 'בטוח' && !hasHardEvidence;
 
   const m = document.createElement('div');
-  m.id = 'pg-modal';
+  m.id = 'lura-modal';
   m.innerHTML = `
-    <div class="pg-overlay">
-      <div class="pg-box">
-        <div class="pg-head">
+    <div class="lura-overlay">
+      <div class="lura-box">
+        <div class="lura-head">
                     <span><img src="${chrome.runtime.getURL('icons/logo.svg')}" style="width:18px;height:18px;vertical-align:middle;margin-left:6px;">ניתוח LURA</span>
-          <button class="pg-x" aria-label="סגירה" title="סגירה">✕</button>
+          <button class="lura-x" aria-label="סגירה" title="סגירה">✕</button>
         </div>
-        <div class="pg-body">
-          <div class="pg-score-row">
+        <div class="lura-body">
+          <div class="lura-score-row">
             <div>
-              <div class="pg-lbl">מדד סיכון</div>
-              <div class="pg-num" style="color:${color}">${s}</div>
-              <div class="pg-sub">מתוך 100</div>
+              <div class="lura-lbl">מדד סיכון</div>
+              <div class="lura-num" style="color:${color}">${s}</div>
+              <div class="lura-sub">מתוך 100</div>
             </div>
-            <div class="pg-lvl" style="background:${bg};color:${color};border:1.5px solid ${color}">
+            <div class="lura-lvl" style="background:${bg};color:${color};border:1.5px solid ${color}">
               ${result.risk_level || ''}
             </div>
           </div>
-          <div class="pg-bar-t">
-            <div class="pg-bar-f" style="width:${s}%;background:${color}"></div>
+          <div class="lura-bar-t">
+            <div class="lura-bar-f" style="width:${s}%;background:${color}"></div>
           </div>
-          ${sender ? `<div class="pg-from">
-            <span class="pg-from-lbl">נשלח מ־</span>
-            <span class="pg-from-val">${escapeHtml(sender)}</span>
+          ${sender ? `<div class="lura-from">
+            <span class="lura-from-lbl">נשלח מ־</span>
+            <span class="lura-from-val">${escapeHtml(sender)}</span>
           </div>` : ''}
-          ${chips ? `<div class="pg-stitle">אינדיקטורים שזוהו</div>
-               <div class="pg-chips">${chips}</div>` : ''}
-          <div class="pg-rec"><strong>המלצה:</strong> ${result.recommendation || ''}</div>
-          ${result.response_time ? `<div class="pg-time">זמן תגובה: ${result.response_time}s</div>` : ''}
+          ${chips ? `<div class="lura-stitle">אינדיקטורים שזוהו</div>
+               <div class="lura-chips">${chips}</div>` : ''}
+          <div class="lura-rec"><strong>המלצה:</strong> ${result.recommendation || ''}</div>
+          ${result.response_time ? `<div class="lura-time">זמן תגובה: ${result.response_time}s</div>` : ''}
         </div>
-        <div class="pg-foot">
-          ${canTrust ? `<button class="pg-trust-btn">אני מכיר את ${escapeHtml(shortSender(sender))}</button>` : ''}
-          <button class="pg-close-btn">סגור</button>
+        <div class="lura-foot">
+          ${canTrust ? `<button class="lura-trust-btn">אני מכיר את ${escapeHtml(shortSender(sender))}</button>` : ''}
+          <button class="lura-close-btn">סגור</button>
         </div>
       </div>
     </div>`;
@@ -526,20 +496,19 @@ function showModal(result, sender = '') {
   }
   document.addEventListener('keydown', onKey, true);
 
-  m.querySelector('.pg-x').onclick         = close;
-  m.querySelector('.pg-close-btn').onclick = close;
-  m.querySelector('.pg-overlay').onclick   = e => {
-    if (e.target.classList.contains('pg-overlay')) close();
+  m.querySelector('.lura-x').onclick         = close;
+  m.querySelector('.lura-close-btn').onclick = close;
+  m.querySelector('.lura-overlay').onclick   = e => {
+    if (e.target.classList.contains('lura-overlay')) close();
   };
 
-  const trustBtn = m.querySelector('.pg-trust-btn');
+  const trustBtn = m.querySelector('.lura-trust-btn');
   if (trustBtn) {
     trustBtn.onclick = async () => {
-      // An explicit confirmation when the message was actually flagged.
-      // The user is about to lower the guard on mail the system marked,
-      // so they should know exactly what that does. The condition is the
-      // server's own verdict rather than a threshold repeated here,
-      // which would go stale the next time the threshold is calibrated.
+      // An explicit confirmation when the message was flagged - the user
+      // is lowering the guard on mail the system marked. The condition is
+      // the server's own verdict, not a threshold repeated here, which
+      // would go stale at the next calibration.
       if (result.is_phishing && !confirm(
         `LURA סימנה את המייל הזה כחשוד (${s}%).\n\n` +
         `סימון ${sender} כמוכר יפחית את משקל ניתוח הניסוח עבורו — ` +
@@ -576,16 +545,11 @@ function escapeHtml(value) {
 }
 
 // ---------------------------------------------------------------------------
-// Marking a sender as known.
-//
-// The system knows the large brands, but an inbox is full of addresses
-// nobody has heard of - an office, a teacher, a supplier. For those
-// there is no positive evidence of legitimacy at all, so ordinary mail
-// scores high on the model's guess alone.
-//
-// Marking damps the model's score only. If the rules see brand
-// impersonation or a link to a forged domain the score stays high: a
-// user can say they know an address, not that the evidence is void.
+// Marking a sender as known. The system knows the large brands, but an
+// inbox is full of addresses nobody has heard of, where there is no
+// positive evidence of legitimacy and ordinary mail scores high on the
+// model's guess alone. Marking damps the model only: a user can say they
+// know an address, not that the evidence is void.
 // ---------------------------------------------------------------------------
 async function markSenderTrusted(sender) {
   const token = await getAuthToken();
@@ -627,97 +591,97 @@ chrome.runtime.onMessage.addListener((req, _, sendResponse) => {
 
 const style = document.createElement('style');
 style.textContent = `
-  @keyframes pg-in {
+  @keyframes lura-in {
     from { opacity:0; transform:scale(.7); }
     to   { opacity:1; transform:scale(1); }
   }
-  @keyframes pg-pulse {
+  @keyframes lura-pulse {
     0%,100% { box-shadow:0 0 0 0 rgba(239,68,68,.5); }
     50%      { box-shadow:0 0 0 5px rgba(239,68,68,0); }
   }
-  .pg-overlay {
+  .lura-overlay {
     position:fixed;inset:0;z-index:999999;
     background:rgba(0,0,0,.75);backdrop-filter:blur(8px);
     display:flex;align-items:center;justify-content:center;
-    animation:pg-in .2s ease;
+    animation:lura-in .2s ease;
   }
-  .pg-box {
+  .lura-box {
     background:#0E1020;
     border:1px solid #282C44;border-radius:14px;
     width:420px;max-width:92vw;color:#fff;overflow:hidden;
     font-family:'Rubik',-apple-system,'Segoe UI',sans-serif;direction:rtl;
-    animation:pg-slide .3s cubic-bezier(.34,1.56,.64,1);
+    animation:lura-slide .3s cubic-bezier(.34,1.56,.64,1);
   }
-  @keyframes pg-slide {
+  @keyframes lura-slide {
     from { transform:translateY(24px) scale(.96); opacity:0; }
     to   { transform:translateY(0) scale(1); opacity:1; }
   }
-  .pg-head {
+  .lura-head {
     padding:16px 20px;display:flex;justify-content:space-between;
     align-items:center;font-size:15px;font-weight:700;
     border-bottom:1px solid rgba(255,255,255,.1);
     background:rgba(255,255,255,.05);
   }
-  .pg-x { background:rgba(255,255,255,.1);border:none;color:#fff;
+  .lura-x { background:rgba(255,255,255,.1);border:none;color:#fff;
     width:26px;height:26px;border-radius:7px;cursor:pointer;font-size:13px; }
-  .pg-x:hover { background:rgba(255,255,255,.2); }
-  .pg-body { padding:20px; }
-  .pg-score-row { display:flex;justify-content:space-between;align-items:center;margin-bottom:12px; }
-  .pg-lbl  { font-size:11px;color:rgba(255,255,255,.4);margin-bottom:4px; }
-  .pg-num  { font-size:50px;font-weight:800;line-height:1; }
-  .pg-sub  { font-size:11px;color:rgba(255,255,255,.35); }
-  .pg-lvl  { padding:6px 14px;border-radius:20px;font-size:13px;font-weight:700; }
+  .lura-x:hover { background:rgba(255,255,255,.2); }
+  .lura-body { padding:20px; }
+  .lura-score-row { display:flex;justify-content:space-between;align-items:center;margin-bottom:12px; }
+  .lura-lbl  { font-size:11px;color:rgba(255,255,255,.4);margin-bottom:4px; }
+  .lura-num  { font-size:50px;font-weight:800;line-height:1; }
+  .lura-sub  { font-size:11px;color:rgba(255,255,255,.35); }
+  .lura-lvl  { padding:6px 14px;border-radius:20px;font-size:13px;font-weight:700; }
   /* The fill carries the band's colour. It used to be a fixed rainbow
      gradient, so a score of 95 still began in green and the length of
      the bar was the only thing saying anything. */
-  .pg-bar-t { height:8px;background:rgba(255,255,255,.1);border-radius:4px;overflow:hidden;margin-bottom:16px; }
-  .pg-bar-f { height:100%;border-radius:4px;transition:width .3s ease; }
-  .pg-from {
+  .lura-bar-t { height:8px;background:rgba(255,255,255,.1);border-radius:4px;overflow:hidden;margin-bottom:16px; }
+  .lura-bar-f { height:100%;border-radius:4px;transition:width .3s ease; }
+  .lura-from {
     display:flex;align-items:baseline;gap:6px;margin-bottom:14px;
     font-size:12px;overflow:hidden;
   }
-  .pg-from-lbl { color:rgba(255,255,255,.4);flex-shrink:0; }
-  .pg-from-val { color:#E7E9F2;direction:ltr;unicode-bidi:embed;
+  .lura-from-lbl { color:rgba(255,255,255,.4);flex-shrink:0; }
+  .lura-from-val { color:#E7E9F2;direction:ltr;unicode-bidi:embed;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
   /* No uppercase and no letter-spacing: the label is Hebrew, which has
      no capitals, and spacing only pulls the letters apart. */
-  .pg-stitle { font-size:11px;font-weight:600;color:rgba(255,255,255,.4);
+  .lura-stitle { font-size:11px;font-weight:600;color:rgba(255,255,255,.4);
     margin-bottom:8px; }
-  .pg-chips { margin-bottom:14px; }
+  .lura-chips { margin-bottom:14px; }
   /* On a clean message the whole section is dropped. The heading used
      to stay, with a single chip under it reading "none found" - a
      section announcing findings and then denying them - and the line
      below it says the same thing anyway. */
-  .pg-chip {
+  .lura-chip {
     display:inline-flex;align-items:center;gap:4px;
     background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);
     border-radius:20px;padding:4px 10px;font-size:12px;margin:3px;color:#fff;
   }
-  .pg-rec {
+  .lura-rec {
     background:#181B2E;border:1px solid #282C44;border-radius:8px;
     padding:12px;font-size:13px;line-height:1.5;margin-bottom:12px;
   }
-  .pg-time { font-size:11px;color:rgba(255,255,255,.3);text-align:center; }
-  .pg-foot {
+  .lura-time { font-size:11px;color:rgba(255,255,255,.3);text-align:center; }
+  .lura-foot {
     padding:14px 20px;border-top:1px solid rgba(255,255,255,.1);
     display:flex;flex-direction:column;gap:8px;
   }
-  .pg-trust-btn {
+  .lura-trust-btn {
     width:100%;padding:10px;
     background:transparent;color:#9BA1B8;
     border:1px solid #282C44;border-radius:8px;
     font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;
     transition:color .15s,border-color .15s;
   }
-  .pg-trust-btn:hover:not(:disabled) { color:#E7E9F2;border-color:#3A3F5C; }
-  .pg-trust-btn:disabled { cursor:default;opacity:.7; }
-  .pg-close-btn {
+  .lura-trust-btn:hover:not(:disabled) { color:#E7E9F2;border-color:#3A3F5C; }
+  .lura-trust-btn:disabled { cursor:default;opacity:.7; }
+  .lura-close-btn {
     width:100%;padding:11px;
     background:#7C4DFF;
     color:#fff;border:none;border-radius:8px;
     font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;
   }
-  .pg-close-btn:hover { opacity:.9; }
+  .lura-close-btn:hover { opacity:.9; }
 `;
 document.head.appendChild(style);
 

@@ -1,11 +1,11 @@
 const API_URL = 'http://localhost:8000';
 
 async function start() {
-  const { pg_token, pg_email, pg_name } = await chrome.storage.local.get([
-    'pg_token', 'pg_email', 'pg_name',
+  const { lura_token, lura_email, lura_name } = await chrome.storage.local.get([
+    'lura_token', 'lura_email', 'lura_name',
   ]);
-  if (pg_token && pg_email) {
-    await loadStats(pg_email, pg_name || pg_email);
+  if (lura_token && lura_email) {
+    await loadStats(lura_email, lura_name || lura_email);
   } else {
     showGuestScreen();
   }
@@ -108,9 +108,9 @@ async function handleLogin() {
       return;
     }
     await chrome.storage.local.set({
-      pg_token: data.token,
-      pg_email: data.email,
-      pg_name:  data.name,
+      lura_token: data.token,
+      lura_email: data.email,
+      lura_name:  data.name,
     });
     await loadStats(data.email, data.name);
   } catch {
@@ -150,9 +150,9 @@ async function handleRegister() {
       return;
     }
     await chrome.storage.local.set({
-      pg_token: data.token,
-      pg_email: data.email,
-      pg_name:  data.name,
+      lura_token: data.token,
+      lura_email: data.email,
+      lura_name:  data.name,
     });
     await loadStats(data.email, data.name);
   } catch {
@@ -170,15 +170,15 @@ async function loadStats(email, name) {
     // /stats is personal and needs a token. This call was sent without
     // one, so it always came back 401 and the popup showed zeros with
     // no hint that anything was wrong.
-    const { pg_token } = await chrome.storage.local.get(['pg_token']);
+    const { lura_token } = await chrome.storage.local.get(['lura_token']);
     const res = await fetch(`${API_URL}/stats/${encodeURIComponent(email)}`, {
-      headers: pg_token ? { Authorization: `Bearer ${pg_token}` } : {},
+      headers: lura_token ? { Authorization: `Bearer ${lura_token}` } : {},
     });
 
     if (res.status === 401) {
       // The token expired. Clearing it returns the user to the sign-in
       // screen instead of leaving them "signed in" but broken.
-      await chrome.storage.local.remove(['pg_token', 'pg_email', 'pg_name']);
+      await chrome.storage.local.remove(['lura_token', 'lura_email', 'lura_name']);
       showGuestScreen();
       return;
     }
@@ -319,17 +319,17 @@ function scanNow() {
     }
     chrome.tabs.sendMessage(tabs[0].id, { action: 'scanAll' }, async () => {
       await new Promise(r => setTimeout(r, 1500));
-      const { pg_email, pg_name } = await chrome.storage.local.get(['pg_email', 'pg_name']);
+      const { lura_email, lura_name } = await chrome.storage.local.get(['lura_email', 'lura_name']);
       btn.disabled = false;
       btn.innerHTML = '<span>סרוק עכשיו</span>';
-      if (pg_email) await loadStats(pg_email, pg_name);
+      if (lura_email) await loadStats(lura_email, lura_name);
       else start();
     });
   });
 }
 
 async function handleLogout() {
-  await chrome.storage.local.remove(['pg_token','pg_email','pg_name','guardianMode','parentEmail','stats']);
+  await chrome.storage.local.remove(['lura_token','lura_email','lura_name','guardianMode','parentEmail','stats']);
   showGuestScreen();
 }
 

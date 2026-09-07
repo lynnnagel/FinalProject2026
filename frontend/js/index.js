@@ -1,9 +1,8 @@
 const API = 'http://localhost:8000';
 
 // ── Nav state ─────────────────────────────────────────────
-// $ returns null quietly for an element that is not on the page. The
-// home page no longer has every section it used to, and a direct
-// getElementById would throw and take the rest of the setup with it -
+// $ returns null quietly for an element that is not on the page, so a
+// missing section cannot throw and take the rest of the setup with it -
 // the reveal animations included.
 const $ = id => document.getElementById(id);
 
@@ -13,7 +12,7 @@ function show(id, visible) {
 }
 
 function initNav() {
-  const loggedIn = Boolean(localStorage.getItem('pg_token'));
+  const loggedIn = Boolean(localStorage.getItem('lura_token'));
   show('navLogin', !loggedIn);
   show('navLogout', loggedIn);
   show('navDashboard', loggedIn);
@@ -38,11 +37,11 @@ function logout() {
 
 // Guardian CTA: signed in -> dashboard, otherwise -> sign in
 function goGuardian() {
-  const token = localStorage.getItem('pg_token');
+  const token = localStorage.getItem('lura_token');
   if (token) {
     window.location.href = 'dashboard.html#guardian';
   } else {
-    localStorage.setItem('pg_after_login', 'dashboard.html#guardian');
+    localStorage.setItem('lura_after_login', 'dashboard.html#guardian');
     window.location.href = 'login.html';
   }
 }

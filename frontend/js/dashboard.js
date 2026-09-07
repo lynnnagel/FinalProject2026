@@ -12,7 +12,7 @@
     function authHeaders() {
       return {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('pg_token')}`,
+        'Authorization': `Bearer ${localStorage.getItem('lura_token')}`,
       };
     }
 
@@ -116,18 +116,14 @@
     }
 
     // The bands come from the server, which derives them from one
-    // calibrated threshold. They used to be written out here by hand -
-    // in two different sets, 80/50/30 in the overview and 70/40/20 in
-    // the scanner - and after the threshold was calibrated neither
-    // matched the real values any more.
-    //
-    // The list below is only what to fall back on if the request fails,
-    // so a dashboard on a server that is briefly down still labels
-    // scores instead of breaking. Keep it in step with config.py.
+    // calibrated threshold. Hand-written here they drifted into two
+    // different sets - 80/50/30 in the overview, 70/40/20 in the scanner
+    // - and neither matched after calibration. The list below is only the
+    // fallback if the request fails. Keep it in step with config.py.
     let BANDS = [
-      { min: 78, label: 'סכנה גבוהה', color: 'var(--danger)' },
-      { min: 60, label: 'חשוד',       color: 'var(--orange)' },
-      { min: 36, label: 'זהירות',     color: 'var(--yellow)' },
+      { min: 84, label: 'סכנה גבוהה', color: 'var(--danger)' },
+      { min: 70, label: 'חשוד',       color: 'var(--orange)' },
+      { min: 42, label: 'זהירות',     color: 'var(--yellow)' },
       { min: -1, label: 'בטוח',       color: 'var(--green)'  },
     ];
 
@@ -180,20 +176,20 @@
     }
 
     // The credentials must be cleared before redirecting. login.html
-    // sends you straight to the dashboard when it finds pg_token, and
+    // sends you straight to the dashboard when it finds lura_token, and
     // the dashboard sends you to login on a 401 - so an expired token
     // bounced between the two pages, which looks like flickering.
     function signOut() {
-      localStorage.removeItem('pg_token');
-      localStorage.removeItem('pg_email');
-      localStorage.removeItem('pg_name');
+      localStorage.removeItem('lura_token');
+      localStorage.removeItem('lura_email');
+      localStorage.removeItem('lura_name');
       window.location.href = 'login.html';
     }
 
     async function loadDashboard() {
-      const token = localStorage.getItem('pg_token');
-      userEmail   = localStorage.getItem('pg_email') || '';
-      const name  = localStorage.getItem('pg_name')  || userEmail;
+      const token = localStorage.getItem('lura_token');
+      userEmail   = localStorage.getItem('lura_email') || '';
+      const name  = localStorage.getItem('lura_name')  || userEmail;
 
       if (!token) { signOut(); return; }
 
@@ -290,12 +286,10 @@
     }
 
     // -- guardian mode ---------------------------------------------
-    //
-    // Linking an address is only the first of three steps: the person
-    // also has to open an account and sign the extension in, and until
-    // both happen no alert can ever arrive. The list below names the
-    // step that is still missing instead of leaving a link that looks
-    // done and does nothing.
+    // Linking is the first of three steps - the person also has to open
+    // an account and sign the extension in - so until both happen no
+    // alert can arrive. This names the missing step instead of leaving a
+    // link that looks done and does nothing.
     const WATCH_STATE = {
       needs_account: {
         label: 'ממתין לפתיחת חשבון',
@@ -402,12 +396,11 @@
       }
     }
 
-    // The bands are fetched before the first render, so a score is
-    // never labelled by the fallback list when the server could have
-    // said otherwise. A failed fetch resolves and the fallback stands.
-    // Which section is on screen does not depend on any request, so it
-    // is decided first. Hanging it off the data load meant that a failed
-    // load left the visitor on the overview after they had asked for
-    // guardian mode.
+    // Bands are fetched before the first render, so a score is never
+    // labelled by the fallback when the server could have said otherwise;
+    // a failed fetch resolves and the fallback stands. Which section is
+    // shown depends on no request, so it is decided first - hanging it
+    // off the data load left a failed load on the overview after the
+    // visitor had asked for guardian mode.
     openSectionFromHash();
     loadBands().then(loadDashboard);

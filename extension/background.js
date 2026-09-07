@@ -1,4 +1,4 @@
-// PhishGuard Background Service Worker
+// LURA Background Service Worker
 const API_URL = 'http://localhost:8000';
 
 // Installation handler

@@ -64,9 +64,9 @@ async function handleLogin(e) {
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.detail || 'שגיאה בהתחברות');
-    localStorage.setItem('pg_token', data.token);
-    localStorage.setItem('pg_email', data.email);
-    localStorage.setItem('pg_name',  data.name);
+    localStorage.setItem('lura_token', data.token);
+    localStorage.setItem('lura_email', data.email);
+    localStorage.setItem('lura_name',  data.name);
     window.location.href = afterLogin();
   } catch (err) {
     errEl.textContent = err.message;
@@ -74,17 +74,14 @@ async function handleLogin(e) {
   }
 }
 
-// Where to land after signing in. A visitor who clicked "Guardian mode"
-// on the home page is not asking to see the dashboard overview - they
-// are asking for that one screen, and the sign-in is in the way. The
-// target is written by the home page and read back here.
-//
-// Only a same-page relative target is accepted: an attacker who can set
-// this key must not be able to bounce the user to another site right
-// after they typed their password.
+// Where to land after signing in: a visitor who clicked "Guardian mode"
+// wants that screen, not the overview, and the sign-in is in the way. The
+// home page writes the target and this reads it back. Only a same-page
+// relative target is accepted - an attacker who can set this key must not
+// be able to bounce the user elsewhere right after they type a password.
 function afterLogin() {
-  const want = localStorage.getItem('pg_after_login') || '';
-  localStorage.removeItem('pg_after_login');
+  const want = localStorage.getItem('lura_after_login') || '';
+  localStorage.removeItem('lura_after_login');
   return /^[a-z_]+\.html(#[a-z]+)?$/i.test(want) ? want : 'dashboard.html';
 }
 
@@ -118,9 +115,9 @@ async function handleRegister(e) {
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.detail || 'שגיאה בהרשמה');
-    localStorage.setItem('pg_token', data.token);
-    localStorage.setItem('pg_email', data.email);
-    localStorage.setItem('pg_name',  data.name);
+    localStorage.setItem('lura_token', data.token);
+    localStorage.setItem('lura_email', data.email);
+    localStorage.setItem('lura_name',  data.name);
     window.location.href = afterLogin();
   } catch (err) {
     errEl.textContent = err.message;
@@ -128,6 +125,6 @@ async function handleRegister(e) {
   }
 }
 
-if (localStorage.getItem('pg_token')) {
+if (localStorage.getItem('lura_token')) {
   window.location.href = afterLogin();
 }

@@ -297,3 +297,32 @@
 .lura-modal-content::-webkit-scrollbar-track { background: var(--border-light, #F1F2F6); border-radius: 10px; }
 .lura-modal-content::-webkit-scrollbar-thumb { background: var(--ink); border-radius: 10px; }
 .lura-modal-content::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+/* Shown instead of scanning when the signed-in account is not the one
+   whose mailbox is open. Fixed rather than injected into Gmail's layout,
+   so it cannot disturb the page it sits on. */
+.lura-mismatch {
+  position: fixed;
+  bottom: 20px;
+  inset-inline-start: 20px;
+  z-index: 2147483000;
+  max-width: 340px;
+  padding: 14px 16px 14px 34px;
+  direction: rtl;
+  text-align: right;
+  background: #FFFFFF;
+  border: 1px solid #E6E2F0;
+  border-inline-start: 3px solid #F59E0B;
+  border-radius: 10px;
+  box-shadow: 0 6px 22px rgba(22, 20, 31, .13);
+  font-family: 'Rubik', -apple-system, 'Segoe UI', Arial, sans-serif;
+}
+.lura-mismatch-title { font-size: 13.5px; font-weight: 600; color: #16141F; margin-bottom: 5px; }
+.lura-mismatch-body  { font-size: 12.5px; line-height: 1.6; color: #4A4660; }
+.lura-mismatch-body b { color: #16141F; direction: ltr; unicode-bidi: embed; }
+.lura-mismatch-x {
+  position: absolute; top: 8px; inset-inline-start: 9px;
+  width: 20px; height: 20px; padding: 0;
+  border: 0; border-radius: 5px; background: transparent;
+  font-size: 16px; line-height: 1; color: #8B87A0; cursor: pointer;
+}
+.lura-mismatch-x:hover { background: #F3F1F9; color: #16141F; }
