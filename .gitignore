@@ -7,3 +7,19 @@ __pycache__/
 *.db
 
 backend/ML/checkpoints/
+
+# IDE settings — personal to whoever opened the project
+.idea/
+.vscode/
+
+# Generated figures and measurement output. They are rebuilt by
+# ML/tradeoff.py and the figure scripts, so the repository holds the
+# code that makes them rather than the images themselves.
+docs/figs/
+backend/figs/
+*.png
+!extension/icons/*.png
+!frontend/icons/*.png
+
+# Local backups of the processed splits
+backend/ML/data/processed.backup/

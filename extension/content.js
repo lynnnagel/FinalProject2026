@@ -8,6 +8,17 @@ let scanQueue     = Promise.resolve();
 async function init() {
   userEmail = await getUserEmail();
   console.log('LURA user:', userEmail);
+
+  const mismatch = await mailboxMismatch();
+  if (mismatch) {
+    console.warn(
+      `LURA: signed in as ${mismatch.signedIn} but this mailbox is ` +
+      `${mismatch.mailbox} - not scanning`
+    );
+    showMismatchNotice(mismatch);
+    return;
+  }
+
   observeEmailChanges();
   setTimeout(scanVisibleEmails, 2000);
   setInterval(scanVisibleEmails, 3000);
@@ -62,6 +73,69 @@ async function getUserEmail() {
 
   // 3. A value saved on an earlier run, then a placeholder.
   return cached || 'user@gmail.com';
+}
+
+// ---------------------------------------------------------------------------
+// Is the mailbox on screen the one the extension is signed in as?
+//
+// Identity comes from the token and never from the page, because a
+// scraped address can be forged. But nothing checked that the token's
+// account owns the mail being read: signed in as one account and
+// browsing another, every message was recorded under the signed-in one,
+// and the guardian was told their child received mail that never reached
+// them.
+//
+// Only a positive mismatch stops the scan. If the account button cannot
+// be read we scan exactly as before - silence is not evidence, the same
+// rule the scoring engine follows.
+// ---------------------------------------------------------------------------
+
+// Gmail treats dots and a +tag as the same mailbox, and the account
+// button always shows the bare address. Without this, testing with
+// plus-addressing (lynn+m@gmail.com against lynn@gmail.com) would look
+// like a mismatch and scanning would stop.
+function sameMailbox(a, b) {
+  const norm = (addr) => {
+    let [local, domain = ''] = String(addr).toLowerCase().trim().split('@');
+    local = local.split('+')[0];
+    if (domain === 'gmail.com' || domain === 'googlemail.com') {
+      local = local.replace(/\./g, '');
+      domain = 'gmail.com';
+    }
+    return `${local}@${domain}`;
+  };
+  return norm(a) === norm(b);
+}
+
+async function mailboxMismatch() {
+  const { lura_email } = await chrome.storage.local.get(['lura_email']);
+  if (!lura_email) return null;          // not signed in - nothing to compare
+
+  for (let i = 0; i < 20; i++) {
+    const open = emailFromAccountButton();
+    if (open) {
+      return sameMailbox(open, lura_email)
+        ? null
+        : { signedIn: lura_email, mailbox: open };
+    }
+    await new Promise(r => setTimeout(r, 500));
+  }
+  return null;                            // could not read it - carry on
+}
+
+function showMismatchNotice({ signedIn, mailbox }) {
+  if (document.querySelector('.lura-mismatch')) return;
+  const box = document.createElement('div');
+  box.className = 'lura-mismatch';
+  box.innerHTML = `
+    <div class="lura-mismatch-title">LURA לא סורקת את התיבה הזאת</div>
+    <div class="lura-mismatch-body">
+      התוסף מחובר כ-<b>${signedIn}</b>, והתיבה הפתוחה היא <b>${mailbox}</b>.
+      כדי לסרוק, התחברי בתוסף לאותו חשבון.
+    </div>
+    <button class="lura-mismatch-x" aria-label="סגירה">×</button>`;
+  box.querySelector('.lura-mismatch-x').onclick = () => box.remove();
+  document.body.appendChild(box);
 }
 
 // ---------------------------------------------------------------------------
