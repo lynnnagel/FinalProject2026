@@ -1,14 +1,11 @@
 """
 LURA - turning a numeric score into a risk level and a message.
 
-A separate module that depends only on config, so `detector`, `scoring`
-and the API layer can all import it without an import cycle.
-
-It exists because this logic was duplicated three times and two copies
-drifted. The one in `API/scan.py` served the cached-result path with
-hard-coded cut-offs (80/50/30) that no longer matched the real ones - so
-the same message got one label on its first scan and a different one
-when it came back from the cache.
+Depends only on config, so detector, scoring and the API layer can all
+import it without a cycle. It exists because this logic was duplicated
+three times and drifted: the copy in API/scan.py served the cache path
+with stale cut-offs, so a message got one label on its first scan and a
+different one when it came back from the cache.
 """
 from config import (
     PHISHING_THRESHOLD,
@@ -46,12 +43,10 @@ def apply(result: dict, corroborated: bool = True) -> dict:
     """
     Add is_phishing, risk_level and recommendation based on risk_score.
 
-    `corroborated` is kept in the signature for compatibility but no
-    longer changes the label: the uncorroborated case is held back on
-    the score itself in scoring.combine, so the number and the label
-    come from the same place and cannot disagree. Holding back only the
-    label used to leave a score of 99 sitting next to the word
-    "suspicious".
+    `corroborated` is kept for compatibility but no longer changes the
+    label: scoring.combine holds back the score itself, so the number and
+    the label come from one place. Holding back only the label used to
+    leave a score of 99 next to the word "suspicious".
     """
     score = result["risk_score"]
     result["is_phishing"] = is_phishing(score)

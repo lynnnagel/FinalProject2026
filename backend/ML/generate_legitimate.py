@@ -33,10 +33,9 @@ import os
 import random
 
 # ---------------------------------------------------------------------------
-# Companies and the domains they really send from. These are exactly
-# the addresses the rule engine recognises as a known sender, so these
-# examples teach the model the combination it never saw: a legitimate
-# sender with operational content.
+# Companies and the domains they really send from - the same addresses
+# the rule engine recognises, so these rows teach the model the
+# combination it never saw: a legitimate sender with operational content.
 # ---------------------------------------------------------------------------
 BRANDS_EN = [
     ("Netflix", "netflix.com"), ("Spotify", "spotify.com"),
@@ -65,11 +64,9 @@ MAILBOXES = ["noreply", "no-reply", "orders", "service", "info",
 SUBDOMAINS = ["", "", "", "mail.", "e.", "email.", "news."]
 
 # ---------------------------------------------------------------------------
-# Templates. {brand} {order} {amount} {date} {link} are substituted.
-#
-# Some deliberately carry the words the model trips on - password,
-# account, verify - because that is exactly where it errs. An
-# operational example without them teaches it nothing.
+# Templates; {brand} {order} {amount} {date} {link} are substituted. Some
+# deliberately carry the words the model trips on - password, account,
+# verify - because an operational example without them teaches nothing.
 # ---------------------------------------------------------------------------
 TEMPLATES_EN = [
     ("Your {brand} order #{order} has shipped",

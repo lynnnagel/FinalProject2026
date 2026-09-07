@@ -57,10 +57,8 @@ def connect_guardian(
 
     # Guardian mode is set up by the guardian alone, so the monitored
     # person would otherwise never learn of it. Only on a new link -
-    # re-linking an account already watched by the same guardian is not
-    # news, and would let the form be used to send repeated mail.
-    #
-    # In the background: a mail that cannot go out must not fail the
+    # re-linking is not news, and would let the form send repeated mail.
+    # In the background, so a mail that cannot go out does not fail the
     # request that created the link.
     if not already_linked:
         background_tasks.add_task(
@@ -89,12 +87,9 @@ def disconnect_guardian(
     db: Session = Depends(get_db),
 ):
     """
-    Removes the link.
-
-    Either side may do it: the guardian who set it, or the monitored
-    account itself. Without the second case someone could be watched
-    with no way to stop it - the guardian was the only one who could
-    undo what only the guardian could start.
+    Removes the link. Either side may: the guardian who set it, or the
+    monitored account. Without the second, only the guardian could undo
+    what only the guardian could start.
     """
     child = db.query(User).filter(User.email == str(request.child_email)).first()
     if not child or child.guardian_id is None:
@@ -120,10 +115,10 @@ def _setup_state(child: User) -> str:
     """
     How far a watched account is through setup.
 
-    Linking is only the first of three steps. Until the person opens an
-    account there is nothing to sign the extension in as, and until the
-    extension runs there is nothing to scan - so a link on its own sends
-    no alerts at all. Naming the missing step is the whole point.
+    Linking is the first of three steps: without an account there is
+    nothing to sign the extension in as, and without the extension there
+    is nothing to scan, so a link alone sends no alerts. Naming the
+    missing step is the point.
     """
     if not child.password_hash:
         return "needs_account"
@@ -197,10 +192,9 @@ def get_guardian_data(
 
     children = db.query(User).filter(User.guardian_id == parent.id).all()
     if not children:
-        # An empty state, not an error. A guardian who is registered
-        # but has not linked an account yet is a perfectly normal case,
-        # and a 404 made the dashboard show a failure message instead of
-        # telling them what to do.
+        # An empty state, not an error: a guardian who has not linked an
+        # account yet is normal, and a 404 made the dashboard show a
+        # failure instead of telling them what to do.
         return GuardianData(
             child_name="", child_email="", risk_score=0.0,
             recent_alerts=[], phishing_blocked_today=0,
@@ -211,11 +205,9 @@ def get_guardian_data(
     # item.
     child = max(children, key=lambda c: c.total_scanned)
 
-    # The guardian's alerts, not the monitored user's. Two records are
-    # created per detection: one for the monitored user and one for the
-    # guardian, and only the guardian's carries the monitored user's
-    # name. Until now the dashboard pulled the monitored user's instead,
-    # so the guardian records were written and never read.
+    # The guardian's alerts, not the monitored user's. Each detection
+    # writes both, and only the guardian's names whose inbox it was. The
+    # dashboard used to pull the other one, so these were never read.
     alerts = (
         db.query(Alert)
         .filter(Alert.user_id == parent.id)

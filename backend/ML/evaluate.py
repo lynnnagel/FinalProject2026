@@ -119,11 +119,10 @@ def main() -> None:
 
     df = load_split(args.data_dir, args.split)
 
-    # Most English corpora give the body only, with no From line. Three
-    # of the nine rules read the sender - including brand impersonation,
-    # the highest-scoring one - so on those rows the engine runs
-    # crippled, and the ensemble measured there is not the system that
-    # runs in Gmail, where a sender is always present.
+    # Most English corpora give the body only. Three of the nine rules
+    # read the sender, impersonation among them, so those rows measure a
+    # crippled engine - not the system that runs in Gmail, where a sender
+    # is always present.
     has_sender = df["sender"].str.strip() != ""
     if args.with_sender:
         df = df[has_sender].reset_index(drop=True)

@@ -29,16 +29,13 @@ from config import (
 )
 
 # ---------------------------------------------------------------------------
-# expect: what the system should return.
-#   "high"    - must be caught
-#   "medium"  - a borderline case; any result is worth discussing
-#   "low"     - must pass quietly
+# expect: "high" must be caught, "low" must pass quietly, "medium" is
+# borderline and any result is worth discussing.
 #
-# from_name is a display name only. The real sender address will be
-# yours, since that is the mailbox this sends from, so the sender-domain
-# rules cannot score fully here. That is a limit of testing against your
-# own inbox, not of the system - check_pipeline.py posts straight to the
-# API with a real sender domain.
+# from_name is a display name only - the real sender is your own mailbox,
+# so the sender-domain rules cannot score fully. A limit of testing
+# against your own inbox, not of the system: check_pipeline.py posts
+# straight to the API with a real sender domain.
 # ---------------------------------------------------------------------------
 SAMPLES = [
     dict(

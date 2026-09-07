@@ -10,9 +10,8 @@ load_dotenv(Path(__file__).parent / ".env")
 
 # ---------------------------------------------------------------------------
 # Security
-# SECRET_KEY signs the JWTs. It has no default on purpose: a hard-coded
-# fallback in a public repository lets anyone forge a token for any user.
-# Generate one with:  python -c "import secrets; print(secrets.token_hex(32))"
+# SECRET_KEY signs the JWTs. No default on purpose - a hard-coded fallback
+# in a public repository lets anyone forge a token for any user.
 # ---------------------------------------------------------------------------
 SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
@@ -35,15 +34,12 @@ APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:8000")
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./lura.db")
 
 # ---------------------------------------------------------------------------
-# CORS
-# Allow Chrome / Firefox extensions and localhost (dev).
-# In production, replace with explicit extension IDs.
+# CORS - extensions and localhost. In production, use explicit extension IDs.
+#
+# mail.google.com must be here: the content script runs inside the Gmail
+# page, so that is the Origin on its requests. Without it the preflight
+# (OPTIONS /scan) is refused with a 400 and nothing is ever marked.
 # ---------------------------------------------------------------------------
-# The extension's content script runs inside the Gmail page, so the
-# Origin on its requests is https://mail.google.com and not
-# chrome-extension://. Without that entry the preflight (OPTIONS /scan)
-# is refused with a 400, the POST is never sent, and the extension marks
-# nothing at all.
 CORS_ORIGIN_REGEX = (
     r"chrome-extension://.*"
     r"|moz-extension://.*"
@@ -56,46 +52,35 @@ CORS_ORIGIN_REGEX = (
 # ---------------------------------------------------------------------------
 # Phishing detection thresholds (0-100 score)
 #
-# PHISHING_THRESHOLD is the only value we calibrate. The other bands are
-# derived from it rather than set separately, because four independent
-# numbers tend to drift apart: at a threshold of 70 the bands 30/50/80
-# all agreed, but once the threshold drops to 35 - which calibrating on
-# real data forces - a message scoring 40 is marked is_phishing=True and
-# shown to the user as merely "caution", because 40 is under MEDIUM=50.
-# The extension would reassure the user about mail the system had just
-# called phishing.
+# PHISHING_THRESHOLD is the only calibrated value; the bands are derived
+# from it. Four independent numbers drift apart: with a fixed MEDIUM=50, a
+# message scoring 40 under a threshold of 35 is is_phishing=True but shown
+# as merely "caution" - the extension reassuring the user about mail the
+# system just called phishing.
 #
-# The derivation keeps the original proportions: at a threshold of 70 it
-# returns 42/70/84, very close to the 30/50/80 picked by hand early on.
+# To set it:  python ML/evaluate.py --split test --sweep
+#             python ML/tradeoff.py    (precision at a real 1% base rate)
 #
-# To set the value itself:  python ML/evaluate.py --split test --sweep
+# 70, raised from 60. The score distribution is bimodal, so almost no
+# message sits between 40 and 80: moving the cut-off through that range
+# reclassifies very few. Recall falls 0.02 points while precision at a 1%
+# base rate rises from 49.3% to 67.4% - the raise is nearly free.
 #
-# 60 was picked off that sweep over the whole test set. From 60 upward
-# the misses are flat at 52-53 and the false alarms fall slowly, from 44
-# at 60 to 37 at 80 - so the top of the range is a wide plateau rather
-# than a peak, and the choice is not balanced on an edge.
-#
-# 60 is the lowest point on that plateau, which makes it the most
-# sensitive setting that still reaches both of the things worth having:
-# the minimum number of misses, and no Hebrew false alarms at all.
-# Raising it further buys about seven fewer false alarms out of 7,644
-# legitimate messages, and pays in sensitivity to well-written phishing
-# from a sender the rules do not recognise - the case this corpus
-# represents least well.
+# It is also a weak lever. 80% precision needs the false alarms cut from
+# 44 to 19, which no cut-off in the measured range delivers; that takes
+# new evidence of legitimacy, not a different number here.
 # ---------------------------------------------------------------------------
-PHISHING_THRESHOLD = 70     # at or above this, classed as phishing
+PHISHING_THRESHOLD = 70       # at or above this, classed as phishing
 
 
 def bands_for(threshold: int) -> tuple[int, int, int]:
     """
     The three derived bands for a given threshold: low, medium, high.
 
-    A function rather than three expressions, because the threshold
-    sweep in ML/evaluate.py has to derive them for a threshold that is
-    not the configured one. When it computed them separately the sweep
-    held the ceiling fixed while moving the threshold, which made every
-    cut-off above the ceiling look catastrophic - an artefact of the
-    measurement, not of the data.
+    A function because the sweep in ML/evaluate.py derives them for a
+    threshold that is not the configured one. Computed separately, the
+    sweep held the ceiling fixed while moving the threshold, making every
+    cut-off above the ceiling look catastrophic - an artefact.
     """
     return (
         round(threshold * 0.6),                              # caution
@@ -114,75 +99,42 @@ assert 0 < LOW_RISK_THRESHOLD < MEDIUM_RISK_THRESHOLD <= PHISHING_THRESHOLD \
        f"{HIGH_RISK_THRESHOLD} with threshold {PHISHING_THRESHOLD}"
 
 # ---------------------------------------------------------------------------
-# Merging the two engines  (see backend/scoring.py for the reasoning)
-#
+# Merging the two engines  (reasoning in backend/scoring.py)
 #     score = max( bert*damping + RULE_BOOST*rules ,  rules )
-#
-# The previous version used a weighted average,
-# BERT_WEIGHT*bert + HEURISTIC_WEIGHT*rules. It was dropped after
-# measurement: the average put a ceiling of BERT_WEIGHT*100 on the BERT
-# score, so the model could not cross the threshold on its own. On the
-# test set that gave 52.8% accuracy and a 93.6% miss rate, against 99.4%
-# for BERT alone.
 # ---------------------------------------------------------------------------
 
 # How much the rule score adds on top of BERT. 0.5 -> up to 50 points.
 RULE_BOOST = float(os.getenv("RULE_BOOST", "0.5"))
 
-# Multiplier on the BERT score when the sender is a known company's own
-# domain. 0.25 takes a score of 99.99 down to 25, under any sensible
-# threshold. It targets a measured failure of the model on legitimate
-# account and security mail, and it requires positive evidence - a
-# recognised sender domain - not merely silence from the rules.
+# BERT multiplier when the sender is a known company's own domain. 0.25
+# takes 99.99 down to 25, under any sensible threshold.
 TRUST_DAMPING = float(os.getenv("TRUST_DAMPING", "0.25"))
 
-# There used to be a damping here for mail that reads as marketing. It
-# was removed after measurement - see the note in scoring.py. In short:
-# it was the only damping that needed no sender address, so it fired on
-# anything carrying an unsubscribe link, phishing included. On the test
-# split it cost 488 missed detections and saved two false alarms, and
-# none of the legitimate mail it was written for depended on it.
-#
-# It was also solving a problem that no longer exists. It dates from
-# when the corpora labelled spam as phishing; relabelling spam as
-# not-phishing (ML/prepare_data.py) taught the model that distinction
-# directly.
-
-# Multiplier on the BERT score for operational mail from a recognised
-# company - order confirmation, shipping notice, receipt. This is the
-# category the system got wrong most often: its shape sets off the rule
-# engine (many links, "order", "account") and the model flags it almost
-# every time. The damping is sharper than the others because there are
-# two independent pieces of evidence here - the sender is the company
-# itself, and every link points back to it.
+# BERT multiplier for operational mail from a recognised company - order
+# confirmation, shipping notice, receipt. The category the system got
+# wrong most often: its shape sets off the rule engine ("order",
+# "account", many links) and the model flags it almost every time.
+# Sharper than the others because two things corroborate it - the sender
+# is the company, and every link points back to it.
 TRANSACTIONAL_DAMPING = float(os.getenv("TRANSACTIONAL_DAMPING", "0.10"))
 
-# Highest score allowed when only one engine contributed.
-#
-# With the rule engine silent, the verdict rests on a single piece of
-# evidence - and it is the one known to flag legitimate mail from a
-# sender it does not recognise. A score of 99 there promises a certainty
-# that is not there. The ceiling sits at the top of the "suspicious"
-# band, so the number and the label say the same thing: there is
-# suspicion, not certainty.
-#
-# The classification itself is kept - 75 is above the threshold - so the
-# alert is still recorded and the guardian still notified. Only the
-# confidence on display is held back.
+# Highest score allowed when only one engine contributed. With the rules
+# silent, the verdict rests on the single signal known to flag legitimate
+# mail from an unrecognised sender, so 99 promises a certainty that is not
+# there. Sits at the top of the "suspicious" band: the classification is
+# kept - the alert is still recorded and the guardian still notified -
+# only the displayed confidence is held back.
 UNCORROBORATED_CEILING = HIGH_RISK_THRESHOLD - 1
 
 # Rule score below which we treat the engine as having found nothing.
 CORROBORATION_FLOOR = 15
 
-# Stamp identifying the current scoring formula. Scan results are stored
-# so a message already checked does not go through BERT again - that is
-# the expensive part of the pipeline. This stamp is what makes the saving
-# safe: it is derived from the parameters, so any change to them
-# automatically invalidates every score computed before it, and they are
-# recomputed on the next scan.
-
+# Stamp identifying the current formula. Scan results are stored so a
+# message already checked skips BERT, the expensive step. Deriving the
+# stamp from the parameters is what makes that safe: any change to them
+# invalidates every score computed before it.
 SCORING_VERSION = (
-    f"v7|b{RULE_BOOST}|t{TRUST_DAMPING}"
+    f"v5|b{RULE_BOOST}|t{TRUST_DAMPING}"
     f"|x{TRANSACTIONAL_DAMPING}|th{PHISHING_THRESHOLD}"
 )
 
@@ -211,12 +163,9 @@ URL_COUNT_THRESHOLD = 2       # Number of URLs above which we penalise
 # ---------------------------------------------------------------------------
 RECENT_EMAILS_WINDOW = 10     # Rolling average window for user risk score
 
-# Both of these were 70 - exactly the classification threshold at the
-# time. They are derived from it so we never end up with mail classed as
-# phishing that records no alert and never reaches the guardian. With a
-# threshold of 35 and a fixed 70, guardian mode would have missed most
-# detections, including brand impersonation that the rules score in the
-# middle.
+# Derived, so mail classed as phishing can never fail to record an alert
+# or reach the guardian. Both were hard-coded at 70; once the threshold
+# was calibrated below that, guardian mode silently missed most detections.
 ALERT_THRESHOLD = PHISHING_THRESHOLD           # lowest score that records an Alert
 GUARDIAN_NOTIFY_THRESHOLD = PHISHING_THRESHOLD  # lowest score that mails the guardian
 ALERT_HISTORY_LIMIT = 5       # Alerts returned in guardian dashboard

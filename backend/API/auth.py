@@ -66,12 +66,10 @@ def create_reset_token(email: str, password_hash: str | None) -> str:
     A short-lived, single-use token for resetting a password.
 
     Single use is what makes it safe to send by mail, and it needs no
-    table of spent tokens: the token carries a fingerprint of the
-    password it was issued against. Resetting replaces the password, the
-    fingerprint stops matching, and the link is dead - including every
-    other link issued earlier. Without this the token was replayable
-    for its whole 30 minutes by anyone who saw the mail, which is
-    exactly the situation the feature exists to protect against.
+    table of spent tokens: the token carries a fingerprint of the password
+    it was issued against, so resetting kills this link and every earlier
+    one. Without it the token was replayable for 30 minutes by anyone who
+    saw the mail.
     """
     payload = {
         "sub": email,
@@ -117,29 +115,24 @@ def get_optional_user(
     db: Session = Depends(get_db),
 ) -> User | None:
     """
-    Returns the identified user if a valid token was sent, and None if
-    none was sent at all.
+    The identified user if a valid token was sent, None if none was.
 
-    It exists for /scan. The extension's content script sends the address
-    it scrapes from Gmail's DOM, which caused two problems at once:
-    anyone could post a request in another user's name, and scans were
-    recorded under an identity that need not match the account the user
-    signed in with - which is why their dashboard came up empty.
-
-    When a token is present it decides, and any address in the request
-    body is ignored. A missing token is allowed, so the extension keeps
-    working before login.
+    It exists for /scan, where the content script sends an address
+    scraped from Gmail's DOM: anyone could post in another user's name,
+    and scans were recorded under an identity that need not match the
+    signed-in account. When a token is present it decides and the body's
+    address is ignored; a missing token is allowed so the extension works
+    before login.
     """
     if not credentials:
         return None
     try:
         email = decode_token(credentials.credentials)
     except HTTPException:
-        # A malformed or expired token counts as no token, not as an
-        # error. This path allows an unauthenticated request in the
-        # first place, so refusing with a 401 added no protection - it
-        # only broke scanning completely for anyone whose token had aged
-        # out after seven days, instead of carrying on anonymously.
+        # A bad or expired token counts as no token, not as an error.
+        # This path allows unauthenticated requests anyway, so a 401 added
+        # no protection - it only broke scanning outright once a token
+        # aged out, instead of carrying on anonymously.
         return None
     return db.query(User).filter(User.email == email).first()
 
@@ -151,12 +144,10 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
         raise HTTPException(400, "כתובת המייל כבר רשומה במערכת")
 
     if existing:
-        # A row with no password is a placeholder: guardian mode creates
-        # one for an address it is asked to watch, so that later scans
-        # have somewhere to attach. Nobody has ever signed into it, so
-        # registering claims it rather than colliding with it - without
-        # this, being named as someone's monitored account locked that
-        # address out of ever creating one.
+        # A row with no password is a placeholder created by guardian
+        # mode, so later scans have somewhere to attach. Nobody has signed
+        # into it, so registering claims it; without this, being named as
+        # someone's monitored account locked that address out.
         existing.name = data.name or existing.name
         existing.password_hash = hash_password(data.password)
         db.commit(); db.refresh(existing)
@@ -223,10 +214,9 @@ def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(404, "משתמש לא נמצא")
 
-    # The link is good for one reset. Once the password changes the
-    # fingerprint in the token no longer matches what is stored, so this
-    # link - and any older one still inside its 30 minutes - stops
-    # working.
+    # One reset per link: once the password changes the fingerprint in the
+    # token stops matching, killing this link and any older one still
+    # inside its 30 minutes.
     if payload.get("pwh") != _password_fingerprint(user.password_hash):
         raise HTTPException(
             400, "הקישור כבר שימש לאיפוס סיסמה — בקש קישור חדש"

@@ -1,5 +1,5 @@
 """
-PhishGuard FastAPI Application
+LURA FastAPI Application
 Run with: uvicorn server:app --host localhost --port 8000 --reload
 """
 import logging

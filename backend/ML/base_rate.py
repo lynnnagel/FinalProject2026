@@ -1,25 +1,19 @@
 """
 The class balance of the data, and what the numbers mean in a real inbox.
 
-The corpus is roughly half phishing. A real mailbox is nowhere near
-that - the usual estimate is one percent or less. That gap does not
-invalidate every measurement, but it changes what some of them mean, and
-the difference is worth being precise about:
+The corpus is roughly half phishing; a real mailbox is one percent or
+less. That gap does not invalidate every measurement, but it changes what
+some of them mean:
 
-    recall (TPR)    unaffected. Of the phishing that arrives, the share
+    recall (TPR)    unaffected - of the phishing that arrives, the share
                     caught does not depend on how much arrives.
-    false positive  unaffected. Of the legitimate mail that arrives, the
-    rate (FPR)      share wrongly flagged does not depend on the mix.
+    FPR             unaffected, for the same reason.
+    precision       collapses as phishing gets rarer: the false alarms
+                    come from a much larger pool.
+    accuracy        meaningless - at 1%, "never phishing" scores 99%.
 
-    precision       collapses as phishing gets rarer. The false alarms
-                    are drawn from a much larger pool, so they come to
-                    outnumber the true detections.
-    accuracy        becomes meaningless. At a one percent base rate,
-                    answering "never phishing" scores 99%.
-
-So this reports two things. First the actual balance of each split, to
-answer the question directly. Then, from the measured TPR and FPR, what
-precision would be at base rates a real inbox might have.
+So this reports the actual balance of each split, then projects precision
+from the measured TPR and FPR to base rates a real inbox might have.
 
     python ML/base_rate.py                  # balance + projection
     python ML/base_rate.py --no-bert        # rules only, fast
@@ -145,14 +139,11 @@ def project(tpr: float, fpr: float) -> None:
 
     print("  " + "-" * 70)
     print("""
-  Recall is the same on every row - it does not depend on the mix.
-  Precision is not: the false alarms come out of the legitimate pile,
-  and the rarer phishing gets, the more they outnumber real detections.
-
-  Accuracy is worth reading with care here. At a 1% base rate a system
-  that answers "never phishing" scores 99%, so the number stops meaning
-  anything. On a balanced corpus it does mean something, which is why it
-  is quoted alongside the balance rather than on its own.""")
+  Recall does not depend on the mix. Precision does: the false alarms
+  come out of the legitimate pile, and the rarer phishing gets, the more
+  they outnumber real detections. Accuracy at a 1% base rate is
+  meaningless - "never phishing" scores 99% - which is why it is quoted
+  alongside the balance rather than on its own.""")
     print()
 
 

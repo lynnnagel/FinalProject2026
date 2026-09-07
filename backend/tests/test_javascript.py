@@ -148,12 +148,9 @@ def test_syntax_is_valid(path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Element ids
-#
-# The pages and the JS that drives them are two files, and nothing ties
-# them together. A renamed or deleted id leaves getElementById returning
-# null, and the button simply stops responding - no error in the console
-# until something tries to read a property off it.
+# Element ids. Nothing ties a page to the JS that drives it, so a renamed
+# id leaves getElementById returning null and the button just stops
+# responding - no console error until something reads a property off it.
 # ---------------------------------------------------------------------------
 PAGES = [
     (ROOT / "frontend" / "js" / "index.js",           ROOT / "frontend" / "index.html"),

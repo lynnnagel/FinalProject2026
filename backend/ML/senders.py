@@ -1,69 +1,41 @@
 """
 Giving every row in the corpus a sender address.
 
-Why this exists
----------------
-Three of the nine rule checks read the sender: the lookalike-pattern
-check, the domain-suffix check, and brand impersonation - which carries
-the highest score in the engine. Most rows in the English corpora have
-no From line, so on those rows the rule engine runs crippled and returns
-a score built from four checks instead of seven. Every error recorded by
-ML/errors.py lacks a sender.
+Three of the nine rule checks read the sender, including brand
+impersonation, which carries the highest score in the engine. Most rows
+in the English corpora have no From line, so there the rules run on four
+checks instead of seven - and every error in ML/errors.py lacks a sender.
+The ensemble had never been measured on the input the extension actually
+receives, where Gmail always supplies one.
 
-So the ensemble has never been measured on the input the extension
-actually receives, where Gmail always supplies a sender.
+Two ways to fix it, not equally good:
 
-Two ways to fix that, and they are not equally good
----------------------------------------------------
-1. EXTRACT. Enron and SpamAssassin are raw mail dumps; many rows still
-   carry their original headers inside the body text. A sender parsed
-   out of the message is real data. It costs nothing and it cannot leak.
-   This runs first and takes everything it can get.
-
+1. EXTRACT. Enron and SpamAssassin are raw dumps and many rows still
+   carry their headers in the body. Real data, costs nothing, cannot
+   leak. Runs first and takes everything it can get.
 2. GENERATE. Only for rows where extraction found nothing.
 
-Generation is dangerous, and the danger has a name
---------------------------------------------------
-If phishing rows get sender addresses that look like phishing and
-legitimate rows get addresses that look legitimate, the label has been
-written into the feature. The rule engine then "detects" it at close to
-100%, the ensemble numbers jump, and none of it means anything: the
-model would be reading our own generator, not the mail.
+Generation risks label leakage: if phishing rows get phishing-shaped
+addresses and legitimate rows legitimate ones, the label is written into
+the feature, the rules "detect" it at ~100%, and the numbers mean
+nothing. Three defences:
 
-That failure is called label leakage, and a synthetic-sender experiment
-falls into it by default unless it is designed not to.
+  a. OVERLAPPING POOLS. Both classes draw from the same pools at similar
+     rates - attackers and real people both send from Gmail - so the
+     commonest sender shape carries no label information.
+  b. CONTENT-CONDITIONED. Where the body names a brand the domain comes
+     from that brand: the real one if legitimate, a lookalike if not.
+     The one place the label influences the address, because that is the
+     relationship the impersonation rule exists to catch. Kept to a
+     minority of rows and reported separately.
+  c. AN AUDIT. --audit trains a char n-gram classifier on the sender
+     string alone and reports how well it recovers the label, with the
+     extracted senders as the control.
 
-Three defences are built in here:
-
-  a. OVERLAPPING DISTRIBUTIONS. Both classes draw a sender from the same
-     pools, in similar proportions. Attackers really do send from Gmail;
-     real people really do send from Gmail. The largest single pool is
-     shared almost evenly (40% / 35%), so the most common sender shape
-     carries no information about the label at all.
-
-  b. CONTENT-CONDITIONED, NOT LABEL-CONDITIONED. Where the body names a
-     brand, the domain is derived from that brand: the real domain for a
-     legitimate row, a lookalike for a phishing one. This is the one
-     place where the label does influence the address - and it has to,
-     because it is the exact relationship the impersonation rule exists
-     to catch, and the one that mirrors how real attacks work. It is
-     kept to a minority of rows and reported separately.
-
-  c. A LEAKAGE AUDIT. --audit trains a character n-gram classifier on
-     the sender string ALONE and reports how well it recovers the label.
-     If that number is high, the generated senders are contaminated and
-     every downstream metric measured on them is inflated. The audit is
-     run on the extracted senders too, as a control: whatever separation
-     real headers carry is the honest reference point.
-
-What may and may not be claimed from the result
------------------------------------------------
-May:      the sender-reading rules now execute on every row; the rules
-          behave as designed on realistic addresses; the pipeline has
-          been measured end to end on complete inputs.
-May not:  any accuracy, recall or precision figure measured on generated
-          senders as a product result. Report those separately, labelled
-          as synthetic, next to the numbers on real senders.
+May be claimed: the sender rules now run on every row, and the pipeline
+is measured end to end on complete inputs. May not: any accuracy figure
+on generated senders as a product result - report those separately, as
+synthetic, beside the numbers on real senders.
 
 Usage
 -----
@@ -102,12 +74,9 @@ SYNTHETIC_SOURCES = frozenset({
 # ---------------------------------------------------------------------------
 # 1. Extraction - real senders, wherever the corpus still has them
 # ---------------------------------------------------------------------------
-# This is the part worth investing in. An address parsed out of a message
-# is real data: it cannot leak the label, and it costs nothing. Every row
-# this recovers is one fewer row that has to be generated.
-#
-# The corpora carry senders in several shapes, and they are not equally
-# trustworthy, so each is tried in order and the method is recorded:
+# Every row recovered here is one fewer that has to be generated. The
+# shapes are not equally trustworthy, so each is tried in order and the
+# method recorded:
 #
 #   From:            the header the extension itself reads. Authoritative.
 #   From <addr> ...  the mbox separator line - no colon. SpamAssassin is
@@ -209,15 +178,11 @@ def extract_sender(text: str, with_method: bool = False):
                 if address and not _NOT_A_SENDER.search(address):
                     return (address, method) if with_method else address
 
-    # Flattened text. prepare_data.py's clean_text collapses every run of
-    # whitespace into a single space, so a message that still carries its
-    # headers arrives as one long line and the block above finds nothing.
-    # Matching "From:" followed by an address recovers those rows.
-    #
-    # This is a rescue for data that has already been processed. The real
-    # fix is to extract before cleaning - clean_text also deletes
-    # <addr@host> as though it were an HTML tag, and no amount of
-    # rematching brings those back.
+    # Flattened text: clean_text collapses whitespace, so a message that
+    # still has headers arrives as one long line and the block above finds
+    # nothing. A rescue for already-processed data - the real fix is to
+    # extract before cleaning, since clean_text also deletes <addr@host>
+    # as though it were an HTML tag, and nothing brings those back.
     if not block:
         flat = re.search(
             r"\bfrom[ \t]*:[ \t]*(?:[^<>@\s]{0,60}?[ \t])?<?"
@@ -245,8 +210,8 @@ def extract_sender(text: str, with_method: bool = False):
 # ---------------------------------------------------------------------------
 # 2. Generation - only where extraction failed
 # ---------------------------------------------------------------------------
-# Shared by both classes. This is the anti-leakage core: the single most
-# common kind of sender is drawn by phishing and legitimate rows alike.
+# The anti-leakage core: the commonest kind of sender is drawn by
+# phishing and legitimate rows alike.
 FREE_PROVIDERS = [
     "gmail.com", "yahoo.com", "hotmail.com", "outlook.com",
     "walla.co.il", "protonmail.com", "mail.com", "bezeqint.net",
@@ -313,22 +278,16 @@ def _brand_in_text(text: str) -> tuple[str, list] | None:
 
 # The mixture, as (weight when phishing, weight when legitimate).
 #
-# Every pool but one is drawn by both classes, at close to the same rate.
-# That is deliberate and it is what keeps the audit honest: a classifier
-# reading only the address cannot separate the classes on the shape of
-# the domain, because both classes produce every shape.
+# Every pool but one is drawn by both classes at close to the same rate,
+# so a classifier reading only the address cannot separate them on the
+# shape of the domain. The first version gave each class its own pools -
+# odd TLDs to phishing, no-reply to legitimate - and the audit scored AUC
+# 0.835 against 0.500 for real headers. Textbook leakage.
 #
-# The first version of this file gave each class its own pools - odd
-# TLDs only to phishing, no-reply only to legitimate. The audit scored
-# AUC 0.835 against 0.500 for real headers, which is textbook leakage,
-# and the mixture was rewritten. Keeping the note because the failure is
-# the easy one to make here.
-#
-# "lookalike" is the single exception. A domain wearing a brand's name
-# that is not the brand's domain is what impersonation *is*; it cannot
-# appear in legitimate mail without ceasing to be legitimate. It is held
-# to a ninth of the phishing rows so it informs the data without
-# defining it.
+# "lookalike" is the exception: a domain wearing a brand's name that is
+# not the brand's is what impersonation *is*, and cannot appear in
+# legitimate mail without ceasing to be legitimate. Held to a ninth of
+# the phishing rows so it informs the data without defining it.
 POOL_WEIGHTS = {
     "free":           (0.38, 0.34),
     "corporate":      (0.22, 0.26),
@@ -392,13 +351,12 @@ def generate_sender(text: str, label: int, r) -> tuple[str, str]:
 def _rng_for(text: str, label: int, nonce: int = 0):
     """
     A generator seeded from the row itself, so the same row always gets
-    the same address - across runs, across splits, across machines. A
-    global seed would reshuffle everything the moment a row is added.
+    the same address across runs, splits and machines; a global seed would
+    reshuffle everything the moment a row is added.
 
     The whole text is hashed, not a prefix, and near-duplicates get a
     nonce. Seeding on the first 500 characters gave every row sharing an
-    opening the identical sender, which on a corpus of templated mail
-    collapsed the generated mixture onto a handful of draws.
+    opening the same sender, collapsing the mixture onto a few draws.
     """
     import random
     digest = hashlib.sha256(
@@ -435,11 +393,9 @@ def audit(df: pd.DataFrame, column: str, title: str) -> float:
                           cv=4, scoring="roc_auc").mean()
     majority = max(rows["label"].mean(), 1 - rows["label"].mean())
 
-    # A bucket that is nearly one class cannot serve as a reference. Its
-    # AUC rests on a handful of minority rows, and any domain appearing
-    # only in the majority class predicts it perfectly - so the number
-    # measures the composition of the bucket, not what real senders
-    # reveal. Marked rather than quietly compared against.
+    # A bucket that is nearly one class cannot serve as a reference: its
+    # AUC rests on a handful of minority rows, so it measures the
+    # composition of the bucket, not what real senders reveal.
     flag = "  << one-class, AUC uninformative" if majority > 0.90 else ""
     print(f"  {title:<34} AUC {auc:5.3f}   (n={len(rows):,}, "
           f"majority {majority:.1%}){flag}")
@@ -475,14 +431,22 @@ def verdict(auc_generated: float, auc_reference: float,
     # rows ship in the training data, so leakage there is not a
     # measurement artefact but a property of what the model learns.
     if auc_corpus == auc_corpus and auc_corpus >= 0.95:
-        print(f"\n  WARNING - our own corpus generators score {auc_corpus:.3f}.")
-        print("  Their senders encode the label almost perfectly: a legitimate")
-        print("  row always gets the brand's real domain and a phishing row")
-        print("  never does. Real mail overlaps - attackers send from Gmail and")
-        print("  so do real people - so a sender-reading result on those rows")
-        print("  reflects the generator's rule, not detection. Either report")
-        print("  them apart, or give both classes shared pools in")
-        print("  generate_hebrew.py:rnd_sender and regenerate.")
+        print(f"\n  Note - our own corpus generators score {auc_corpus:.3f}.")
+        print("  Read this as a property of that data, not as a defect. Those")
+        print("  rows are brand transactional mail, and for that category the")
+        print("  sender genuinely is what makes a message legitimate: a notice")
+        print("  claiming to be the bank, sent from gmail.com, is impersonation")
+        print("  however it is labelled.")
+        print()
+        print("  Overlapping the classes there was tried and reverted - it")
+        print("  produced brand-claiming legitimate rows that the impersonation")
+        print("  rule flagged, and Hebrew false alarms went from 0 to 34.")
+        print("  Overlap belongs where the message claims nothing about its")
+        print("  sender, which is the case this script fills in.")
+        print()
+        print("  What to do instead: report metrics on these rows separately")
+        print("  from metrics on parsed headers, and treat them as an upper")
+        print("  bound rather than merging them into a headline figure.")
 
 
 # ---------------------------------------------------------------------------
@@ -640,15 +604,11 @@ def main() -> None:
         print("=" * 74)
         combined = pd.concat(frames.values(), ignore_index=True)
 
-        # "Already present" covers two different things and they must not
-        # be audited together. Enron and SpamAssassin senders were parsed
-        # out of real headers by prepare_data.py. The Hebrew and
-        # legitimate corpora are written by our own generators, which
-        # give phishing rows phishing-shaped addresses on purpose - so
-        # they carry label information by construction.
-        #
-        # Averaged into one bucket they inflate the reference this audit
-        # compares against, and the comparison stops meaning anything.
+        # "Already present" covers two things that must not be audited
+        # together: Enron and SpamAssassin senders parsed from real
+        # headers, and Hebrew/legitimate rows written by our own
+        # generators, which carry label information by construction.
+        # Averaged into one bucket they inflate the reference.
         source = combined.get("source", pd.Series("", index=combined.index))
         is_synthetic = source.astype(str).isin(SYNTHETIC_SOURCES)
 

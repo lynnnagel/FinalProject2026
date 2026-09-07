@@ -1,26 +1,16 @@
 """
-LURA BERT Classifier
-==========================
-Fine-tuned multilingual transformer for binary phishing classification.
-Supports Hebrew + English via the multilingual tokeniser.
+LURA BERT Classifier - fine-tuned multilingual transformer for binary
+phishing classification, Hebrew and English.
 
 Base model (BERT_MODEL_NAME):
   bert-base-multilingual-cased        177M, ~710 MB
-  distilbert-base-multilingual-cased  135M, ~540 MB, ~2x faster, 1-2% less accurate
+  distilbert-base-multilingual-cased  135M, ~540 MB, ~2x faster, 1-2% worse
 
-Both cover 104 languages. Over half the weight in each is the embedding
-table (92M parameters, 119,547 tokens), so DistilBERT mostly saves
-compute rather than file size.
+Both cover 104 languages; over half the weight is the embedding table
+(92M parameters), so DistilBERT saves compute more than file size.
+Switching means retraining - the checkpoints are not compatible.
 
-Switching models means retraining - the checkpoints are not compatible.
-
-Usage
------
-Inference (after checkpoint is available):
-    from ML.bert_model import bert_model
-    prob = bert_model.predict("sender subject body")
-
-Training:
+    from ML.bert_model import bert_model; prob = bert_model.predict(text)
     python ML/train.py --data_dir ML/data --output_dir ML/checkpoints
 
 Checkpoint path: ML/checkpoints/best_model.pt
@@ -42,11 +32,8 @@ from transformers import (
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-# The base model, swappable through an environment variable. Changing
-# it means retraining: the checkpoints are not compatible.
+# The base model, swappable through an environment variable. Changing it
+# means retraining: the checkpoints are not compatible.
 MODEL_NAME = os.getenv("BERT_MODEL_NAME", "bert-base-multilingual-cased")
 
 # Dynamic int8 quantisation: less memory and faster on CPU, no
@@ -63,13 +50,11 @@ DEFAULT_CHECKPOINT = os.path.join(_THIS_DIR, "checkpoints", "best_model.pt")
 
 def _apply_checkpoint_metadata(checkpoint_path: str) -> None:
     """
-    Line the runtime settings up with the ones the model was trained
-    on.
+    Line the runtime settings up with the ones the model was trained on.
 
-    train.py writes best_model.meta.json next to the checkpoint with the
-    base model name and sequence length. Without it, training ran at 256
-    and inference at 512 - a silent mismatch nobody noticed. Environment
-    variables still win, so a different setting can be tried on purpose.
+    train.py writes best_model.meta.json beside the checkpoint with the
+    base model and sequence length. Without it, training ran at 256 and
+    inference at 512 - a silent mismatch. Environment variables still win.
     """
     global MODEL_NAME, MAX_LENGTH
 
@@ -216,15 +201,10 @@ class PhishingBertClassifier(nn.Module):
     # ------------------------------------------------------------------ #
     def predict_batch(self, texts: list[str], batch_size: int = 32) -> list[float]:
         """
-        Same result as predict() for each text, but in batches.
-
-        One forward per message is right for a live scan. Over a whole
-        evaluation split it wastes fixed overhead on every call; a batch
-        of 32 does the same work in one matrix multiply.
-
-        padding="longest" rather than "max_length": if the whole batch
-        is short there is no point padding to 256. The result is
-        identical, since attention_mask hides the padding either way.
+        Same result as predict(), in batches. One forward per message is
+        right for a live scan but wastes fixed overhead over a whole
+        split. padding="longest" rather than "max_length": identical
+        result, since attention_mask hides the padding either way.
         """
         self.eval()
         out: list[float] = []
@@ -324,12 +304,10 @@ def load_model(
 
 
 # ---------------------------------------------------------------------------
-# Lazy loading
-#
-# Loading reads a ~700MB checkpoint and takes tens of seconds. Run at
-# import time it blocks uvicorn and the site never comes up, so it runs
-# on a background thread: the server answers immediately, and scans that
-# arrive before the model is ready run on the rules alone.
+# Lazy loading. Reading a ~700MB checkpoint takes tens of seconds; at
+# import time that blocks uvicorn and the site never comes up. On a
+# background thread the server answers immediately, and scans arriving
+# before the model is ready run on the rules alone.
 # ---------------------------------------------------------------------------
 _model: Optional[PhishingBertClassifier] = None
 _load_thread: Optional[threading.Thread] = None

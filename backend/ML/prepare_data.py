@@ -53,21 +53,16 @@ def clean_text(text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Spam is not phishing.
+# Spam is not phishing. The public corpora label them together, so the
+# model was never asked to tell them apart - an advertisement scored
+# 99.99, the same as a request for card details.
 #
-# The public corpora label them together, so the model was never asked
-# to tell them apart - and it showed: an advertisement scored 99.99,
-# the same as a request for card details. LURA detects phishing, and
-# marking an advertisement as danger costs trust in every other alert.
+# SPAM_LABEL:  0 - not phishing (default, what the product does)
+#              1 - the old behaviour, for comparison
+#              None - drop those rows
 #
-# SPAM_LABEL decides what happens to those rows:
-#   0     - spam is not phishing. The default, and what the product does.
-#   1     - the old behaviour, for comparison.
-#   None  - drop them entirely.
-#
-# Note for measurement: 0 lowers the reported accuracy on a corpus that
-# labels spam as phishing. That is expected - it measures a different,
-# narrower task.
+# 0 lowers the reported accuracy on a corpus that labels spam as
+# phishing. Expected: it measures a different, narrower task.
 # ---------------------------------------------------------------------------
 SPAM_LABEL: int | None = 0
 
@@ -104,18 +99,15 @@ CONTENT_COLUMNS = ("message", "body", "content", "text", "email", "raw")
 
 def pick_text_column(df: pd.DataFrame, source: str) -> str:
     """
-    The column holding the message, chosen by content rather than position.
+    The column holding the message, chosen by content, not position.
 
-    Taking df.columns[0] cost this project 40,000 rows. The Enron export
-    is ('file', 'message'): the first column is the path the message was
-    read from, so every Enron row entered the corpus as a filename like
-    "allen-p/_sent_mail/1." labelled legitimate mail. It had no headers
-    to extract a sender from, no body for the model to read, and it made
-    the source trivially separable from every other - which is exactly
-    the corpus fingerprint source_check.py measures.
+    Taking df.columns[0] cost this project 40,000 rows: the Enron export
+    is ('file', 'message'), so every Enron row entered as a filename like
+    "allen-p/_sent_mail/1." labelled legitimate - no headers, no body,
+    and trivially separable from every other source.
 
-    A known content name wins. Otherwise the widest column does: a path
-    column averages tens of characters and a message column thousands.
+    A known content name wins; otherwise the widest column does, since a
+    path averages tens of characters and a message thousands.
     """
     named = [c for c in df.columns if c.strip().lower() in CONTENT_COLUMNS]
     if named:
@@ -203,13 +195,11 @@ def balance_sources(df: pd.DataFrame, max_single_frac: float) -> pd.DataFrame:
     """
     Cap how much of the corpus comes from single-class sources.
 
-    Enron is 100% legitimate and PhishTank 100% phishing. When they
-    dominate, the model can score well by recognising the corpus rather
-    than the phishing - leave-one-source-out showed exactly that, with
-    accuracy falling from 99.6% to 65.9% on an unseen source.
-
-    This does not solve it; it reduces the reward for the shortcut and
-    pushes the model toward sources that carry both classes.
+    Enron is 100% legitimate and PhishTank 100% phishing, so when they
+    dominate the model can score well by recognising the corpus rather
+    than the phishing - leave-one-source-out showed accuracy falling from
+    99.6% to 65.9% on an unseen source. This does not solve it, it only
+    reduces the reward for the shortcut.
     """
     if max_single_frac >= 1.0:
         return df
@@ -345,11 +335,9 @@ def prepare(args: argparse.Namespace):
                     "  [with sender and subject]" if "sender" in df.columns else "")
 
     # -- legitimate operational mail --------------------------------
-    # The category missing from the corpora entirely: order
-    # confirmations, renewals, receipts, sign-in alerts, requested
-    # password resets. The model scored them 99.99 simply because it had
-    # never seen one - they look like phishing in every shallow way.
-    #     ML/generate_legitimate.py --n 2000
+    # Missing from the corpora entirely: order confirmations, renewals,
+    # receipts, requested password resets. The model scored them 99.99
+    # because it had never seen one.   ML/generate_legitimate.py --n 2000
     legit_path = os.path.join(args.data_dir, "legitimate_generated.csv")
     if os.path.exists(legit_path):
         df = pd.read_csv(legit_path).dropna(subset=["text", "label"])
@@ -378,14 +366,11 @@ def prepare(args: argparse.Namespace):
 
     combined = pd.concat(frames, ignore_index=True)
 
-    # Recover the sender BEFORE cleaning, because clean_text destroys it
-    # three separate ways: it deletes <addr@host> along with the HTML
-    # tags, it collapses the newlines that separate one header from the
-    # next, and it truncates to 1,000 characters. Run afterwards,
-    # extraction found a sender in 0% of the Kaggle and Enron rows.
-    #
-    # Three of the nine rule checks read this field, including brand
-    # impersonation, which carries the highest score in the engine.
+    # Recover the sender BEFORE cleaning: clean_text deletes <addr@host>
+    # with the HTML tags, collapses the newlines between headers, and
+    # truncates to 1,000 characters. Run afterwards, extraction found a
+    # sender in 0% of the Kaggle and Enron rows. Three of the nine rules
+    # read this field, impersonation among them.
     if "sender" not in combined.columns:
         combined["sender"] = ""
     combined["sender"] = combined["sender"].fillna("").astype(str)

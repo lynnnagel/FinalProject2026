@@ -26,11 +26,8 @@ from detector import detector          # noqa: E402
 from scoring import combine            # noqa: E402
 from config import PHISHING_THRESHOLD   # noqa: E402
 
-# ---------------------------------------------------------------------------
-# label: 1 = phishing, 0 = legitimate. The note says why each one is
-# here - several are real failures found in a live inbox, which makes
-# them the ones that matter.
-# ---------------------------------------------------------------------------
+# label: 1 = phishing, 0 = legitimate. The note says why each is here;
+# several are real failures found in a live inbox.
 EMAILS = [
     # -- legitimate -------------------------------------------------
     dict(

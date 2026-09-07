@@ -154,17 +154,12 @@ PHISH = {
 }
 
 # ---------------------------------------------------------------------------
-# Borderline cases
-#
-# The first version separated the classes perfectly: legitimate always
-# https to an official domain with no urgency, phishing always http to a
-# hyphenated domain with urgency. A model learning from that learns one
-# rule - "hyphen in the domain means phishing" - not how to spot
-# phishing. Calibrating on it gave a perfect F1 and a threshold low
-# enough to flag a real invoice.
-#
-# These two groups break that separation: legitimate mail that looks
-# suspicious, and phishing that looks innocent.
+# Borderline cases. The first version separated the classes perfectly -
+# legitimate always https to an official domain, phishing always http to
+# a hyphenated one - so a model learns "hyphen means phishing", not how
+# to spot phishing. Calibrating on it gave a perfect F1 and a threshold
+# low enough to flag a real invoice. These two groups break that:
+# legitimate mail that looks suspicious, phishing that looks innocent.
 # ---------------------------------------------------------------------------
 
 # Legitimate, with signs that look suspicious: real urgency, genuine
@@ -262,14 +257,11 @@ REAL_MAILBOXES = ["noreply", "no-reply", "service", "info", "billing",
 FAKE_MAILBOXES = ["no-reply", "security", "alert", "verify", "service-il",
                   "account-security", "support"]
 
-# Mailboxes that sound alarming but that real organisations genuinely
-# use: a bank's fraud alert really does come from security@ or alerts@.
-#
-# Before this existed, "security", "verify" and "alert" appeared only in
-# phishing rows, so the word before the @ predicted the label on its own.
-# Overlapping the domains was not enough - a classifier reading the whole
-# address still scored 0.985, because the mailbox vocabularies were
-# disjoint. Both classes now draw from this list.
+# Mailboxes that sound alarming but that real organisations use - a
+# bank's fraud alert really does come from security@. Before this,
+# "security" and "alert" appeared only in phishing rows, so the word
+# before the @ predicted the label: overlapping the domains was not
+# enough, and a classifier reading the address still scored 0.985.
 ALERTING_MAILBOXES = ["security", "alerts", "fraud-alert", "account-notice",
                       "verification", "secure-messages"]
 FREE_PROVIDERS = ["gmail.com", "outlook.com", "hotmail.com", "walla.co.il"]
@@ -298,19 +290,15 @@ def rnd_sender(brand: tuple, legit: bool, rng: random.Random,
 
     The classes overlap on purpose. An earlier version gave every
     legitimate row the brand's real domain and every phishing row a
-    lookalike or a free provider, with no exceptions either way, so the
-    address determined the label: a classifier reading nothing but the
-    sender scored AUC 1.000 on these rows (ML/senders.py --audit).
+    lookalike, so the address determined the label - a classifier reading
+    nothing but the sender scored AUC 1.000 (ML/senders.py --audit). Since
+    these rows are in the training data that is not only a measurement
+    problem: it taught the model that an official domain proves safety.
+    Real senders overlap - sole traders write from Gmail, and attackers
+    send from compromised accounts on ordinary domains.
 
-    That is not what real mail looks like, and because these rows are in
-    the training data it is not only a measurement problem - it taught
-    the model that an official domain is proof of safety. Real senders
-    overlap: small businesses and sole traders write from Gmail, and
-    attackers send from compromised accounts on ordinary domains.
-
-    The overlap is deliberately modest. Impersonation from a lookalike
-    domain is still most of what phishing draws, because that is what
-    the impersonation rule exists to catch.
+    The overlap is modest: impersonation from a lookalike is still most of
+    what phishing draws, since that is what the rule exists to catch.
     """
     name, real_domain, fake_domains = brand
 
@@ -323,23 +311,17 @@ def rnd_sender(brand: tuple, legit: bool, rng: random.Random,
 
     if legit:
         roll = rng.random()
-        # There is deliberately no free-provider branch here.
+        # No free-provider branch here, deliberately. Giving 18% of
+        # legitimate rows a Gmail address, to stop the sender predicting
+        # the label, was a mistake: every template here presents the
+        # message as the brand, so a brand-claiming mail from gmail.com
+        # labelled legitimate is a mislabelled impersonation. The rules
+        # flagged 34 of them, rightly.
         #
-        # An earlier version gave 18% of legitimate rows a Gmail or Walla
-        # address, to stop the sender predicting the label. Measured, it
-        # was a mistake: every template in this file presents the message
-        # as the brand ("הודעת חיוב | בנק הפועלים"), so a brand-claiming
-        # message from gmail.com labelled legitimate is a mislabelled
-        # impersonation. The rule engine flagged 34 of them and was right
-        # to - they turned into Hebrew false alarms at every threshold,
-        # where there had been none.
-        #
-        # The wider lesson: for brand transactional mail the sender is
-        # genuinely what makes it legitimate, so a sender that predicts
-        # the label here is the subject matter, not leakage. Overlapping
-        # the classes is the right move only where the message makes no
-        # claim about who sent it - which is what ML/senders.py does for
-        # the rows that have no sender at all.
+        # For brand transactional mail the sender is what makes it
+        # legitimate, so a sender predicting the label is the subject
+        # matter, not leakage. Overlapping is right only where the message
+        # claims nothing about who sent it - what ML/senders.py does.
         if hard and roll < 0.60:
             # An official subdomain - looks unusual, entirely valid
             sub = rng.choice(LEGIT_SUBDOMAINS)

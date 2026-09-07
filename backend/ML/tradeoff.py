@@ -1,32 +1,24 @@
 """
 The recall / precision trade-off, measured at the base rate of a real inbox.
 
-Why this is a separate script from evaluate.py --sweep
-------------------------------------------------------
-That sweep reports accuracy and F1 on the test split, where phishing is
-48.6% of the mail. Both numbers are close to 99% at every threshold, so
-the sweep looks like a flat plateau and there is no visible trade-off to
-reason about.
+Separate from evaluate.py --sweep because that sweep reports accuracy and
+F1 on the test split, where phishing is 48.6% of the mail - both stay
+near 99% at every threshold, so there is no visible trade-off to reason
+about. A real inbox is around 1% phishing, and there:
 
-A real inbox is around 1% phishing, and at that rate the two metrics
-behave completely differently:
+    recall, FPR   unchanged - both are class-conditional, so the mix
+                  between classes cannot move them.
+    precision     collapses - the false alarms come from a pool ~99x
+                  larger than the true detections.
 
-    recall, FPR   unchanged. Both are class-conditional - they are
-                  measured within one class, so the mix between classes
-                  cannot move them.
-    precision     collapses. The false alarms are drawn from a pool
-                  ~99x larger than the true detections.
-
-So the honest way to choose a threshold is to measure recall and FPR on
-the test split, which the split can support, and then project precision
-to the base rate the product will actually meet. That projection is
-exact, not a simulation:
+So measure recall and FPR on the split, which it can support, then
+project precision to the real base rate. The projection is exact, not a
+simulation:
 
     precision(b) = b*TPR / ( b*TPR + (1-b)*FPR )
 
-This script does the projection at every threshold and prints the curve.
-It also solves the inverse question - what FPR a precision target needs -
-because that turns "improve precision" into a number to aim at.
+The script also solves the inverse - what FPR a precision target needs -
+which turns "improve precision" into a number to aim at.
 
     python ML/tradeoff.py                        # sweep + PR curve at 1%
     python ML/tradeoff.py --pr-svg               # write figs/pr-curve.svg
@@ -35,34 +27,19 @@ because that turns "improve precision" into a number to aim at.
     python ML/tradeoff.py --csv figs/tradeoff.csv    # data for the graph
     python ML/tradeoff.py --no-bert                  # rules only, fast
 
-A note on reading the PR curve for this system
-----------------------------------------------
-The usual curve sweeps smoothly from high precision at low recall down
-to low precision at high recall. This one will not: recall is roughly
-99.3% at every cut-off between 40 and 80, so nearly the whole operating
-range collapses into a short segment near the right-hand edge, with the
-interesting variation happening above 80 where no measurement existed
-before this script. That shape is a property of a bimodal score
-distribution, and it is the finding - not a defect in the plot.
+Reading the curve here: it does not sweep smoothly, because recall is
+~99.3% at every cut-off between 40 and 80, so the whole operating range
+collapses into a short segment near the right edge. That is a property of
+a bimodal score distribution, and it is the finding, not a defect in the
+plot. Average precision is reported at the projected base rate - so it is
+comparable to the 0.01 a random classifier scores there, and NOT to an AP
+computed on the balanced corpus.
 
-Average precision is reported at the projected base rate, so it is
-comparable to the 0.01 a random classifier would score there, and NOT
-comparable to an AP computed on the balanced corpus.
-
-What the curve showed when this was written
--------------------------------------------
-Between thresholds 40 and 80 recall moves by 0.02 points - from 99.29%
-to 99.27% - while precision at 1% moves from 49.3% to 67.4%. That is
-not the usual trade-off shape, and it is worth understanding rather than
-smoothing over: the score distribution is bimodal, so almost no message
-sits between 40 and 80 and moving the cut-off through that range
-reclassifies very few of them.
-
-Two things follow. Raising the threshold is nearly free, so it should be
-raised. And the threshold is a weak lever: reaching 80% precision at a
-1% base rate needs the false alarms cut from 44 to 19, which no cut-off
-in the measured range delivers. That requires new evidence of
-legitimacy, not a different cut-off.
+What it showed: between 40 and 80, recall moves 0.02 points while
+precision at 1% moves from 49.3% to 67.4%. Two consequences. Raising the
+threshold is nearly free, so it should be raised. And the threshold is a
+weak lever: 80% precision needs the false alarms cut from 44 to 19, which
+no cut-off delivers - that takes new evidence of legitimacy.
 """
 from __future__ import annotations
 

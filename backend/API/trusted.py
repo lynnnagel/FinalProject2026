@@ -5,14 +5,13 @@ GET    /trusted-senders          - the list
 POST   /trusted-senders          - add one
 DELETE /trusted-senders/{value}  - remove one
 
-The system knows the large brands, but a person's inbox is full of
-addresses nobody has heard of: an office they write to, a teacher, a
-supplier. For those there is no positive evidence of legitimacy at all,
-so entirely ordinary mail gets a high score on the model's guess alone.
-This list is the missing evidence.
+The system knows the large brands, but an inbox is full of addresses
+nobody has heard of - an office, a teacher, a supplier - where there is
+no positive evidence of legitimacy, so ordinary mail scores high on the
+model's guess alone. This list is that missing evidence.
 
-It is personal: what one user recognises says nothing about another, so
-it is filtered by the user in the token and never by a request field.
+It is personal, so it is filtered by the user in the token and never by
+a request field.
 """
 from __future__ import annotations
 
@@ -31,15 +30,11 @@ router = APIRouter(tags=["trusted"])
 
 # Rule score above which a sender can no longer be marked as known.
 #
-# The feature lets a user damp the model's score, and that is its weak
-# point: an attacker who talks the user into clicking "I know this
-# sender" earns a damping on every future message from that address.
-# This check stops it at the root - an address the rule engine has found
-# real evidence against cannot be marked at all.
-#
-# 30 is the level above which there is a substantive finding rather than
-# weak words alone: brand impersonation in the body (30), in the subject
-# (45), an official-sounding organisation on a free mailbox (30).
+# The feature damps the model's score, so an attacker who talks the user
+# into clicking "I know this sender" earns that damping on every future
+# message. An address the rules have real evidence against cannot be
+# marked at all. 30 is where a substantive finding starts - body
+# impersonation (30), subject (45), official name on a free mailbox (30).
 MAX_RULE_SCORE_FOR_TRUST = 30
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
@@ -66,10 +61,9 @@ def normalise(raw: str) -> tuple[str, bool]:
     if not _DOMAIN_RE.match(value):
         raise HTTPException(400, "דומיין לא תקין")
 
-    # Trusting a whole free-mail provider is destructive: it disables
-    # detection for *every* phishing message sent from Gmail, one of the
-    # commonest channels there is. A single address from that provider
-    # is fine, since it concerns one person.
+    # Trusting a whole free-mail provider would disable detection for
+    # every phishing message sent from Gmail, one of the commonest
+    # channels there is. A single address from one is fine.
     if value in detector.FREE_EMAIL_PROVIDERS:
         raise HTTPException(
             400,
@@ -82,13 +76,10 @@ def normalise(raw: str) -> tuple[str, bool]:
 def _rule_evidence_against(db: Session, user_id: int,
                            value: str, is_domain: bool) -> tuple[float, list[str]]:
     """
-    Re-runs the rule engine over the stored mail from that sender.
-
-    The question it answers: does the system already have evidence
-    against this address? It runs over the stored text rather than the
-    stored score, because that score includes the model - and the model
-    is exactly what the mark is meant to damp. Only the hard findings
-    matter here.
+    Re-runs the rule engine over the stored mail from that sender: does
+    the system already have evidence against this address? It uses the
+    stored text, not the stored score, because that score includes the
+    model - which is exactly what the mark is meant to damp.
     """
     q = db.query(EmailRecord).filter(EmailRecord.user_id == user_id)
     q = q.filter(EmailRecord.sender.ilike(f"%@{value}" if is_domain else f"%{value}%"))
@@ -128,12 +119,10 @@ def is_trusted_by_user(db: Session, user_id: int, sender: str) -> bool:
 def _invalidate_cached_scores(db: Session, user_id: int, value: str,
                               is_domain: bool) -> int:
     """
-    Marks that sender's stored scans for recomputation.
-
-    Without this, marking a sender would change nothing in the inbox:
-    the verdicts are already cached, and the next scan would hand them
-    back unchanged. Clearing the version stamp makes the next scan
-    recompute them, without deleting any history.
+    Marks that sender's stored scans for recomputation. Without it the
+    cached verdicts would come back unchanged and marking a sender would
+    change nothing in the inbox. Clearing the version stamp forces a
+    recompute without deleting history.
     """
     q = db.query(EmailRecord).filter(EmailRecord.user_id == user_id)
     if is_domain:
@@ -182,14 +171,10 @@ def add_trusted(
     if count >= MAX_ENTRIES:
         raise HTTPException(400, f"הרשימה מוגבלת ל-{MAX_ENTRIES} רשומות")
 
-    # Hard evidence outranks what the user says.
-    #
-    # The user testifying that they know an address is worth something,
-    # but it does not override a finding from the rule engine. If the
-    # address impersonates a brand or writes from a forged domain, the
-    # person asking to trust it may well be the one being deceived -
-    # which is precisely what the attacker is working toward: getting
-    # the victim to switch off the protection themselves.
+    # Hard evidence outranks what the user says. If the address
+    # impersonates a brand or writes from a forged domain, the person
+    # asking to trust it may be the one being deceived - getting the
+    # victim to switch off the protection is the attacker's goal.
     evidence, indicators = _rule_evidence_against(db, current_user.id,
                                                   value, is_domain)
     if evidence >= MAX_RULE_SCORE_FOR_TRUST:

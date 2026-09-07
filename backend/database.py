@@ -41,17 +41,11 @@ def init_db():
 
 
 # ---------------------------------------------------------------------------
-# A minimal migration
-#
-# create_all creates missing tables but never touches an existing one. A
-# column added to a model after the database was created simply is not
-# there, and any query mentioning it fails with "no such column" - on a
-# database that already holds the user's scan history. This function
-# only adds missing columns; it never drops or alters an existing one,
-# so it is safe to run on every startup.
-#
-# A larger project would use Alembic. Here it is a couple of columns,
-# and another dependency is not worth it.
+# A minimal migration. create_all never touches an existing table, so a
+# column added to a model afterwards is simply missing and every query
+# mentioning it fails - on a database already holding the user's history.
+# This only adds; it never drops or alters, so it is safe on every
+# startup. Alembic would be the grown-up answer, but this is two columns.
 # ---------------------------------------------------------------------------
 _EXPECTED_COLUMNS = {
     "emails": {

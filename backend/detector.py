@@ -1,12 +1,11 @@
 """
 LURA - the rule engine.
 
-Nine weighted checks over the sender, the subject and the body, summed
-into a score from 0 to 100. The engine is fully transparent: every point
-comes from a check you can point at. That is what lets it tell the user
-why a message was flagged, and it is also why it does not depend on the
-training corpus - which makes it the part that generalises to mail
-nobody has ever seen.
+Nine weighted checks over the sender, subject and body, summed into a
+score from 0 to 100. Every point comes from a check you can point at,
+which is what lets it tell the user why a message was flagged - and,
+since it does not depend on the training data, it is the part that
+generalises to mail nobody has seen.
 """
 import re
 from datetime import datetime
@@ -40,11 +39,10 @@ class PhishingDetector:
         "tax refund", "immediately",
     ]
 
-    # Words that also appear in entirely legitimate mail. A real message
-    # from a bank or a card company is bound to contain "account",
-    # "credit" and "credit card", so these are worth less and capped
-    # low. A genuine Cal message was once flagged as phishing on their
-    # account alone.
+    # Words that also appear in entirely legitimate mail - a real bank
+    # message is bound to contain "account" and "credit card" - so they
+    # are worth less and capped low. A genuine Cal message was once
+    # flagged on their account alone.
     WEAK_KEYWORDS = [
         "חשבון", "בנק", "אשראי", "כרטיס אשראי", "העברה", "מזומן",
         "סיסמה", "אימות", "אישור", "ביטול", "חסימה", "פרטים אישיים",
@@ -94,20 +92,16 @@ class PhishingDetector:
     ]
 
     # -----------------------------------------------------------------------
-    # Brands and the domains they really send from.
+    # Brands and the domains they really send from. The strongest check in
+    # the engine: a message presenting itself as Bank Hapoalim but arriving
+    # from bankhapoalim-secure.net is impersonation, full stop.
     #
-    # This is the strongest check in the engine: if a message presents
-    # itself as Bank Hapoalim but arrives from bankhapoalim-secure.net,
-    # that is impersonation, full stop.
+    # The earlier check (VALID_DOMAIN_SUFFIXES) looked only at the suffix,
+    # so bezeq-pay.net and netflix-il.info sailed through. Over 250 Hebrew
+    # phishing messages it never fired once.
     #
-    # The earlier domain check (VALID_DOMAIN_SUFFIXES) only looked at the
-    # suffix, so bezeq-pay.net and netflix-il.info sailed through - .net
-    # and .info are perfectly valid endings. Measured over 250 Hebrew
-    # phishing messages, it never fired once.
-    #
-    # The key is how the brand appears in the text; the value is the
-    # domains the organisation actually sends from. List every spelling
-    # likely to turn up in a message.
+    # Key: how the brand appears in text - list every likely spelling.
+    # Value: the domains the organisation actually sends from.
     # -----------------------------------------------------------------------
     BRAND_DOMAINS = {
         # Banks and credit cards - Israel
@@ -166,12 +160,9 @@ class PhishingDetector:
         "dropbox":          ["dropbox.com"],
 
         # -- Security vendors, subscriptions and retail ---------------
-        # This table serves both impersonation detection and recognising
-        # a known sender (is_trusted_sender). The brands below were added
-        # for the second purpose: their operational mail - a renewal
-        # notice, an order confirmation, a security alert - is exactly
-        # the kind of legitimate message that barely exists in the
-        # training corpora, so BERT flags it as phishing with high
+        # The table also backs is_trusted_sender, which is why these are
+        # here: their operational mail - renewal notice, security alert -
+        # barely exists in the training data, so BERT flags it with high
         # confidence.
         "temu":             ["temu.com"],
         "aliexpress":       ["aliexpress.com"],
@@ -199,10 +190,9 @@ class PhishingDetector:
         "canva":            ["canva.com"],
 
         # -- Shops and services whose operational mail fills an inbox --
-        # Order confirmations, shipping notices and receipts are the
-        # category the system got wrong most often: their shape - many
-        # links, "order", "account" - sets off the rule engine, and the
-        # model flags them nearly every time.
+        # The category the system got wrong most often: the shape of an
+        # order confirmation - many links, "order", "account" - sets off
+        # the rules, and the model flags it nearly every time.
         "iherb":            ["iherb.com"],
         "asos":             ["asos.com"],
         "next":             ["next.co.il", "nextdirect.com"],
@@ -234,13 +224,11 @@ class PhishingDetector:
     }
 
     # Brand keys that are also ordinary words. "next", "yes", "hot" and
-    # "partner" turn up in normal mail constantly, and a bare word match
-    # is not evidence of anything: a LinkedIn digest containing the word
-    # "partner" scored 45 for impersonating Partner.
-    #
-    # They stay in the table because is_trusted_sender needs their
-    # domains. For impersonation they need more than the word - a link
-    # that carries the brand name to a domain that is not the brand's.
+    # "partner" turn up in normal mail constantly - a LinkedIn digest
+    # containing "partner" scored 45 for impersonating Partner. They stay
+    # in the table because is_trusted_sender needs their domains, but for
+    # impersonation they need more than the word: a link carrying the
+    # brand name to a domain that is not the brand's.
     AMBIGUOUS_BRANDS = frozenset({
         "partner", "next", "yes", "hot", "golf", "fox", "booking",
         "steam", "zoom", "slack", "notion", "מקס",
@@ -272,11 +260,9 @@ class PhishingDetector:
         """
         One pattern per brand, with word boundaries.
 
-        Without the boundaries this matches substrings: the key "cal"
-        was found inside call, local and calendar, and an innocent Temu
-        message got flagged as impersonating Cal. \b works on Hebrew
-        too, since Hebrew letters count as word characters - so "כאל"
-        will not match inside "כאלה".
+        Without them this matches substrings: "cal" was found inside
+        call, local and calendar, flagging an innocent Temu message. \b
+        works on Hebrew too, so "כאל" will not match inside "כאלה".
         """
         if not hasattr(cls, "_brand_re_cache"):
             cls._brand_re_cache = {
@@ -292,12 +278,9 @@ class PhishingDetector:
         brand name without being the brand's own?
 
         A word alone says nothing - "our partner programme" is English,
-        not a claim. What makes it a claim is a domain that wears the
-        name: a sender at partner-il-secure.net, or a link to one. That
-        is also the attack itself, not a proxy for it.
-
-        A Hebrew key has no Latin token and so never qualifies here; it
-        stays recognition-only.
+        not a claim. A domain wearing the name is the claim, and is also
+        the attack itself. A Hebrew key has no Latin token and so never
+        qualifies here; it stays recognition-only.
         """
         token = re.sub(r"[^a-z0-9]+", "", brand.lower())
         if not token:
@@ -314,25 +297,19 @@ class PhishingDetector:
     def _check_brand_impersonation(self, sender: str, subject: str,
                                    content: str) -> tuple[str, str, str] | None:
         """
-        Returns (brand, sender domain, where it matched) if the message
-        impersonates a known brand, otherwise None. "where" is either
-        "subject" or "body" and decides the score - a body match counts
-        for less.
-
-        If the sender is the official domain after all, there is no
-        impersonation.
+        Returns (brand, sender domain, where) if the message impersonates
+        a known brand, else None. "where" is "subject" or "body" and
+        decides the score - a body match counts for less. A sender on the
+        official domain is not impersonating anyone.
         """
         domain = self._sender_domain(sender)
         if not domain:
             return None
 
-        # The sender is a recognised company's own domain, so it is not
-        # impersonating anybody: nobody but LinkedIn can send from
-        # linkedin.com. Without this the check ran on the sender's own
-        # mail and matched whichever brand name happened to appear in
-        # it. Free mailboxes are excluded inside is_trusted_sender -
-        # gmail.com sits in the table as Google's, and anyone can open
-        # one, so mail from it is still checked.
+        # A recognised company's own domain is not impersonating anybody:
+        # nobody but LinkedIn can send from linkedin.com. Without this the
+        # check matched whichever brand name appeared in a company's own
+        # mail. Free mailboxes are excluded inside is_trusted_sender.
         if self.is_trusted_sender(sender):
             return None
 
@@ -342,9 +319,8 @@ class PhishingDetector:
         urls = self._URL_RE.findall(content or "")
 
         # -- Step 1: the subject line ---------------------------------
-        # An attacker puts the brand name in the subject to build trust
-        # from the very first line. That is the strong signal, so it is
-        # checked first and carries the full score.
+        # An attacker puts the brand in the subject to build trust from
+        # the first line. The strong signal, so it carries the full score.
         for brand, official_domains in self.BRAND_DOMAINS.items():
             if not patterns[brand].search(subject_l):
                 continue
@@ -357,24 +333,15 @@ class PhishingDetector:
             return brand, domain, "subject"
 
         # -- Step 2: the body, under stricter conditions ---------------
-        # Checking the body with no conditions is what flagged a genuine
-        # Malwarebytes message that mentioned "Google Chrome" as
-        # impersonating Google. Mentioning a brand is not impersonating
-        # it, and newsletters name brands all the time.
-        #
-        # But skipping the body entirely leaves a real gap: a message
-        # subjected "Action required: your mailbox is full", naming
+        # Unconditionally, this flagged a genuine Malwarebytes message
+        # mentioning "Google Chrome" as impersonating Google - newsletters
+        # name brands all the time. Skipped entirely, a message naming
         # "Microsoft 365" only in the body and linking to
-        # office365-alert.net, scored just 19 - below any sensible
-        # threshold. The impersonation was there, only not in the
-        # subject line.
+        # office365-alert.net scored 19.
         #
-        # The condition: there is a link, and no link resolves to the
-        # brand's own domain. A newsletter naming a brand links to it or
-        # to its own site; a forger links to a domain they control.
-        # (The other half of the answer - that mail genuinely from
-        # malwarebytes.com is not impersonating Google - is the
-        # is_trusted_sender guard at the top of this function.)
+        # The condition: there is a link, and none resolves to the brand's
+        # own domain. A newsletter links to the brand or to itself; a
+        # forger links to a domain they control.
         if not urls:
             return None
 
@@ -400,10 +367,9 @@ class PhishingDetector:
 
         return None
 
-    # Phrases that give away marketing mail or a service notice. They
-    # are not evidence of legitimacy on their own, but they are evidence
-    # the message belongs to a different category than phishing - and
-    # that is their job here.
+    # Phrases that give away marketing mail or a service notice. Not
+    # evidence of legitimacy on their own, but evidence the message
+    # belongs to a different category than phishing.
     PROMO_MARKERS = [
         # Unsubscribe link - the most reliable marker. Spam law in the
         # US and Europe requires it on marketing mail, so it is almost
@@ -422,16 +388,11 @@ class PhishingDetector:
     ]
 
     # A subset of STRONG_KEYWORDS that cancels the "marketing" verdict.
-    #
-    # The full STRONG_KEYWORDS list cannot be used here: it contains
-    # "click here", "today only" and "limited time" - phrasings that
-    # appear in nearly all legitimate marketing mail, so every
-    # advertisement was rejected and the check was useless. Those are
-    # signs of spam, not signs of phishing.
-    #
-    # What remains marks an attack rather than a sale: a request for
-    # credentials, a threat to the account, or a prize as bait. Phishing
-    # dressed up as an advertisement is caught by this list.
+    # The full list cannot be used: "click here", "today only" and
+    # "limited time" appear in nearly all legitimate marketing mail, so
+    # every advertisement was rejected. Those are signs of spam, not of
+    # phishing. What remains marks an attack rather than a sale - a
+    # request for credentials, a threat, or a prize as bait.
     ATTACK_KEYWORDS = [
         "אמת את חשבונך", "אימות זהות", "החשבון יינעל", "חשבונך ייחסם",
         "החשבון הושעה", "פעילות חריגה", "עדכן פרטים", "הזן סיסמה",
@@ -449,18 +410,15 @@ class PhishingDetector:
         """
         האם המייל הוא דיוור שיווקי או התראת שירות, ולא ניסיון פישינג.
 
-        BERT אומן על קורפוסים שבהם ספאם מתויג כמחלקה החיובית יחד עם
-        פישינג, ולכן הוא לא מבדיל ביניהם: פרסומת של Temu מקבלת ממנו
-        99.99 בדיוק כמו מייל שמבקש פרטי אשראי. אבל LURA מזהה פישינג,
-        לא ספאם — פרסומת מעצבנת אינה איום, וסימונה כ"סכנה" שוחק את
-        אמון המשתמש בכל שאר ההתרעות.
+        המודל אומן על נתונים שבהם ספאם תויג יחד עם פישינג, ולכן פרסומת
+        של Temu מקבלת ממנו 99.99 בדיוק כמו בקשה לפרטי אשראי. אבל LURA
+        מזהה פישינג, לא ספאם — סימון פרסומת כ"סכנה" שוחק את האמון בכל
+        שאר ההתרעות.
 
-        הבדיקה דורשת ראיה חיובית לקטגוריה השיווקית, ולא שקט של מנוע
-        החוקים. שקט אינו אומר דבר — ודווקא מייל פישינג מנוסח היטב
-        משתיק את החוקים. לכן גם אם נמצא סימן שיווקי, נדרש שלא יופיע
-        אף ניסוח של בקשת אישורים או איום על החשבון: "זכית בפרס, לחץ
-        כאן" הוא פישינג שעוטה מעטה של פרסומת, וה-STRONG_KEYWORDS
-        מכסים אותו.
+        נדרשת ראיה חיובית לקטגוריה השיווקית, ולא שקט של מנוע החוקים —
+        דווקא פישינג מנוסח היטב משתיק אותם. בנוסף נדרש שלא תופיע בקשת
+        אישורים או איום על החשבון, כי "זכית בפרס, לחץ כאן" הוא פישינג
+        שעוטה מעטה של פרסומת.
         """
         haystack = f"{subject or ''} {content or ''}".lower()
         if not any(marker in haystack for marker in self.PROMO_MARKERS):
@@ -481,25 +439,22 @@ class PhishingDetector:
         Is this genuine operational mail - an order confirmation, a
         shipping notice, a receipt?
 
-        This is the largest category the system got wrong. An order
-        message naturally carries many links and words like order and
-        account, so the rule engine gives it a middling score; BERT
-        flags it nearly every time, because the training corpora hold
-        almost no legitimate commercial mail. Both engines err in the
-        same direction, so their agreement proves nothing.
+        The largest category the system got wrong. Such a message carries
+        many links and words like "order" and "account", so the rules give
+        it a middling score, and BERT flags it nearly every time because
+        the training data holds almost no legitimate commercial mail. Both
+        engines err in the same direction, so their agreement proves
+        nothing.
 
         What separates a real order confirmation from a forged one is
-        **where the links go**. A real shop links to itself. An attacker
-        mimicking an order confirmation has to lead somewhere they
-        control - otherwise there is nothing in it for them.
+        where the links go: a real shop links to itself, an attacker has
+        to lead somewhere they control.
 
         Four conditions, all required:
-          1. The sender is a recognised company. Without this the check
-             is worthless: a forgery sent from iherb-delivery.info that
-             links back to itself satisfies everything else, because the
-             attacker controls both ends. "The link points at the
-             sender" shows consistency, not trustworthiness - that comes
-             from the sender being who it claims to be.
+          1. The sender is a recognised company. Without this a forgery
+             from iherb-delivery.info linking back to itself passes
+             everything else - the attacker controls both ends. "The link
+             points at the sender" shows consistency, not trust.
           2. The text carries operational vocabulary.
           3. Nothing asks for credentials or threatens the account.
           4. Every link resolves to the sender's domain or a known brand.
@@ -534,11 +489,9 @@ class PhishingDetector:
     @staticmethod
     def _shares_registrable_part(a: str, b: str) -> bool:
         """
-        Do two domains belong to the same organisation?
-
-        Shops send operational mail from adjacent infrastructure -
-        iherb.com against e.iherb.com or iherbemail.com - so an exact
-        match alone would have rejected genuine order confirmations.
+        Do two domains belong to the same organisation? Shops send from
+        adjacent infrastructure - iherb.com against e.iherb.com - so an
+        exact match would reject genuine order confirmations.
         """
         core = lambda d: d.rsplit(".", 2)[0].split(".")[-1]
         return bool(core(a)) and core(a) == core(b)
@@ -547,29 +500,24 @@ class PhishingDetector:
         """
         האם המייל נשלח באמת מדומיין של חברה מוכרת.
 
-        זו ראיה חיובית ללגיטימיות, ולא רק היעדר ראיה להתחזות: תוקף
-        יכול לכתוב מה שירצה בגוף המייל, אבל אינו יכול לשלוח
-        מ-accounts.google.com. שקט של מנוע החוקים אינו אומר דבר —
-        הוא גם שותק על מייל שאין לו שולח כלל.
+        ראיה חיובית ללגיטימיות, לא רק היעדר ראיה להתחזות: תוקף יכול
+        לכתוב מה שירצה בגוף המייל, אבל אינו יכול לשלוח מ-
+        accounts.google.com. שקט של מנוע החוקים אינו אומר דבר — הוא
+        שותק גם על מייל בלי שולח כלל.
 
-        משמש להנמכת ציון BERT: המודל אומן על קורפוסים שכמעט אין בהם
-        דואר לגיטימי בענייני חשבון ואבטחה, ולכן הוא מסמן ב-99.99
-        גם הודעת חידוש מנוי מ-malwarebytes.com וגם איפוס סיסמה
-        שהמשתמש עצמו ביקש מ-accounts.google.com.
+        משמש להנמכת ציון BERT, שמסמן ב-99.99 גם איפוס סיסמה שהמשתמש
+        עצמו ביקש, כי כמעט אין בנתוני האימון דואר לגיטימי בענייני
+        חשבון ואבטחה.
         """
         domain = self._sender_domain(sender)
         if not domain:
             return False
 
-        # A free mail provider is not "the company itself". gmail.com
-        # and outlook.com appear in BRAND_DOMAINS as Google's and
-        # Microsoft's domains, but unlike accounts.google.com they are
-        # addresses anyone can open in a minute. Without excluding them,
-        # every phishing message sent from Gmail had the model's score
-        # cut by a factor of four - and a free mailbox is one of the
-        # commonest channels phishing actually arrives through. The same
-        # list already backs check 8, which flags an official-sounding
-        # organisation writing from a free address.
+        # A free provider is not "the company itself". gmail.com is in
+        # BRAND_DOMAINS as Google's, but unlike accounts.google.com anyone
+        # can open one - and a free mailbox is among the commonest
+        # channels phishing arrives through. Without this, every phishing
+        # mail sent from Gmail had the model's score cut fourfold.
         if any(domain == p or domain.endswith("." + p)
                for p in self.FREE_EMAIL_PROVIDERS):
             return False
@@ -637,10 +585,9 @@ class PhishingDetector:
             risk_score += INVALID_DOMAIN_SCORE
             indicators.append("דומיין לא תקני")
 
-        # Check 9: impersonating a known brand
-        # The message presents itself as a known organisation but comes
-        # from a domain that is not theirs. Strongest signal here, so it
-        # carries the highest score.
+        # Check 9: impersonating a known brand - presents itself as a
+        # known organisation, comes from a domain that is not theirs.
+        # Strongest signal here, so the highest score.
         impersonation = self._check_brand_impersonation(sender, subject, content)
         if impersonation:
             brand, domain, where = impersonation

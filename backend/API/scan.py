@@ -31,18 +31,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["scan"])
 
 # ---------------------------------------------------------------------------
-# The endpoints are plain def, not async def, on purpose.
-#
-# In FastAPI an async endpoint runs *on the event loop itself*. Any
-# blocking work inside it stops the whole server until it finishes. The
-# code here blocks completely - synchronous SQLAlchemy queries, bcrypt
-# hashing, and on the scan path BERT inference - and contains not one
-# await. So the async added nothing and cost everything: loading an
-# inbox fires 50 scans, and they were processed one after another with
-# no overlap.
-#
-# With plain def, FastAPI runs the function in a threadpool and
-# concurrent requests genuinely run at the same time.
+# Plain def, not async def, on purpose. An async endpoint runs on the
+# event loop itself, so blocking work inside it stops the whole server.
+# Everything here blocks - SQLAlchemy, bcrypt, BERT inference - and there
+# is not one await, so async cost everything and added nothing: loading an
+# inbox fires 50 scans and they ran one after another. Plain def puts them
+# in a threadpool, where they genuinely overlap.
 # ---------------------------------------------------------------------------
 
 # The model loads in the background (see ML/bert_model.py). get_model
@@ -87,17 +81,11 @@ def get_risk_score(sender: str, subject: str, content: str,
                        user_trusts_sender=user_trusts_sender)
     result["risk_score"] = round(ensemble, 2)
 
-    # The explanation shown to the user.
-    #
-    # This used to add a bare tag reading "semantic analysis (BERT)"
-    # next to whatever the rules found. When the rules found nothing,
-    # the list still held the default "no suspicious indicators" - so
-    # the user saw a score of 99 alongside a statement that nothing
-    # suspicious was found. A flat contradiction, with no way to tell
-    # why the message was flagged.
-    #
-    # If the model is what decided, say so plainly, and say that this is
-    # a judgement about phrasing rather than a finding you can point at.
+    # The explanation shown to the user. A bare "semantic analysis (BERT)"
+    # tag used to sit next to the rules' default "no suspicious
+    # indicators", so a score of 99 arrived with a statement that nothing
+    # was found. If the model decided, say so plainly - and say it is a
+    # judgement about phrasing, not a finding you can point at.
     if bert_score >= 50:
         result["indicators"] = [
             i for i in result["indicators"]
@@ -112,13 +100,10 @@ def get_risk_score(sender: str, subject: str, content: str,
                 "לא נמצאו סימנים טכניים בשולח, בקישורים או בניסוח"
             )
 
-    # "High risk" is reserved for cases both engines agree on.
-    #
-    # With the rule engine silent the score rests on a single signal -
-    # and it is the signal known to flag legitimate account, security
-    # and marketing mail. Showing "high risk" on that alone wears away
-    # what the level means, and in time the user's trust in every other
-    # alert.
+    # "High risk" is reserved for cases both engines agree on. With the
+    # rules silent the score rests on the one signal known to flag
+    # legitimate account and security mail; spending the top label on that
+    # wears away what it means.
     return _apply_thresholds(result, corroborated=rule_score >= 15)
 
 
@@ -129,11 +114,10 @@ def scan_email(
     db: Session = Depends(get_db),
     auth_user: User | None = Depends(get_optional_user),
 ):
-    # The user's identity comes from the token when there is one. The
-    # address in the request body is scraped out of Gmail's DOM, so it
-    # can be forged and it may not match the account the user signed in
-    # with - which left their dashboard empty while the scans were
-    # recorded under a different identity.
+    # Identity comes from the token when there is one. The address in the
+    # body is scraped from Gmail's DOM, so it can be forged and need not
+    # match the signed-in account - which left dashboards empty while the
+    # scans were recorded under another identity.
     if auth_user:
         user = auth_user
     else:
@@ -156,28 +140,22 @@ def scan_email(
         )
         .first()
     )
-    # A stored result is returned only if it was computed by the
-    # current scoring version. Otherwise the message is scanned again
-    # and the existing record updated - so a change to the formula or
-    # the threshold shows up in the inbox without the user clearing
-    # anything, and the saving still applies to everything else.
+    # Only a result from the current scoring version is reused; anything
+    # older is rescanned and the record updated, so a change to the
+    # formula reaches the inbox without the user clearing anything.
     content_hash = hashlib.sha256(
         (email_data.content or "").encode("utf-8")
     ).hexdigest()[:32]
 
-    # A stored result is only valid if both the formula and the text
-    # match. The list scan sends the preview, the open-message scan
-    # sends the full body - without comparing the text, the second would
-    # receive the first one's verdict and the full body would never be
-    # examined at all.
+    # The text has to match too. The list scan sends the preview and the
+    # open-message scan the full body; without this the second would get
+    # the first one's verdict and the body would never be examined.
     if (existing
             and existing.scoring_version == SCORING_VERSION
             and existing.content_hash == content_hash):
-        # The reasons come back with the score. They were once replaced
-        # by a placeholder here, which meant a message scanned a second
-        # time showed a number and no explanation - and the explanation
-        # is the point of the product. Older records predate the column
-        # and fall back to the placeholder until they are rescored.
+        # The reasons come back with the score - a rescanned message used
+        # to show a number and no explanation. Records predating the
+        # column fall back to the placeholder until they are rescored.
         try:
             saved = json.loads(existing.indicators) if existing.indicators else []
         except (ValueError, TypeError):
@@ -243,12 +221,10 @@ def scan_email(
     if recent:
         user.risk_score = round(sum(e.risk_score for e in recent) / len(recent), 2)
 
-    # An alert is created only the *first* time a message counts as
-    # phishing. Without this, every recomputation of older mail - which
-    # happens on any change to the scoring formula - would add a
-    # duplicate alert and mail the guardian again about the same event.
-    # The guardian would be flooded with alerts about mail received
-    # weeks ago.
+    # An alert only on the *first* time a message counts as phishing.
+    # Otherwise every recomputation of older mail - which any change to
+    # the formula triggers - would mail the guardian again about the same
+    # event, weeks after it arrived.
     newly_flagged = analysis["risk_score"] >= ALERT_THRESHOLD and not was_phishing
 
     if newly_flagged:
@@ -260,11 +236,9 @@ def scan_email(
         ))
 
         if user.guardian_id:
-            # A separate alert for the guardian. It carries the
-            # monitored user's name, which is why it is the one shown on
-            # their dashboard - a guardian can watch more than one
-            # account, and the monitored user's own alert does not say
-            # whose it is.
+            # A separate alert for the guardian, carrying the monitored
+            # user's name - a guardian can watch several accounts, and the
+            # user's own alert does not say whose it is.
             guardian = db.query(User).filter(User.id == user.guardian_id).first()
             db.add(Alert(
                 user_id=user.guardian_id,

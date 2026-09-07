@@ -388,12 +388,10 @@ class TestAuthEndpoint:
 
 
 # ---------------------------------------------------------------------------
-# Guardian mode - the whole flow
-#
-# This spans three pieces written separately: the scan that creates an
-# alert, the record kept for the guardian, and the dashboard that reads
-# it. These walk the whole chain, because every failure they cover lived
-# in a seam between two of them.
+# Guardian mode - the whole flow. Three pieces written separately: the
+# scan that creates an alert, the record kept for the guardian, and the
+# dashboard that reads it. Walked end to end, because every failure these
+# cover lived in a seam between two of them.
 # ---------------------------------------------------------------------------
 class TestGuardianFlow:
     @staticmethod

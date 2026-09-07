@@ -50,29 +50,21 @@ class EmailRecord(Base):
     clicked_suspicious = Column(Boolean, default=False)
     scanned_at = Column(DateTime, default=datetime.utcnow)
 
-    # Which scoring formula produced this score. A scan returns the
-    # stored result for mail already checked - a real saving, since
-    # running BERT is the expensive part. But without a version stamp, a
-    # change to the formula or the threshold would affect nothing
-    # already scanned: the inbox would keep showing scores computed by
-    # old code, and testing after a fix would measure the previous
-    # version.
+    # Which formula produced this score. Mail already checked returns the
+    # stored result, skipping BERT. Without the stamp, a change to the
+    # formula would affect nothing already scanned - the inbox would keep
+    # showing scores from old code.
     scoring_version = Column(String, default="", index=True)
 
-    # Fingerprint of the text the score was computed from. A record is
-    # identified by (user, sender, subject), so without this a second
-    # scan of the same message gets the stored result even when the text
-    # sent is completely different - which is exactly what happens when
-    # the full body is scanned after the preview.
+    # Fingerprint of the text scored. A record is keyed by (user, sender,
+    # subject), so without this the full body scanned after the preview
+    # would receive the preview's verdict.
     content_hash = Column(String, default="")
 
-    # The reasons the score was given, as a JSON array of strings.
-    #
-    # Stored because the cache returns a saved verdict without rerunning
-    # the engines, and without this the explanation was replaced by the
-    # placeholder "נסרק בעבר" - so a message scanned once showed a score
-    # with no reasons behind it, which is the one thing this product is
-    # supposed to do.
+    # The reasons for the score, as a JSON array. Stored because the cache
+    # returns a saved verdict without rerunning the engines; without this
+    # a rescanned message showed a number and the placeholder "נסרק
+    # בעבר", with no reasons behind it.
     indicators = Column(String, default="")
 
     user = relationship("User", back_populates="emails")
@@ -85,17 +77,14 @@ class TrustedSender(Base):
     """
     A sender the user has marked as known to them.
 
-    The system knows the large brands (BRAND_DOMAINS), but a person's
-    inbox is full of addresses nobody has heard of - an office they
-    write to, a teacher, a supplier. For those the system has no
-    positive evidence of legitimacy at all, so entirely ordinary mail
-    gets a high score on the model's guess alone.
+    The system knows the large brands, but an inbox is full of addresses
+    nobody has heard of - an office, a teacher, a supplier - where there
+    is no positive evidence of legitimacy at all, so ordinary mail scores
+    high on the model's guess alone. This list is that missing evidence,
+    and it is personal.
 
-    This list is the missing evidence, and it is personal: what one user
-    recognises says nothing about another.
-
-    value holds either a full address (name@example.com) or a domain
-    (example.com) when an organisation writes from several addresses.
+    value is a full address, or a domain when an organisation writes from
+    several addresses.
     """
     __tablename__ = "trusted_senders"
     __table_args__ = (

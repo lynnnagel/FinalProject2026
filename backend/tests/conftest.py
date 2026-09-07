@@ -7,10 +7,9 @@ LURA.db is never touched.
 import os
 import sys
 
-# Must be set before config is imported. The reset tests call
-# /auth/forgot-password, and with the flag on that sends real mail to
-# the test addresses - so every pytest run would bounce messages into a
-# real inbox. load_dotenv does not override an existing variable, so
+# Must be set before config is imported: the reset tests call
+# /auth/forgot-password, which with the flag on sends real mail to the
+# test addresses. load_dotenv does not override an existing variable, so
 # setting it here wins over .env.
 os.environ["EMAIL_ENABLED"] = "false"
 os.environ.setdefault("SECRET_KEY", "test-secret-not-used-in-production-0123456789")
@@ -70,10 +69,8 @@ def client(reset_db):
 
 
 # ---------------------------------------------------------------------------
-# Authentication helpers
-#
-# /stats and /guardian need a token. These fixtures register a user and
-# return their authorization header.
+# Authentication helpers. /stats and /guardian need a token; these
+# register a user and return their authorization header.
 # ---------------------------------------------------------------------------
 @pytest.fixture
 def make_user(client):

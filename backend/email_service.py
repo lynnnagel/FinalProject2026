@@ -63,11 +63,9 @@ def send_guardian_phishing_alert(
     """
     Alert a guardian that phishing was found in the account they watch.
 
-    Called from a background task, so it never delays the scan response
-    and never fails it: a mail that cannot be sent is logged and the
-    detection itself still stands, recorded on the dashboard.
-
-    Returns True only if the message actually went out.
+    Called from a background task, so it never delays or fails the scan
+    response: a mail that cannot be sent is logged and the detection
+    still stands. Returns True only if the message actually went out.
     """
     if not EMAIL_ENABLED:
         logger.info(
@@ -129,12 +127,9 @@ def send_guardian_phishing_alert(
 
 def _risk_color(risk_score: float) -> str:
     """
-    An HTML colour for a risk score.
-
-    The cut-offs are the same ones the rest of the system uses. They were
-    hard-coded here as 80 and 50, so after the threshold was calibrated a
-    message the extension called "סכנה גבוהה" could arrive in the
-    guardian's mail painted orange.
+    An HTML colour for a risk score, from the same cut-offs as everything
+    else. Hard-coded here as 80 and 50, they drifted after calibration and
+    a message the extension called "סכנה גבוהה" arrived painted orange.
     """
     if risk_score >= HIGH_RISK_THRESHOLD:
         return "#dc2626"  # red
@@ -156,15 +151,10 @@ def _attach_icon(msg: MIMEMultipart) -> None:
 
 
 # ---------------------------------------------------------------------------
-# One shell for every message we send.
-#
-# Mail clients strip <style> and most modern CSS, so everything here is a
-# table with inline styles - the only layout that renders the same in
-# Gmail, Outlook and Apple Mail.
-#
-# The look is deliberately plain: a white page, one hairline frame, the
-# wordmark, and the text. Colour appears once, on the risk score, where
-# it carries meaning.
+# One shell for every message. Mail clients strip <style> and most modern
+# CSS, so this is a table with inline styles - the only layout that
+# renders the same in Gmail, Outlook and Apple Mail. Colour appears once,
+# on the risk score, where it carries meaning.
 # ---------------------------------------------------------------------------
 
 INK, INK_SOFT, INK_FAINT, RULE = "#16141F", "#4A4660", "#8B87A0", "#E6E3EE"
@@ -409,13 +399,9 @@ def send_guardian_link_notice(*, to_email: str, monitored_name: str,
     Tell someone that an account named them as the one it watches over.
 
     Guardian mode is set up by the guardian alone, so without this the
-    monitored person is never told it happened. The link itself shares
-    nothing on its own - alerts only start once the extension is
-    installed and signed in on this address - and saying that plainly
-    is most of what this message is for.
-
-    Sent from a background task: a mail that cannot go out must not fail
-    the request that created the link.
+    monitored person is never told. The link shares nothing on its own -
+    alerts start only once the extension is installed and signed in on
+    this address - and saying that plainly is most of the message.
     """
     if not EMAIL_ENABLED:
         logger.info("[Email] mail off - would have told %s that %s is watching",
