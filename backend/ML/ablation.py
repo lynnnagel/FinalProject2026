@@ -58,7 +58,8 @@ def damping_for(sender: str, subject: str, content: str) -> tuple[float, str]:
     """
     if sender and detector.looks_transactional(sender, subject, content):
         return TRANSACTIONAL_DAMPING, "transactional"
-    if sender and detector.is_trusted_sender(sender):
+    if (sender and detector.is_trusted_sender(sender)
+            and not detector.asks_for_credentials(subject, content)):
         return TRUST_DAMPING, "known sender"
     return 1.0, ""
 

@@ -8,11 +8,8 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent / ".env")
 
-# ---------------------------------------------------------------------------
-# Security
-# SECRET_KEY signs the JWTs. No default on purpose - a hard-coded fallback
-# in a public repository lets anyone forge a token for any user.
-# ---------------------------------------------------------------------------
+# SECRET_KEY signs the JWTs. No default on purpose: a fallback in a public
+# repo lets anyone forge a token.
 SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
     raise RuntimeError(
@@ -22,24 +19,16 @@ if not SECRET_KEY:
     )
 
 JWT_ALGORITHM = "HS256"
-TOKEN_TTL_DAYS = 7            # how long a login token stays valid
-RESET_TOKEN_TTL_MINUTES = 30  # how long a password-reset link stays valid
+TOKEN_TTL_DAYS = 7
+RESET_TOKEN_TTL_MINUTES = 30
 
-# Base address used to build the links we send by mail
+# Base of the links we send by mail
 APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:8000")
 
-# ---------------------------------------------------------------------------
-# Database
-# ---------------------------------------------------------------------------
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./lura.db")
 
-# ---------------------------------------------------------------------------
-# CORS - extensions and localhost. In production, use explicit extension IDs.
-#
 # mail.google.com must be here: the content script runs inside the Gmail
-# page, so that is the Origin on its requests. Without it the preflight
-# (OPTIONS /scan) is refused with a 400 and nothing is ever marked.
-# ---------------------------------------------------------------------------
+# page, so that is the Origin it sends. Without it the preflight fails.
 CORS_ORIGIN_REGEX = (
     r"chrome-extension://.*"
     r"|moz-extension://.*"
@@ -49,27 +38,9 @@ CORS_ORIGIN_REGEX = (
     r"|http://127\.0\.0\.1(:\d+)?"
 )
 
-# ---------------------------------------------------------------------------
-# Phishing detection thresholds (0-100 score)
-#
-# PHISHING_THRESHOLD is the only calibrated value; the bands are derived
-# from it. Four independent numbers drift apart: with a fixed MEDIUM=50, a
-# message scoring 40 under a threshold of 35 is is_phishing=True but shown
-# as merely "caution" - the extension reassuring the user about mail the
-# system just called phishing.
-#
-# To set it:  python ML/evaluate.py --split test --sweep
-#             python ML/tradeoff.py    (precision at a real 1% base rate)
-#
-# 70, raised from 60. The score distribution is bimodal, so almost no
-# message sits between 40 and 80: moving the cut-off through that range
-# reclassifies very few. Recall falls 0.02 points while precision at a 1%
-# base rate rises from 49.3% to 67.4% - the raise is nearly free.
-#
-# It is also a weak lever. 80% precision needs the false alarms cut from
-# 44 to 19, which no cut-off in the measured range delivers; that takes
-# new evidence of legitimacy, not a different number here.
-# ---------------------------------------------------------------------------
+# Only the threshold is calibrated; the bands are derived from it, so they
+# cannot drift apart. Raised 60 -> 70: same 66 misses, three fewer false
+# alarms.  Set it with:  python ML/tradeoff.py
 PHISHING_THRESHOLD = 70       # at or above this, classed as phishing
 
 
@@ -98,10 +69,8 @@ assert 0 < LOW_RISK_THRESHOLD < MEDIUM_RISK_THRESHOLD <= PHISHING_THRESHOLD \
        f"Inconsistent risk bands: {LOW_RISK_THRESHOLD}/{MEDIUM_RISK_THRESHOLD}/" \
        f"{HIGH_RISK_THRESHOLD} with threshold {PHISHING_THRESHOLD}"
 
-# ---------------------------------------------------------------------------
 # Merging the two engines  (reasoning in backend/scoring.py)
 #     score = max( bert*damping + RULE_BOOST*rules ,  rules )
-# ---------------------------------------------------------------------------
 
 # How much the rule score adds on top of BERT. 0.5 -> up to 50 points.
 RULE_BOOST = float(os.getenv("RULE_BOOST", "0.5"))
@@ -110,31 +79,23 @@ RULE_BOOST = float(os.getenv("RULE_BOOST", "0.5"))
 # takes 99.99 down to 25, under any sensible threshold.
 TRUST_DAMPING = float(os.getenv("TRUST_DAMPING", "0.25"))
 
-# BERT multiplier for operational mail from a recognised company - order
-# confirmation, shipping notice, receipt. The category the system got
-# wrong most often: its shape sets off the rule engine ("order",
-# "account", many links) and the model flags it almost every time.
-# Sharper than the others because two things corroborate it - the sender
-# is the company, and every link points back to it.
+# BERT multiplier for order confirmations and receipts, the category we got
+# wrong most often. Sharper than the others: the sender is the company and
+# every link points back to it.
 TRANSACTIONAL_DAMPING = float(os.getenv("TRANSACTIONAL_DAMPING", "0.10"))
 
-# Highest score allowed when only one engine contributed. With the rules
-# silent, the verdict rests on the single signal known to flag legitimate
-# mail from an unrecognised sender, so 99 promises a certainty that is not
-# there. Sits at the top of the "suspicious" band: the classification is
-# kept - the alert is still recorded and the guardian still notified -
-# only the displayed confidence is held back.
+# Cap when only one engine found anything. 99 from the model alone promises
+# a certainty that is not there. The classification is kept; only the
+# number on screen is held back.
 UNCORROBORATED_CEILING = HIGH_RISK_THRESHOLD - 1
 
 # Rule score below which we treat the engine as having found nothing.
 CORROBORATION_FLOOR = 15
 
-# Stamp identifying the current formula. Scan results are stored so a
-# message already checked skips BERT, the expensive step. Deriving the
-# stamp from the parameters is what makes that safe: any change to them
-# invalidates every score computed before it.
+# Derived from the parameters, so changing any of them invalidates every
+# stored score and the next scan recomputes it.
 SCORING_VERSION = (
-    f"v5|b{RULE_BOOST}|t{TRUST_DAMPING}"
+    f"v6|b{RULE_BOOST}|t{TRUST_DAMPING}"
     f"|x{TRANSACTIONAL_DAMPING}|th{PHISHING_THRESHOLD}"
 )
 
@@ -143,37 +104,30 @@ SCORING_VERSION = (
 BERT_WEIGHT = float(os.getenv("BERT_WEIGHT", "0.4"))
 HEURISTIC_WEIGHT = float(os.getenv("HEURISTIC_WEIGHT", "0.6"))
 
-# ---------------------------------------------------------------------------
-# Heuristic scoring weights
-# ---------------------------------------------------------------------------
-MAX_KEYWORD_SCORE = 40        # Cap for keyword contribution
-KEYWORD_SCORE_PER_WORD = 15   # points per phrase typical of phishing
-WEAK_KEYWORD_SCORE = 4        # a word that also shows up in real mail
-MAX_WEAK_KEYWORD_SCORE = 16   # low cap - on their own they prove nothing
-SUSPICIOUS_DOMAIN_SCORE = 25  # Suspicious sender patterns
-MULTIPLE_URLS_SCORE = 20      # More than URL_COUNT_THRESHOLD links
-URGENCY_SCORE = 15            # Artificial-urgency words
-INVALID_DOMAIN_SCORE = 20     # Sender domain not in whitelist
-BRAND_IMPERSONATION_SCORE = 45  # known brand in the subject, other domain
-BODY_IMPERSONATION_SCORE = 30   # brand only in the body - weaker signal
-URL_COUNT_THRESHOLD = 2       # Number of URLs above which we penalise
+# What each rule check is worth. Impersonation carries the most because
+# it is the one finding an attacker cannot avoid leaving.
+MAX_KEYWORD_SCORE = 40
+KEYWORD_SCORE_PER_WORD = 15
+WEAK_KEYWORD_SCORE = 4          # also common in real mail, so capped low
+MAX_WEAK_KEYWORD_SCORE = 16
+SUSPICIOUS_DOMAIN_SCORE = 25
+MULTIPLE_URLS_SCORE = 20
+URGENCY_SCORE = 15
+INVALID_DOMAIN_SCORE = 20
+BRAND_IMPERSONATION_SCORE = 45  # brand in the subject, sent from elsewhere
+BODY_IMPERSONATION_SCORE = 30   # brand only in the body - weaker
+URL_COUNT_THRESHOLD = 2
 
-# ---------------------------------------------------------------------------
-# Database / query limits
-# ---------------------------------------------------------------------------
-RECENT_EMAILS_WINDOW = 10     # Rolling average window for user risk score
+RECENT_EMAILS_WINDOW = 10     # rolling window for the user's risk score
+ALERT_HISTORY_LIMIT = 5
 
-# Derived, so mail classed as phishing can never fail to record an alert
-# or reach the guardian. Both were hard-coded at 70; once the threshold
-# was calibrated below that, guardian mode silently missed most detections.
-ALERT_THRESHOLD = PHISHING_THRESHOLD           # lowest score that records an Alert
-GUARDIAN_NOTIFY_THRESHOLD = PHISHING_THRESHOLD  # lowest score that mails the guardian
-ALERT_HISTORY_LIMIT = 5       # Alerts returned in guardian dashboard
+# Derived, so phishing can never fail to alert the guardian. Hard-coded at
+# 70, they silently missed most detections once the threshold moved.
+ALERT_THRESHOLD = PHISHING_THRESHOLD
+GUARDIAN_NOTIFY_THRESHOLD = PHISHING_THRESHOLD
 
 
-# ---------------------------------------------------------------------------
-# Email / SMTP –
-# ---------------------------------------------------------------------------
+# Email / SMTP
 SMTP_HOST       = os.getenv("SMTP_HOST",       "smtp.gmail.com")
 SMTP_PORT       = int(os.getenv("SMTP_PORT",   "587"))
 SMTP_USER       = os.getenv("SMTP_USER",       "")   # sending address

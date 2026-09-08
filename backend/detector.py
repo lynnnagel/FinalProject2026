@@ -91,18 +91,10 @@ class PhishingDetector:
         "ow.ly", "buff.ly", "rebrand.ly", "cutt.ly", "rb.gy",
     ]
 
-    # -----------------------------------------------------------------------
-    # Brands and the domains they really send from. The strongest check in
-    # the engine: a message presenting itself as Bank Hapoalim but arriving
-    # from bankhapoalim-secure.net is impersonation, full stop.
-    #
-    # The earlier check (VALID_DOMAIN_SUFFIXES) looked only at the suffix,
-    # so bezeq-pay.net and netflix-il.info sailed through. Over 250 Hebrew
-    # phishing messages it never fired once.
-    #
-    # Key: how the brand appears in text - list every likely spelling.
-    # Value: the domains the organisation actually sends from.
-    # -----------------------------------------------------------------------
+    # Brands and the domains they really send from - the strongest check
+    # here. Checking only the suffix let bezeq-pay.net through and never
+    # fired once on 250 Hebrew attacks.
+    # Key: every spelling likely in text.  Value: the real domains.
     BRAND_DOMAINS = {
         # Banks and credit cards - Israel
         "בנק הפועלים":      ["bankhapoalim.co.il", "poalim.co.il"],
@@ -160,10 +152,8 @@ class PhishingDetector:
         "dropbox":          ["dropbox.com"],
 
         # -- Security vendors, subscriptions and retail ---------------
-        # The table also backs is_trusted_sender, which is why these are
-        # here: their operational mail - renewal notice, security alert -
-        # barely exists in the training data, so BERT flags it with high
-        # confidence.
+        # Here for is_trusted_sender: renewal notices and security alerts
+        # barely exist in the training data, so BERT flags them.
         "temu":             ["temu.com"],
         "aliexpress":       ["aliexpress.com"],
         "booking":          ["booking.com"],
@@ -223,12 +213,10 @@ class PhishingDetector:
         "תן ביס":           ["10bis.co.il"],
     }
 
-    # Brand keys that are also ordinary words. "next", "yes", "hot" and
-    # "partner" turn up in normal mail constantly - a LinkedIn digest
-    # containing "partner" scored 45 for impersonating Partner. They stay
-    # in the table because is_trusted_sender needs their domains, but for
-    # impersonation they need more than the word: a link carrying the
-    # brand name to a domain that is not the brand's.
+    # Brand keys that are also ordinary words: a LinkedIn digest with the
+    # word "partner" scored 45 for impersonating Partner. They stay for
+    # is_trusted_sender, but impersonation needs more than the word - a
+    # domain wearing the brand name.
     AMBIGUOUS_BRANDS = frozenset({
         "partner", "next", "yes", "hot", "golf", "fox", "booking",
         "steam", "zoom", "slack", "notion", "מקס",
@@ -240,7 +228,6 @@ class PhishingDetector:
     _IP_IN_URL = re.compile(r"https?://\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}")
     _SENDER_DOMAIN_RE = re.compile(r"@([A-Za-z0-9.\-]+)")
 
-    # -----------------------------------------------------------------------
     def _sender_domain(self, sender: str) -> str:
         """The domain from a sender address, lowercased. Empty if there is none."""
         match = self._SENDER_DOMAIN_RE.search(sender or "")
@@ -333,15 +320,9 @@ class PhishingDetector:
             return brand, domain, "subject"
 
         # -- Step 2: the body, under stricter conditions ---------------
-        # Unconditionally, this flagged a genuine Malwarebytes message
-        # mentioning "Google Chrome" as impersonating Google - newsletters
-        # name brands all the time. Skipped entirely, a message naming
-        # "Microsoft 365" only in the body and linking to
-        # office365-alert.net scored 19.
-        #
-        # The condition: there is a link, and none resolves to the brand's
-        # own domain. A newsletter links to the brand or to itself; a
-        # forger links to a domain they control.
+        # Unconditionally this flagged a real Malwarebytes mail mentioning
+        # Chrome; skipped, it missed office365-alert.net. So: there is a
+        # link, and none goes to the brand's own domain.
         if not urls:
             return None
 
@@ -387,12 +368,10 @@ class PhishingDetector:
         "מוצרים חדשים", "הטבות", "במחיר מיוחד",
     ]
 
-    # A subset of STRONG_KEYWORDS that cancels the "marketing" verdict.
-    # The full list cannot be used: "click here", "today only" and
-    # "limited time" appear in nearly all legitimate marketing mail, so
-    # every advertisement was rejected. Those are signs of spam, not of
-    # phishing. What remains marks an attack rather than a sale - a
-    # request for credentials, a threat, or a prize as bait.
+    # The words that cancel a "marketing" verdict. The full STRONG_KEYWORDS
+    # list rejected every advertisement, because "click here" and "today
+    # only" are signs of spam, not of phishing. What is left marks an
+    # attack: credentials, a threat, or a prize as bait.
     ATTACK_KEYWORDS = [
         "אמת את חשבונך", "אימות זהות", "החשבון יינעל", "חשבונך ייחסם",
         "החשבון הושעה", "פעילות חריגה", "עדכן פרטים", "הזן סיסמה",
@@ -405,6 +384,13 @@ class PhishingDetector:
         "social security", "tax refund", "congratulations", "you have won",
         "claim your prize",
     ]
+
+    def asks_for_credentials(self, subject: str, content: str) -> bool:
+        """Does the message ask for credentials, threaten the account, or
+        dangle a prize? looks_transactional already vetoes on this; the
+        trusted-sender damping needs the same veto."""
+        haystack = f"{subject or ''} {content or ''}".lower()
+        return any(kw in haystack for kw in self.ATTACK_KEYWORDS)
 
     def looks_promotional(self, subject: str, content: str) -> bool:
         """
@@ -513,11 +499,9 @@ class PhishingDetector:
         if not domain:
             return False
 
-        # A free provider is not "the company itself". gmail.com is in
-        # BRAND_DOMAINS as Google's, but unlike accounts.google.com anyone
-        # can open one - and a free mailbox is among the commonest
-        # channels phishing arrives through. Without this, every phishing
-        # mail sent from Gmail had the model's score cut fourfold.
+        # A free provider is not "the company itself" - anyone can open a
+        # gmail.com address, and it is one of the commonest channels
+        # phishing arrives through.
         if any(domain == p or domain.endswith("." + p)
                for p in self.FREE_EMAIL_PROVIDERS):
             return False

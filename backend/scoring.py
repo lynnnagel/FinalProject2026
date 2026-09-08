@@ -3,16 +3,11 @@ LURA - merging the rule score and the BERT score into one.
 
     score = min( max( bert*damping + RULE_BOOST*rules , rules ) , 100 )
 
-Either engine can reach 100 alone. The first version averaged them
-(0.4*bert + 0.6*rules) and that failed twice: BERT at full confidence
-contributed only 40 points, under the threshold (52.8% accuracy, 93.6%
-miss rate, against 99.4% for BERT alone); and a rule score of 0 means
-"nothing to say", which an average reads as evidence of legitimacy.
+Either engine can reach 100 alone. Averaging them failed twice: BERT at
+full confidence only reached 40 points, under the threshold; and a rule
+score of 0 means "nothing to say", which an average reads as innocence.
 
-Damping applies only on positive evidence that the mail is legitimate,
-never on silence. It targets a measured weakness: the model gives 99.99
-to a real password reset from accounts.google.com, because the training
-data holds almost no legitimate account or security mail.
+Damping needs positive evidence the mail is legitimate, never silence.
 """
 from __future__ import annotations
 
@@ -36,29 +31,29 @@ def combine(bert_score: float, rule_score: float, sender: str,
     """
     bert = bert_score
 
-    # Each damping needs a verified sender an attacker cannot forge, and
-    # damps the model only, never the rules - so impersonation or a
-    # raw-IP link still scores high on a sender the user trusts. They do
-    # not stack; several would erase the model.
+    # Each damping needs a verified sender, and damps the model only - so
+    # impersonation still scores high on a trusted sender. They do not
+    # stack. A fourth, for marketing mail, was removed: it needed no
+    # sender, so it cost 488 misses to save 2 false alarms.
     #
-    # A fourth, for marketing-looking mail, was removed: it was the only
-    # one needing no sender, so it fired on anything with an unsubscribe
-    # link - 1,129 times on the test split, 510 of them real attacks -
-    # costing 488 misses to save 2 false alarms.
+    # The brand-domain damping asks one more question than it used to: is
+    # the message demanding credentials or threatening the account? A real
+    # domain plus that demand is the signature of a compromised account,
+    # and damping it cost 20 detections on the test split while saving
+    # none. looks_transactional already vetoes on the same list.
+    asking = detector.asks_for_credentials(subject, content)
+
     if user_trusts_sender:
         bert *= TRUST_DAMPING
     elif sender and detector.looks_transactional(sender, subject, content):
         bert *= TRANSACTIONAL_DAMPING
-    elif sender and detector.is_trusted_sender(sender):
+    elif sender and detector.is_trusted_sender(sender) and not asking:
         bert *= TRUST_DAMPING
 
     score = min(max(bert + RULE_BOOST * rule_score, rule_score), 100.0)
 
-    # With no rule finding at all, the model's 99 was displayed as 99 next
-    # to a mild "check who sent it" - a number promising certainty that is
-    # not there. The ceiling sits at the top of the "suspicious" band, so
-    # only the displayed confidence is held back; the classification is
-    # untouched.
+    # With no rule finding, the model's 99 sat next to a mild "check who
+    # sent it". The cap holds back the number, not the classification.
     if ceiling is not None and rule_score < CORROBORATION_FLOOR:
         score = min(score, float(ceiling))
     return score
