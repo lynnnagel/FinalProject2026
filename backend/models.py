@@ -50,15 +50,12 @@ class EmailRecord(Base):
     clicked_suspicious = Column(Boolean, default=False)
     scanned_at = Column(DateTime, default=datetime.utcnow)
 
-    # Which formula produced this score. Mail already checked returns the
-    # stored result, skipping BERT. Without the stamp, a change to the
-    # formula would affect nothing already scanned - the inbox would keep
-    # showing scores from old code.
+    # Which formula produced this score. Without it, changing the formula
+    # would leave every stored score untouched.
     scoring_version = Column(String, default="", index=True)
 
-    # Fingerprint of the text scored. A record is keyed by (user, sender,
-    # subject), so without this the full body scanned after the preview
-    # would receive the preview's verdict.
+    # Fingerprint of the text scored, so the full body does not receive the
+    # preview's verdict.
     content_hash = Column(String, default="")
 
     # The reasons for the score, as a JSON array. Stored because the cache

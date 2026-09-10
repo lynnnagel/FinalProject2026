@@ -46,9 +46,7 @@ ICON_CID = "lura_icon"
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
 # Public API
-# ---------------------------------------------------------------------------
 
 def send_guardian_phishing_alert(
     *,
@@ -121,9 +119,7 @@ def send_guardian_phishing_alert(
     return False
 
 
-# ---------------------------------------------------------------------------
 # Internal helpers
-# ---------------------------------------------------------------------------
 
 def _risk_color(risk_score: float) -> str:
     """
@@ -150,12 +146,9 @@ def _attach_icon(msg: MIMEMultipart) -> None:
     msg.attach(img)
 
 
-# ---------------------------------------------------------------------------
-# One shell for every message. Mail clients strip <style> and most modern
-# CSS, so this is a table with inline styles - the only layout that
-# renders the same in Gmail, Outlook and Apple Mail. Colour appears once,
-# on the risk score, where it carries meaning.
-# ---------------------------------------------------------------------------
+# One shell for every message. Mail clients strip <style>, so this is a
+# table with inline styles - the only layout that survives Gmail, Outlook
+# and Apple Mail alike.
 
 INK, INK_SOFT, INK_FAINT, RULE = "#16141F", "#4A4660", "#8B87A0", "#E6E3EE"
 

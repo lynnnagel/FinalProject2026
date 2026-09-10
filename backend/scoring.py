@@ -39,7 +39,7 @@ def combine(bert_score: float, rule_score: float, sender: str,
     # The brand-domain damping asks one more question than it used to: is
     # the message demanding credentials or threatening the account? A real
     # domain plus that demand is the signature of a compromised account,
-    # and damping it cost 20 detections on the test split while saving
+    # and damping it cost 19 detections on the test split while saving
     # none. looks_transactional already vetoes on the same list.
     asking = detector.asks_for_credentials(subject, content)
 

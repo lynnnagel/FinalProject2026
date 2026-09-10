@@ -40,13 +40,9 @@ def init_db():
     _add_missing_columns()
 
 
-# ---------------------------------------------------------------------------
 # A minimal migration. create_all never touches an existing table, so a
-# column added to a model afterwards is simply missing and every query
-# mentioning it fails - on a database already holding the user's history.
-# This only adds; it never drops or alters, so it is safe on every
-# startup. Alembic would be the grown-up answer, but this is two columns.
-# ---------------------------------------------------------------------------
+# column added later is simply missing and every query using it fails.
+# This only adds columns, so it is safe to run on every startup.
 _EXPECTED_COLUMNS = {
     "emails": {
         "scoring_version": "VARCHAR DEFAULT ''",
