@@ -1,4 +1,24 @@
-@import url('https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap');
+/* Rubik comes from the extension package, like styles.css. The @import
+   here fetched it from Google: an extra network round trip before the
+   popup could paint, and nothing guarantees it is reachable. */
+@font-face {
+  font-family: 'Rubik';
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: swap;
+  src: url('../fonts/rubik-hebrew.woff2') format('woff2');
+  unicode-range: U+0590-05FF, U+200C-2010, U+20AA, U+25CC, U+FB1D-FB4F;
+}
+@font-face {
+  font-family: 'Rubik';
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: swap;
+  src: url('../fonts/rubik-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+                 U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F,
+                 U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF;
+}
 
 /* אותם טוקנים כמו frontend/css/main.css. התוסף הוא חבילה נפרדת ואינו
    יכול לייבא את הגיליון של האתר, ולכן הם משוכפלים כאן — אבל פעם אחת
@@ -7,7 +27,10 @@
   --blue: #42A5F5;
   --purple: #7C4DFF;
   --pink: #E040FB;
-  --brand-gradient: var(--brand-gradient);
+  /* Was var(--brand-gradient) - a token defined as itself, which is
+     invalid, so .header h1 got no background under a transparent text
+     fill: the word LURA in the popup header was not drawn at all. */
+  --brand-gradient: linear-gradient(135deg, #42A5F5, #7C4DFF, #E040FB);
 
   --accent: #7C4DFF;
   --accent-hover: #6B3AF0;
