@@ -115,11 +115,9 @@
       }
     }
 
-    // The bands come from the server, which derives them from one
-    // calibrated threshold. Hand-written here they drifted into two
-    // different sets - 80/50/30 in the overview, 70/40/20 in the scanner
-    // - and neither matched after calibration. The list below is only the
-    // fallback if the request fails. Keep it in step with config.py.
+    // The bands come from the server. Hand-written here they drifted into
+    // two different sets and neither matched after calibration. This is
+    // only the fallback; keep it in step with config.py.
     let BANDS = [
       { min: 84, label: 'סכנה גבוהה', color: 'var(--danger)' },
       { min: 70, label: 'חשוד',       color: 'var(--orange)' },
@@ -156,6 +154,21 @@
     const riskColor = score => band(score).color;
     const riskLabel = score => band(score).label;
 
+    // The ring is a conic gradient: the band colour up to the score, the
+    // track after it. At 0 that is all track, so the number carries the
+    // colour and the gauge still reads as "safe" rather than as unloaded.
+    function renderRisk(score) {
+      const color = riskColor(score);
+      const set = (id, fn) => { const el = document.getElementById(id); if (el) fn(el); };
+      set('riskNum',   el => { el.textContent = score; el.style.color = color; });
+      set('riskLevel', el => { el.textContent = riskLabel(score); el.style.color = color; });
+      set('riskBar',   el => { el.style.width = `${score}%`; });
+      set('riskCircle', el => {
+        el.style.background =
+          `conic-gradient(${color} ${score}%, var(--border-light) ${score}%)`;
+      });
+    }
+
     // No data yet - perfectly normal for a new user, so it reads as
     // guidance rather than a failure.
     function showEmptyDashboard(status) {
@@ -165,6 +178,11 @@
       });
       const statusEl = document.getElementById('statStatus');
       if (statusEl) statusEl.textContent = '—';
+
+      // The gauge was left untouched here, so it kept the "טוען..." it
+      // starts with and an uncoloured ring - the one thing on the page
+      // that still looked like it was mid-request.
+      renderRisk(0);
 
       const alertsEl = document.getElementById('alertsList');
       if (alertsEl) {
@@ -217,15 +235,7 @@
         const detectionRate = d.total_scanned > 0 ? Math.round((d.phishing_blocked / d.total_scanned) * 100) : 0;
         document.getElementById('statStatus').textContent = detectionRate + '%';
 
-        const score = Math.round(d.risk_score || 0);
-        const color = riskColor(score);
-        document.getElementById('riskNum').textContent   = score;
-        document.getElementById('riskNum').style.color   = color;
-        document.getElementById('riskLevel').textContent = riskLabel(score);
-        document.getElementById('riskLevel').style.color = color;
-        document.getElementById('riskBar').style.width   = `${score}%`;
-        document.getElementById('riskCircle').style.background =
-          `conic-gradient(${color} ${score}%, var(--border-light) ${score}%)`;
+        renderRisk(Math.round(d.risk_score || 0));
 
         // Alerts
         const list = d.recent_alerts_list || [];
@@ -286,10 +296,8 @@
     }
 
     // -- guardian mode ---------------------------------------------
-    // Linking is the first of three steps - the person also has to open
-    // an account and sign the extension in - so until both happen no
-    // alert can arrive. This names the missing step instead of leaving a
-    // link that looks done and does nothing.
+    // Linking is one of three steps; the person also has to open an
+    // account and sign the extension in. This names the missing one.
     const WATCH_STATE = {
       needs_account: {
         label: 'ממתין לפתיחת חשבון',
@@ -396,11 +404,8 @@
       }
     }
 
-    // Bands are fetched before the first render, so a score is never
-    // labelled by the fallback when the server could have said otherwise;
-    // a failed fetch resolves and the fallback stands. Which section is
-    // shown depends on no request, so it is decided first - hanging it
-    // off the data load left a failed load on the overview after the
-    // visitor had asked for guardian mode.
+    // Bands are fetched before the first render, so no score is labelled
+    // by the fallback while the server could answer. Which section shows
+    // depends on no request, so it is decided first.
     openSectionFromHash();
     loadBands().then(loadDashboard);

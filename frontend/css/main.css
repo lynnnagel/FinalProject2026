@@ -46,6 +46,17 @@
     --ink-text:#E7E9F2; --ink-text-2:#9BA1B8;
     --danger:#DC2626; --warn:#D97706; --safe:#059669;
     --r:8px; --r-lg:14px;
+
+    /* The dashboard and login sheets were written before this palette and
+       kept their own names. The port brought the rules over but not the
+       names, so 39 references resolved to nothing - among them the risk
+       gauge, whose conic-gradient became invalid and drew no ring at all.
+       Aliases, not new colours: same values under the older names. */
+    --green:var(--safe); --orange:var(--warn); --red:var(--danger);
+    --blue:var(--brand-blue);
+    --yellow:#EAB308;              /* the caution band, as on the home page */
+    --text-secondary:var(--text-2); --muted:var(--text-3);
+    --border-light:#F1F2F6;        /* the gauge track: lighter than --border */
   }
   *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
   body{font-family:'Rubik',-apple-system,'Segoe UI',Arial,sans-serif;
@@ -64,8 +75,12 @@
     color:var(--text-2);text-decoration:none}
   .nav-links a:hover{background:var(--bg);color:var(--text)}
   .nav-links a.active{color:var(--accent);background:var(--accent-wash)}
+  /* The dashboard's sign-out is a <button>, which inherits neither the
+     page font nor the pointer, so it came out as a default grey box. */
   .nav-cta{padding:7px 15px;border:1px solid var(--border-strong);border-radius:6px;
-    font-size:14px;font-weight:500;color:var(--text-2);background:var(--surface)}
+    font-size:14px;font-weight:500;color:var(--text-2);background:var(--surface);
+    font-family:inherit;cursor:pointer}
+  .nav-cta:hover{background:var(--bg);color:var(--text)}
 
   /* ═══ HERO ═══ */
   .hero-wrap{position:relative;overflow:hidden;border-bottom:1px solid var(--border);

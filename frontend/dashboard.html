@@ -10,14 +10,17 @@
 </head>
 <body class="dash-page">
  <nav class="navbar">
-    <div class="nav-brand">
-      <img src="icons/logo.svg" alt="" class="brand-mark">
-      <span class="brand-word">LURA</span>
-    </div>
     <div class="nav-links">
       <a href="index.html">בית</a>
       <span class="nav-user" id="navUser"></span>
-      <button class="btn-logout" onclick="logout()">יציאה</button>
+      <button class="nav-cta" onclick="logout()">יציאה</button>
+    </div>
+    <!-- Same order and same class as index.html: the lockup was mirrored
+         here and used .nav-brand, which has no rule, so LURA jumped sides
+         and lost its size and weight on the way in from the home page. -->
+    <div class="brand">
+      <span class="brand-word">LURA</span>
+      <img src="icons/logo.svg" alt="" class="brand-mark">
     </div>
   </nav>
 
