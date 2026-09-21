@@ -25,14 +25,9 @@ async function init() {
   setInterval(scanOpenEmail, 1500);
 }
 
-// ---------------------------------------------------------------------------
-// Identifying the mailbox owner. Searching the page for
-// [data-hovercard-id] picked whoever appeared first in the DOM, usually a
-// sender: accounts named noreply@discord.com ended up in the database
-// with the scans under them, and the real user's dashboard stayed empty.
-// So: the account signed in to LURA first, which is known rather than
-// guessed, then Google's account button - one element, not a search.
-// ---------------------------------------------------------------------------
+// Who owns this mailbox. Searching the page picked whoever came first in
+// the DOM, usually a sender, so scans landed under noreply@discord.com.
+// Now: the signed-in LURA account first, then Google's account button.
 const EMAIL_RE = /[\w.+-]+@[\w-]+\.[\w.-]+/;
 
 function emailFromAccountButton() {
@@ -75,20 +70,10 @@ async function getUserEmail() {
   return cached || 'user@gmail.com';
 }
 
-// ---------------------------------------------------------------------------
-// Is the mailbox on screen the one the extension is signed in as?
-//
-// Identity comes from the token and never from the page, because a
-// scraped address can be forged. But nothing checked that the token's
-// account owns the mail being read: signed in as one account and
-// browsing another, every message was recorded under the signed-in one,
-// and the guardian was told their child received mail that never reached
-// them.
-//
-// Only a positive mismatch stops the scan. If the account button cannot
-// be read we scan exactly as before - silence is not evidence, the same
-// rule the scoring engine follows.
-// ---------------------------------------------------------------------------
+// Is the mailbox on screen the one we are signed in as? Nothing checked
+// that, so browsing a second mailbox recorded every message under the
+// signed-in account. Only a proven mismatch stops the scan: if the account
+// button cannot be read we scan as before.
 
 // Gmail treats dots and a +tag as the same mailbox, and the account
 // button always shows the bare address. Without this, testing with
@@ -138,12 +123,9 @@ function showMismatchNotice({ signedIn, mailbox }) {
   document.body.appendChild(box);
 }
 
-// ---------------------------------------------------------------------------
-// The authorization header for a scan. The popup stores the token in
-// chrome.storage.local, shared by both halves of the extension. When it
-// is there the server takes identity from it and ignores the address in
-// the body, so scans are recorded under the account signed in.
-// ---------------------------------------------------------------------------
+// The authorization header. The popup stores the token in
+// chrome.storage.local, which both halves of the extension share. With
+// it, the server ignores the address in the body.
 function getAuthToken() {
   return new Promise(resolve =>
     chrome.storage.local.get(['lura_token'], r => resolve(r.lura_token || null))
@@ -203,7 +185,14 @@ function hashRow(row) {
 
 function extractEmailData(row) {
   const subjectEl = row.querySelector('.bog,[data-subject],.y6,span[title]');
-  const senderEl  = row.querySelector('.yW span,.zF,[email],.yP');
+  // [email] first, and on its own. In one Gmail layout the address sits
+  // on a span nested inside another, and a combined selector returned
+  // the outer one - so the row was scanned under a display name while
+  // the opened message was scanned under the address. Different senders
+  // key different cache rows, and the three sender rules found no domain
+  // to read.
+  const senderEl  = row.querySelector('[email]')
+                 || row.querySelector('.yW span,.zF,.yP');
   const previewEl = row.querySelector('.y2,.Zt');
   return {
     subject: subjectEl?.textContent?.trim() || 'ללא נושא',
@@ -261,14 +250,9 @@ async function scanEmail(row, id) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Scanning the open message, with the full body. A row in Gmail's list
-// holds ~100 characters of preview, and that was all the server ever saw,
-// so most of the pipeline ran blind: the unsubscribe link sits in the
-// footer, the link/IP/shortener and brand-in-body checks read the body,
-// and BERT was trained on whole messages but given an opening fragment.
-// Opening a message re-scans it with the real text and updates the badge.
-// ---------------------------------------------------------------------------
+// Scanning the open message, with the full body. A list row holds ~100
+// characters of preview, and that was all the server saw, so most checks
+// ran blind. Opening a message rescans it and updates the badge.
 const fullyScanned = new Set();
 
 function extractOpenEmail() {
@@ -372,11 +356,8 @@ function findRowById(id) {
   return null;
 }
 
-// ---------------------------------------------------------------------------
-// The risk bands. Must match backend/config.py, where they are derived
-// from PHISHING_THRESHOLD. Hard-coded here as 80/50/30 they went stale
-// after calibration, and mail the server called phishing showed yellow.
-// ---------------------------------------------------------------------------
+// The risk bands. Must match backend/config.py. Hard-coded as 80/50/30
+// they went stale, and mail the server called phishing showed yellow.
 const BADGE_BANDS = [
   { min: 84, label: 'סכנה',   level: 'סכנה גבוהה', color: '#EF4444', bg: '#450A0A', pulse: true  },
   { min: 70, label: 'חשוד',   level: 'חשוד',       color: '#F97316', bg: '#431407', pulse: false },
@@ -503,11 +484,9 @@ function showModal(result, sender = '') {
 
   const chips = (result.indicators || []).map(i => `<span class="lura-chip">${escapeHtml(i)}</span>`).join('');
 
-  // Shown only when there is something to mark and the message was
-  // flagged; on clean mail it does nothing and adds noise. Hidden
-  // entirely when the rules found real evidence: the server would refuse
-  // anyway, and on a message that looks like impersonation a button
-  // reading "I know this sender" is what the attacker wants pressed.
+  // Only when the message was flagged and there is something to mark.
+  // Hidden when the rules found real evidence: on an impersonation,
+  // "I know this sender" is the button the attacker wants pressed.
   const hasHardEvidence = (result.indicators || []).some(i =>
     i.includes('מתיימר להיות') || i.includes('דומיין לא תקני') ||
     i.includes('כתובת IP') || i.includes('קיצור URL') ||
@@ -618,13 +597,9 @@ function escapeHtml(value) {
   }[ch]));
 }
 
-// ---------------------------------------------------------------------------
-// Marking a sender as known. The system knows the large brands, but an
-// inbox is full of addresses nobody has heard of, where there is no
-// positive evidence of legitimacy and ordinary mail scores high on the
-// model's guess alone. Marking damps the model only: a user can say they
-// know an address, not that the evidence is void.
-// ---------------------------------------------------------------------------
+// Marking a sender as known. An inbox is full of addresses nobody has
+// heard of, where ordinary mail scores high on the model's guess alone.
+// The mark damps the model only, never the rules.
 async function markSenderTrusted(sender) {
   const token = await getAuthToken();
   if (!token) {
