@@ -253,17 +253,54 @@ async function scanEmail(row, id) {
 // Scanning the open message, with the full body. A list row holds ~100
 // characters of preview, and that was all the server saw, so most checks
 // ran blind. Opening a message rescans it and updates the badge.
-const fullyScanned = new Set();
+// key -> the verdict, or null while its scan is still in flight. A Set
+// here meant the second visit to a message returned before the badge was
+// drawn: the scan was skipped, correctly, but so was the drawing, and
+// Gmail had removed the badge on the way out.
+const fullyScanned = new Map();
+
+// The message on screen, not the first one in the document. Gmail leaves
+// earlier messages mounted - collapsed ones in a thread, and the message
+// read before this one - so .a3s matches several bodies and the first is
+// rarely the right one. Rendered height tells the open one from the
+// leftovers, and the last of those is the one being read.
+function openBodyElement() {
+  const bodies = [...document.querySelectorAll('.a3s')].filter(el =>
+    el.getBoundingClientRect().height > 0
+    && (el.innerText || el.textContent || '').trim().length >= 20);
+  return bodies[bodies.length - 1] || null;
+}
+
+// Gmail puts the subject above the messages, so of the headings on the
+// page the one belonging to a body is the last one before it. The badge
+// hangs off this element, so it has to be the same heading the scan read
+// its subject from.
+function openSubjectElement(bodyEl = openBodyElement()) {
+  const heads = [...document.querySelectorAll('h2.hP')];
+  if (!bodyEl) return heads[heads.length - 1] || null;
+  const above = heads.filter(h =>
+    h.compareDocumentPosition(bodyEl) & Node.DOCUMENT_POSITION_FOLLOWING);
+  return above[above.length - 1] || heads[0] || null;
+}
 
 function extractOpenEmail() {
-  const bodyEl = document.querySelector('.a3s');
+  const bodyEl = openBodyElement();
   if (!bodyEl) return null;
 
   const body = (bodyEl.innerText || bodyEl.textContent || '').trim();
-  if (body.length < 20) return null;
 
-  const senderEl  = document.querySelector('span.gD[email], .gD[email], [email]');
-  const subjectEl = document.querySelector('h2.hP');
+  // Scoped to the message that body belongs to. A selector list has no
+  // priority - querySelector returns whichever alternative appears first
+  // in the document - so a bare [email] used to match a list row mounted
+  // behind the message, and every message was read as having been sent
+  // by the same address.
+  const box = bodyEl.closest('.adn, .gs, [role="listitem"]') || document;
+  const senderEl  = box.querySelector('.gD[email]')
+                 || box.querySelector('[email]')
+                 || document.querySelector('.gD[email]')
+                 || box.querySelector('.gD');
+
+  const subjectEl = openSubjectElement(bodyEl);
 
   return {
     sender:  senderEl?.getAttribute('email') || senderEl?.textContent?.trim() || 'לא ידוע',
@@ -291,8 +328,17 @@ async function scanOpenEmail() {
   if (!data) return;
 
   const key = openEmailKey(data);
-  if (fullyScanned.has(key)) return;
-  fullyScanned.add(key);
+  if (fullyScanned.has(key)) {
+    // Already scanned, so do not scan again - but redraw when the badge
+    // on screen is missing or belongs to another message. Matching on
+    // the key rather than on presence keeps the interval from restarting
+    // the animation every second and a half.
+    const known = fullyScanned.get(key);
+    const shown = document.querySelector('.lura-open-badge');
+    if (known && shown?.dataset.luraKey !== key) showOpenBadge(known, key);
+    return;
+  }
+  fullyScanned.set(key, null);
 
   try {
     const res = await fetch(`${API_URL}/scan`, {
@@ -307,7 +353,8 @@ async function scanOpenEmail() {
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const result = await res.json();
-    showOpenBadge(result);
+    fullyScanned.set(key, result);
+    showOpenBadge(result, key);
 
     // The badge in the list came from the preview alone. There is a
     // better result now, so the cache updates and the row reflects it.
@@ -320,13 +367,20 @@ async function scanOpenEmail() {
       }
     }
   } catch (err) {
+    // Drop the key so the scan is tried again, the way a failed row
+    // scan is. Left in place, the message stayed unscanned until Gmail
+    // was reloaded.
+    fullyScanned.delete(key);
     console.warn('LURA open-scan error:', err.message);
   }
 }
 
-function showOpenBadge(result) {
+// key marks which message the badge belongs to. Without it a badge left
+// over from the message read a moment ago counted as "a badge is already
+// showing", and the one on screen described a different mail.
+function showOpenBadge(result, key = '') {
   document.querySelector('.lura-open-badge')?.remove();
-  const subjectEl = document.querySelector('h2.hP');
+  const subjectEl = openSubjectElement();
   if (!subjectEl) return;
 
   const s = Math.round(result.risk_score ?? 0);
@@ -334,6 +388,7 @@ function showOpenBadge(result) {
 
   const b = document.createElement('span');
   b.className = 'lura-badge lura-open-badge';
+  b.dataset.luraKey = key;
   b.style.cssText = `
     display:inline-flex;align-items:center;gap:6px;
     padding:4px 12px;margin-inline-start:10px;vertical-align:middle;

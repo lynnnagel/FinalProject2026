@@ -33,9 +33,7 @@ def reset_token_for(email: str) -> str:
         next(sessions, None)
 
 
-# ---------------------------------------------------------------------------
 # /scan
-# ---------------------------------------------------------------------------
 class TestScanEndpoint:
     def test_phishing_email_high_risk(self, client, phishing_email):
         r = client.post("/scan", json=phishing_email)
@@ -105,10 +103,67 @@ class TestScanEndpoint:
                       "indicators", "recommendation", "response_time"]:
             assert field in data, f"Missing field: {field}"
 
+    def test_rules_only_score_is_rescanned_once_the_model_loads(
+        self, client, phishing_email, monkeypatch
+    ):
+        """
+        BERT loads in the background, so a scan in the first seconds after
+        a restart runs on the rules alone. That score used to be stored
+        under the ordinary version and reused for the life of the message,
+        leaving a rules-only badge in the inbox for good.
+        """
+        import API.scan as scan
+        from models import EmailRecord
+        from conftest import TestingSessionLocal
 
-# ---------------------------------------------------------------------------
+        monkeypatch.setattr(scan, "get_bert_model", lambda: None)
+        client.post("/scan", json=phishing_email)
+
+        db = TestingSessionLocal()
+        try:
+            stored = db.query(EmailRecord).one().scoring_version
+        finally:
+            db.close()
+        assert stored == scan.RULES_ONLY_VERSION
+
+        # Loaded now, so the stored score no longer counts as current.
+        monkeypatch.setattr(scan, "get_bert_model", lambda: object())
+        assert not scan._is_reusable(stored)
+        assert scan._is_reusable(scan.SCORING_VERSION)
+
+    def test_preview_rescan_keeps_the_verdict_from_the_full_body(self, client):
+        """
+        Both scans of a message key the same row: the list sends the
+        preview, the opened message the full body. Scoring the preview
+        again afterwards overwrote the fuller verdict, and the badge
+        alternated between the two numbers on every pass over the inbox.
+        """
+        preview = {
+            "user_email": "both@example.com",
+            "sender": "security@paypa1-verify.com",
+            "subject": "התראת אבטחה",
+            "content": "אמת את זהותך",
+        }
+        full = dict(preview, content=(
+            "אמת את זהותך תוך 24 שעות אחרת החשבון ייסגר לצמיתות. "
+            "לחץ כאן לאימות פרטי כרטיס האשראי: http://bit.ly/xyz "
+            "ועוד קישור: http://192.0.2.5/login"
+        ))
+
+        client.post("/scan", json=preview)
+        opened = client.post("/scan", json=full).json()["risk_score"]
+
+        # Back to the list. The preview must not undo what the body said.
+        for _ in range(3):
+            again = client.post("/scan", json=preview).json()["risk_score"]
+            assert again == opened
+
+        # And a longer text still gets a real scan of its own.
+        longer = dict(full, content=full["content"] + " בנק לאומי")
+        assert client.post("/scan", json=longer).status_code == 200
+
+
 # /stats
-# ---------------------------------------------------------------------------
 class TestStatsEndpoint:
     def test_requires_authentication(self, client):
         """Stats are personal data - no token, no access."""
@@ -137,9 +192,7 @@ class TestStatsEndpoint:
         assert 0.0 <= data["risk_score"] <= 100.0
 
 
-# ---------------------------------------------------------------------------
 # /guardian
-# ---------------------------------------------------------------------------
 class TestGuardianEndpoint:
     def test_connect_creates_link(self, client, safe_email, parent_headers):
         client.post("/scan", json=safe_email)
@@ -246,9 +299,7 @@ class TestGuardianEndpoint:
         assert r.status_code == 200
 
 
-# ---------------------------------------------------------------------------
 # /metrics
-# ---------------------------------------------------------------------------
 class TestMetricsEndpoint:
     def test_returns_200(self, client):
         r = client.get("/metrics")
@@ -260,9 +311,7 @@ class TestMetricsEndpoint:
         assert "total_emails_scanned" in data
 
 
-# ---------------------------------------------------------------------------
 # Health check
-# ---------------------------------------------------------------------------
 class TestHealthEndpoint:
     def test_root_returns_200(self, client):
         r = client.get("/")
@@ -270,9 +319,7 @@ class TestHealthEndpoint:
         assert "version" in r.json()
 
 
-# ---------------------------------------------------------------------------
 # /auth
-# ---------------------------------------------------------------------------
 class TestAuthEndpoint:
     def test_register_and_login(self, client):
         r = client.post("/auth/register",
@@ -387,12 +434,9 @@ class TestAuthEndpoint:
         assert client.get("/auth/me").status_code == 401
 
 
-# ---------------------------------------------------------------------------
-# Guardian mode - the whole flow. Three pieces written separately: the
-# scan that creates an alert, the record kept for the guardian, and the
-# dashboard that reads it. Walked end to end, because every failure these
-# cover lived in a seam between two of them.
-# ---------------------------------------------------------------------------
+# Guardian mode, walked end to end: the scan that raises an alert, the
+# record kept for the guardian, and the dashboard that reads it. Every
+# failure these cover lived in a seam between two of them.
 class TestGuardianFlow:
     @staticmethod
     def _connect(client, parent_headers, child_email):
@@ -407,7 +451,7 @@ class TestGuardianFlow:
     def test_phishing_reaches_guardian_dashboard(
         self, client, phishing_email, parent_headers
     ):
-        """מייל פישינג אצל המנוטר מופיע בלוח הבקרה של המפקח."""
+        """Phishing in the monitored inbox reaches the guardian dashboard."""
         self._connect(client, parent_headers, phishing_email["user_email"])
         assert client.post("/scan", json=phishing_email).json()["is_phishing"] is True
 
@@ -442,11 +486,11 @@ class TestGuardianFlow:
         self, client, phishing_email, parent_headers
     ):
         """
-        סריקה חוזרת של אותו מייל אינה מייצרת התראה שנייה.
+        Rescanning the same message raises no second alert.
 
-        תוצאות סריקה נשמרות במסד, אך שינוי בנוסחת הניקוד מחשב אותן
-        מחדש. בלי התניה על זיהוי *ראשון*, כל שינוי כזה היה מציף את
-        המפקח בהתראות על דואר שהמנוטר קיבל לפני שבועות.
+        Results are stored, but a change to the scoring formula recomputes
+        them. Without conditioning on the *first* detection, every such
+        change would flood the guardian with alerts about weeks-old mail.
         """
         self._connect(client, parent_headers, phishing_email["user_email"])
         for _ in range(3):
@@ -460,7 +504,7 @@ class TestGuardianFlow:
     def test_rescanning_does_not_inflate_counters(
         self, client, phishing_email, auth_headers
     ):
-        """אותו מייל נספר פעם אחת, גם אם נסרק שוב ושוב."""
+        """A message counts once, however many times it is scanned."""
         for _ in range(3):
             client.post("/scan", json=phishing_email)
 
@@ -496,7 +540,7 @@ class TestGuardianFlow:
 
     def test_stranger_cannot_disconnect(self, client, phishing_email,
                                         parent_headers, make_user):
-        """רק המפקח שמוגדר בפועל יכול לנתק את הקישור."""
+        """Only the actual guardian can break the link."""
         self._connect(client, parent_headers, phishing_email["user_email"])
         stranger = make_user("stranger@example.com")
 
@@ -511,8 +555,9 @@ class TestGuardianFlow:
     def test_monitored_user_can_remove_their_own_guardian(
             self, client, phishing_email, parent_headers, make_user):
         """
-        רק המפקח יכול להגדיר שיוך, ולכן הוא חייב להיות ניתן להסרה גם
-        על ידי המנוטר — אחרת אפשר לנטר מישהו בלי שתהיה לו דרך לעצור.
+        Only a guardian can create the link, so the monitored user must be
+        able to remove it - otherwise someone can be watched with no way
+        to stop it.
         """
         monitored = phishing_email["user_email"]
         child = make_user(monitored)
@@ -533,9 +578,9 @@ class TestGuardianFlow:
     def test_watched_list_names_the_missing_step(
             self, client, phishing_email, parent_headers, make_user):
         """
-        שלושה שלבים: לחבר, לפתוח חשבון, להתחבר בתוסף. הרשימה חייבת
-        להגיד באיזה מהם החשבון נמצא — אחרת נראה שהחיבור עובד בזמן
-        שלא תגיע אף התראה.
+        Three steps: link, create the account, sign in to the extension. The
+        list has to say which one an account is on, or the link looks
+        healthy while no alert will ever arrive.
         """
         target = phishing_email["user_email"]
         self._connect(client, parent_headers, target)
@@ -561,14 +606,14 @@ class TestGuardianFlow:
 
     def test_watched_list_holds_several_accounts(
             self, client, parent_headers, make_user):
-        """המפתח הזר תמך תמיד בכמה מנוטרים; רק מבנה התשובה הגביל לאחד."""
+        """The foreign key always allowed several; only the response shape did not."""
         for addr in ("kid-a@example.com", "kid-b@example.com"):
             self._connect(client, parent_headers, addr)
         rows = client.get("/guardian/watched", headers=parent_headers).json()["accounts"]
         assert sorted(a["email"] for a in rows) == ["kid-a@example.com", "kid-b@example.com"]
 
     def test_watched_list_is_private(self, client, parent_headers, make_user):
-        """הרשימה נגזרת מהטוקן, ולכן זר רואה רשימה ריקה ולא את שלי."""
+        """The list comes from the token, so a stranger sees an empty one."""
         self._connect(client, parent_headers, "kid-c@example.com")
         stranger = make_user("nosy@example.com")
         rows = client.get("/guardian/watched", headers=stranger).json()["accounts"]
@@ -576,9 +621,10 @@ class TestGuardianFlow:
 
     def test_monitored_account_can_still_register(self, client, parent_headers):
         """
-        חיבור לכתובת שאין לה חשבון יוצר רשומה ריקה בלי סיסמה. אסור
-        שהרשומה הזאת תחסום את בעל הכתובת מלפתוח חשבון בעצמו — אחרת
-        אי אפשר להתחבר בתוסף, ולכן אי אפשר לסרוק, ומצב מפקח מת.
+        Linking an address with no account creates an empty record with no
+        password. It must not block the owner from registering, or they
+        cannot sign in to the extension, cannot scan, and guardian mode is
+        dead.
         """
         target = "watched-newcomer@example.com"
         client.post("/guardian/connect",
@@ -602,8 +648,8 @@ class TestGuardianFlow:
     def test_connect_reports_that_the_monitored_user_was_told(
             self, client, phishing_email, parent_headers):
         """
-        המנוטר מקבל הודעה על השיוך — אבל רק בפעם הראשונה, אחרת אפשר
-        להשתמש בטופס כדי לשלוח לו מיילים שוב ושוב.
+        The monitored user is told about the link - but only the first time,
+        or the form becomes a way to mail them repeatedly.
         """
         monitored = phishing_email["user_email"]
         first = self._connect(client, parent_headers, monitored)

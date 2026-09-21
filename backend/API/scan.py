@@ -30,14 +30,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["scan"])
 
-# ---------------------------------------------------------------------------
-# Plain def, not async def, on purpose. An async endpoint runs on the
-# event loop itself, so blocking work inside it stops the whole server.
-# Everything here blocks - SQLAlchemy, bcrypt, BERT inference - and there
-# is not one await, so async cost everything and added nothing: loading an
-# inbox fires 50 scans and they ran one after another. Plain def puts them
-# in a threadpool, where they genuinely overlap.
-# ---------------------------------------------------------------------------
+# Plain def, not async def, on purpose: an async endpoint runs on the event
+# loop, so the blocking work here (SQLAlchemy, bcrypt, BERT) would stop the
+# whole server. Plain def puts it in a threadpool instead.
 
 # The model loads in the background (see ML/bert_model.py). get_model
 # returns None until it is ready, and until then scanning runs on the
@@ -62,13 +57,34 @@ def _apply_thresholds(result: dict, corroborated: bool = True) -> dict:
     return risk_levels.apply(result, corroborated=corroborated)
 
 
+# Scans in the first seconds after a restart run before BERT has loaded.
+# Under the plain version those scores would be reused for the life of the
+# message; the suffix marks them so they are rescanned instead.
+RULES_ONLY_VERSION = f"{SCORING_VERSION}|rules"
+
+
+def _version_for(bert_used: bool) -> str:
+    return SCORING_VERSION if bert_used else RULES_ONLY_VERSION
+
+
+def _is_reusable(stored: str) -> bool:
+    """A full score always. A rules-only one only while still rules-only."""
+    if stored == SCORING_VERSION:
+        return True
+    return stored == RULES_ONLY_VERSION and get_bert_model() is None
+
+
 def get_risk_score(sender: str, subject: str, content: str,
                    user_trusts_sender: bool = False) -> dict:
     result = detector.analyze_email(sender, subject, content)
 
+    # bert_used travels with the result so the caller can tell a full
+    # score from a rules-only one and version them differently.
+    result["bert_used"] = False
+
     model = get_bert_model()
     if model is None:
-        return result          # fallback: חוקים בלבד
+        return result          # rules only, until the model finishes loading
 
     try:
         bert_score = model.predict_score(sender, subject, content)
@@ -76,16 +92,15 @@ def get_risk_score(sender: str, subject: str, content: str,
         logger.exception("BERT prediction failed — falling back to heuristics")
         return result
 
+    result["bert_used"] = True
     rule_score = result["risk_score"]
     ensemble = combine(bert_score, rule_score, sender, subject, content,
                        user_trusts_sender=user_trusts_sender)
     result["risk_score"] = round(ensemble, 2)
 
-    # The explanation shown to the user. A bare "semantic analysis (BERT)"
-    # tag used to sit next to the rules' default "no suspicious
-    # indicators", so a score of 99 arrived with a statement that nothing
-    # was found. If the model decided, say so plainly - and say it is a
-    # judgement about phrasing, not a finding you can point at.
+    # What the user is shown. A bare "BERT" tag used to sit next to the
+    # rules' "nothing suspicious", so 99 arrived alongside a denial. If the
+    # model decided, say so, and say it is a judgement about phrasing.
     if bert_score >= 50:
         result["indicators"] = [
             i for i in result["indicators"]
@@ -100,10 +115,8 @@ def get_risk_score(sender: str, subject: str, content: str,
                 "לא נמצאו סימנים טכניים בשולח, בקישורים או בניסוח"
             )
 
-    # "High risk" is reserved for cases both engines agree on. With the
-    # rules silent the score rests on the one signal known to flag
-    # legitimate account and security mail; spending the top label on that
-    # wears away what it means.
+    # "High risk" only when both engines agree. Alone, the model is the
+    # signal known to flag legitimate account mail.
     return _apply_thresholds(result, corroborated=rule_score >= 15)
 
 
@@ -114,10 +127,9 @@ def scan_email(
     db: Session = Depends(get_db),
     auth_user: User | None = Depends(get_optional_user),
 ):
-    # Identity comes from the token when there is one. The address in the
-    # body is scraped from Gmail's DOM, so it can be forged and need not
-    # match the signed-in account - which left dashboards empty while the
-    # scans were recorded under another identity.
+    # Identity comes from the token. The address in the body is scraped
+    # from the page, so it can be forged - and it left dashboards empty
+    # while scans were filed under someone else.
     if auth_user:
         user = auth_user
     else:
@@ -150,9 +162,18 @@ def scan_email(
     # The text has to match too. The list scan sends the preview and the
     # open-message scan the full body; without this the second would get
     # the first one's verdict and the body would never be examined.
+    #
+    # It has to hold one way only. Both scans key the same row, so once
+    # the body has been read, the next pass over the list would score the
+    # preview again and overwrite it - and the mail showed one number,
+    # then the other, depending on which ran last. Less text cannot say
+    # more than more text, so a shorter scan keeps the fuller verdict.
+    stored_len = len(existing.content or "") if existing else 0
+    thinner = existing is not None and len(email_data.content or "") < stored_len
+
     if (existing
-            and existing.scoring_version == SCORING_VERSION
-            and existing.content_hash == content_hash):
+            and _is_reusable(existing.scoring_version)
+            and (existing.content_hash == content_hash or thinner)):
         # The reasons come back with the score - a rescanned message used
         # to show a number and no explanation. Records predating the
         # column fall back to the placeholder until they are rescored.
@@ -180,7 +201,7 @@ def scan_email(
         was_phishing = existing.is_phishing
         existing.risk_score = analysis["risk_score"]
         existing.is_phishing = analysis["is_phishing"]
-        existing.scoring_version = SCORING_VERSION
+        existing.scoring_version = _version_for(analysis.get("bert_used", True))
         existing.content_hash = content_hash
         existing.content = email_data.content[:500]
         existing.indicators = json.dumps(analysis["indicators"], ensure_ascii=False)
@@ -201,7 +222,7 @@ def scan_email(
             content=email_data.content[:500],
             risk_score=analysis["risk_score"],
             is_phishing=analysis["is_phishing"],
-            scoring_version=SCORING_VERSION,
+            scoring_version=_version_for(analysis.get("bert_used", True)),
             content_hash=content_hash,
             indicators=json.dumps(analysis["indicators"], ensure_ascii=False),
         )
@@ -221,10 +242,8 @@ def scan_email(
     if recent:
         user.risk_score = round(sum(e.risk_score for e in recent) / len(recent), 2)
 
-    # An alert only on the *first* time a message counts as phishing.
-    # Otherwise every recomputation of older mail - which any change to
-    # the formula triggers - would mail the guardian again about the same
-    # event, weeks after it arrived.
+    # Only the *first* time a message counts as phishing. Otherwise every
+    # rescan would mail the guardian again about the same old message.
     newly_flagged = analysis["risk_score"] >= ALERT_THRESHOLD and not was_phishing
 
     if newly_flagged:
