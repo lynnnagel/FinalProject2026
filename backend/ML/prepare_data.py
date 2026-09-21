@@ -52,18 +52,10 @@ def clean_text(text: str) -> str:
     return text[:1000]
 
 
-# ---------------------------------------------------------------------------
-# Spam is not phishing. The public corpora label them together, so the
-# model was never asked to tell them apart - an advertisement scored
-# 99.99, the same as a request for card details.
-#
-# SPAM_LABEL:  0 - not phishing (default, what the product does)
-#              1 - the old behaviour, for comparison
-#              None - drop those rows
-#
-# 0 lowers the reported accuracy on a corpus that labels spam as
-# phishing. Expected: it measures a different, narrower task.
-# ---------------------------------------------------------------------------
+# Spam is not phishing, but the public corpora label them together - so an
+# advertisement scored 99.99, same as a request for card details.
+#   0 = not phishing (default) | 1 = old behaviour | None = drop the rows
+# 0 lowers the reported accuracy, because it measures a narrower task.
 SPAM_LABEL: int | None = 0
 
 
@@ -334,7 +326,7 @@ def prepare(args: argparse.Namespace):
                     source, len(df), int((df["label"] == 0).sum()), int(df["label"].sum()),
                     "  [with sender and subject]" if "sender" in df.columns else "")
 
-    # -- legitimate operational mail --------------------------------
+    # legitimate operational mail
     # Missing from the corpora entirely: order confirmations, renewals,
     # receipts, requested password resets. The model scored them 99.99
     # because it had never seen one.   ML/generate_legitimate.py --n 2000
@@ -366,11 +358,9 @@ def prepare(args: argparse.Namespace):
 
     combined = pd.concat(frames, ignore_index=True)
 
-    # Recover the sender BEFORE cleaning: clean_text deletes <addr@host>
-    # with the HTML tags, collapses the newlines between headers, and
-    # truncates to 1,000 characters. Run afterwards, extraction found a
-    # sender in 0% of the Kaggle and Enron rows. Three of the nine rules
-    # read this field, impersonation among them.
+    # Recover the sender BEFORE cleaning. clean_text deletes <addr@host>
+    # along with the HTML tags, so afterwards extraction found a sender in
+    # 0% of the Kaggle and Enron rows.
     if "sender" not in combined.columns:
         combined["sender"] = ""
     combined["sender"] = combined["sender"].fillna("").astype(str)
@@ -406,7 +396,7 @@ def prepare(args: argparse.Namespace):
         with_sender, len(combined), with_sender / len(combined) * 100,
     )
 
-    # -- dedup, which has to happen before the split ------------------
+    # dedup, which has to happen before the split
     # A message that appears twice and lands in both train and test
     # means the model is tested on text it memorised.
     before = len(combined)
@@ -428,7 +418,7 @@ def prepare(args: argparse.Namespace):
     train, tmp = train_test_split(combined, test_size=0.30, stratify=combined["label"], random_state=42)
     val, test = train_test_split(tmp, test_size=0.50, stratify=tmp["label"], random_state=42)
 
-    # -- Hebrew oversampling: after the split, train only -------------
+    # Hebrew oversampling: after the split, train only
     train = oversample_hebrew(train, factor=args.hebrew_factor)
 
     os.makedirs(args.output_dir, exist_ok=True)

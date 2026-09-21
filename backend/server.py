@@ -62,11 +62,11 @@ if os.path.exists(frontend_path):
 @app.on_event("startup")
 async def _start_bert_load():
     """
-    מתחיל את טעינת מודל BERT בשרשור רקע.
+    Starts loading BERT on a background thread.
 
-    ה-checkpoint שוקל ~678 MB. כשהוא נטען בזמן ה-import, uvicorn חוסם
-    עשרות שניות והאתר לא עולה. כאן הטעינה רצה במקביל: השרת עונה מיד,
-    וסריקות שמגיעות לפני שהמודל מוכן רצות על מנוע החוקים בלבד.
+    The checkpoint is ~678 MB. Loaded at import time it blocks uvicorn for
+    tens of seconds and the site never comes up. In parallel the server
+    answers at once, and scans arriving early run on the rules alone.
     """
     try:
         from ML.bert_model import start_background_load

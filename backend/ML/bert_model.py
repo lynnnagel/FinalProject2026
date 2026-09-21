@@ -1,19 +1,13 @@
 """
-LURA BERT Classifier - fine-tuned multilingual transformer for binary
-phishing classification, Hebrew and English.
+LURA BERT classifier - a fine-tuned multilingual transformer, Hebrew and
+English. Switching the base model means retraining; checkpoints are not
+compatible.
 
-Base model (BERT_MODEL_NAME):
   bert-base-multilingual-cased        177M, ~710 MB
   distilbert-base-multilingual-cased  135M, ~540 MB, ~2x faster, 1-2% worse
 
-Both cover 104 languages; over half the weight is the embedding table
-(92M parameters), so DistilBERT saves compute more than file size.
-Switching means retraining - the checkpoints are not compatible.
-
     from ML.bert_model import bert_model; prob = bert_model.predict(text)
     python ML/train.py --data_dir ML/data --output_dir ML/checkpoints
-
-Checkpoint path: ML/checkpoints/best_model.pt
 """
 
 import json
@@ -92,9 +86,6 @@ def _apply_checkpoint_metadata(checkpoint_path: str) -> None:
         MAX_LENGTH = int(meta["max_length"])
 
 
-# ---------------------------------------------------------------------------
-# Model
-# ---------------------------------------------------------------------------
 class PhishingBertClassifier(nn.Module):
     """
     Thin wrapper around BertForSequenceClassification.
@@ -153,7 +144,6 @@ class PhishingBertClassifier(nn.Module):
             k in lowered for k in ("distil", "minilm", "xlm-roberta")
         )
 
-    # ------------------------------------------------------------------ #
     def forward(self, input_ids, attention_mask, token_type_ids=None, labels=None):
         kwargs = {
             "input_ids": input_ids,
@@ -164,7 +154,6 @@ class PhishingBertClassifier(nn.Module):
             kwargs["token_type_ids"] = token_type_ids
         return self.bert(**kwargs)
 
-    # ------------------------------------------------------------------ #
     def predict(self, text: str) -> float:
         """
         Return phishing probability in [0.0, 1.0] for the given text.
@@ -198,7 +187,6 @@ class PhishingBertClassifier(nn.Module):
         text = f"{sender} {subject} {content}"
         return round(self.predict(text) * 100, 2)
 
-    # ------------------------------------------------------------------ #
     def predict_batch(self, texts: list[str], batch_size: int = 32) -> list[float]:
         """
         Same result as predict(), in batches. One forward per message is
@@ -237,9 +225,6 @@ class PhishingBertClassifier(nn.Module):
         return [round(p * 100, 2) for p in self.predict_batch(texts, batch_size)]
 
 
-# ---------------------------------------------------------------------------
-# Loader
-# ---------------------------------------------------------------------------
 def load_model(
     checkpoint_path: str = DEFAULT_CHECKPOINT,
 ) -> Optional["PhishingBertClassifier"]:
@@ -303,12 +288,9 @@ def load_model(
         return None
 
 
-# ---------------------------------------------------------------------------
-# Lazy loading. Reading a ~700MB checkpoint takes tens of seconds; at
-# import time that blocks uvicorn and the site never comes up. On a
-# background thread the server answers immediately, and scans arriving
-# before the model is ready run on the rules alone.
-# ---------------------------------------------------------------------------
+# Lazy loading. Reading a ~700MB checkpoint takes tens of seconds and would
+# block uvicorn at import time. On a background thread the server answers
+# at once, and early scans run on the rules alone.
 _model: Optional[PhishingBertClassifier] = None
 _load_thread: Optional[threading.Thread] = None
 _load_lock = threading.Lock()

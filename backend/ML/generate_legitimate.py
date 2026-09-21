@@ -1,29 +1,27 @@
 """
-מחולל דואר תפעולי לגיטימי — הקטגוריה שחסרה בקורפוסים
-======================================================
+Generator for legitimate operational mail - the category the corpora lack.
 
-הבעיה שהוא בא לפתור: המודל נותן 99.99 להודעת חידוש מנוי מ-Malwarebytes
-ולאיפוס סיסמה שהמשתמש עצמו ביקש מגוגל. שני מיילים תקינים לחלוטין.
+The model scores 99.99 on a Malwarebytes renewal notice and on a Google
+password reset the user asked for. Both are perfectly ordinary mail.
 
-הסיבה אינה חולשה של הארכיטקטורה אלא חור בנתונים. הקורפוסים מכילים
-דואר עסקי משנת 2001 (Enron), ספאם משנות ה-2000 (SpamAssassin) ופישינג
-עכשווי (PhishTank) — ואין בהם כמעט דבר מהקטגוריה שממלאת תיבת דואר
-מודרנית: אישור הזמנה, הודעת משלוח, חידוש מנוי, קבלה, התראת כניסה,
-ואיפוס סיסמה שהמשתמש יזם.
+The cause is a hole in the data, not the architecture. The corpora hold
+business mail from 2001 (Enron), spam from the 2000s (SpamAssassin) and
+current phishing (PhishTank), and almost nothing from the category that
+fills a modern inbox: order confirmations, shipping notices, renewals,
+receipts, sign-in alerts, and user-initiated password resets.
 
-המודל לא "טועה" בהם. הוא מעולם לא ראה אותם, והם דומים לפישינג בכל
-מאפיין שטחי: הם מדברים על חשבון, מכילים קישורים, ולעיתים גם על סיסמה.
-ההבדל היחיד הוא שהם אמיתיים.
+The model is not wrong about them. It has never seen them, and on every
+surface feature they look like phishing: they discuss an account, carry
+links, sometimes mention a password. They are simply real.
 
-הקובץ מייצר את הקטגוריה הזאת קומבינטורית, באותה גישה שבה נבנה
-generate_hebrew.py — עברית ואנגלית, עם שולח, נושא וגוף מלא, מתויגים 0.
+This builds that category combinatorially, the same way generate_hebrew.py
+does - Hebrew and English, with sender, subject and full body, labelled 0.
 
-הרצה (מתוך backend/):
+Run from backend/:
     python ML/generate_legitimate.py --n 2000
     python ML/generate_legitimate.py --n 500 --preview 3
 
-הפלט: ML/data/legitimate_generated.csv
-prepare_data.py קורא אותו אוטומטית אם הוא קיים.
+Writes ML/data/legitimate_generated.csv, which prepare_data.py picks up.
 """
 from __future__ import annotations
 
@@ -32,11 +30,8 @@ import csv
 import os
 import random
 
-# ---------------------------------------------------------------------------
-# Companies and the domains they really send from - the same addresses
-# the rule engine recognises, so these rows teach the model the
-# combination it never saw: a legitimate sender with operational content.
-# ---------------------------------------------------------------------------
+# Companies and the domains they really send from. These rows teach the
+# model the pairing it never saw: a real sender with operational content.
 BRANDS_EN = [
     ("Netflix", "netflix.com"), ("Spotify", "spotify.com"),
     ("Amazon", "amazon.com"), ("eBay", "ebay.com"),
@@ -63,11 +58,9 @@ MAILBOXES = ["noreply", "no-reply", "orders", "service", "info",
 
 SUBDOMAINS = ["", "", "", "mail.", "e.", "email.", "news."]
 
-# ---------------------------------------------------------------------------
 # Templates; {brand} {order} {amount} {date} {link} are substituted. Some
-# deliberately carry the words the model trips on - password, account,
-# verify - because an operational example without them teaches nothing.
-# ---------------------------------------------------------------------------
+# carry the words the model trips on (password, account, verify) on
+# purpose - an example without them teaches nothing.
 TEMPLATES_EN = [
     ("Your {brand} order #{order} has shipped",
      "Hi,\n\nYour order #{order} is on its way and should arrive within "

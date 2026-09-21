@@ -7,10 +7,8 @@ LURA.db is never touched.
 import os
 import sys
 
-# Must be set before config is imported: the reset tests call
-# /auth/forgot-password, which with the flag on sends real mail to the
-# test addresses. load_dotenv does not override an existing variable, so
-# setting it here wins over .env.
+# Must be set before config is imported, or the reset tests send real mail.
+# load_dotenv does not override an existing variable, so this wins.
 os.environ["EMAIL_ENABLED"] = "false"
 os.environ.setdefault("SECRET_KEY", "test-secret-not-used-in-production-0123456789")
 
@@ -26,9 +24,7 @@ from sqlalchemy.pool import StaticPool
 from database import Base, get_db
 from server import app
 
-# ---------------------------------------------------------------------------
 # In-memory test database
-# ---------------------------------------------------------------------------
 TEST_DATABASE_URL = "sqlite:///:memory:"
 test_engine = create_engine(
     "sqlite:///:memory:",
@@ -51,9 +47,7 @@ def override_get_db():
 app.dependency_overrides[get_db] = override_get_db
 
 
-# ---------------------------------------------------------------------------
 # Fixtures
-# ---------------------------------------------------------------------------
 @pytest.fixture(autouse=True)
 def reset_db():
     """Create tables before each test and drop them after."""
@@ -68,10 +62,8 @@ def client(reset_db):
         yield c
 
 
-# ---------------------------------------------------------------------------
-# Authentication helpers. /stats and /guardian need a token; these
-# register a user and return their authorization header.
-# ---------------------------------------------------------------------------
+# /stats and /guardian need a token; these register a user and return the
+# authorization header.
 @pytest.fixture
 def make_user(client):
     def _make(email: str, password: str = "testpass123", name: str | None = None):

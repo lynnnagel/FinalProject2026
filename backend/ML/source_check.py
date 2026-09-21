@@ -73,7 +73,7 @@ def main() -> None:
     df = load(args.data_dir, args.limit)
     print(f"\n{len(df):,} rows | {df['source'].nunique()} sources\n")
 
-    # -- 1. label distribution per source -----------------------------
+    # 1. label distribution per source
     print("=" * 68)
     print("  1. Label distribution per source")
     print("=" * 68)
@@ -93,7 +93,7 @@ def main() -> None:
         print(f"\n  {len(confounded)} source(s) are almost entirely one class.")
         print("  For those, predicting the source predicts the label.")
 
-    # -- 2. how easily the source can be guessed ----------------------
+    # 2. how easily the source can be guessed
     print("\n" + "=" * 68)
     print("  2. How much the text gives away its corpus")
     print("=" * 68)
@@ -113,7 +113,7 @@ def main() -> None:
     else:
         print("  the corpora are fairly mixed - lower risk of source separation.")
 
-    # -- 3. train without one source, test on it ----------------------
+    # 3. train without one source, test on it
     print("\n" + "=" * 68)
     print("  3. The decisive check: train without a source, test on it")
     print("=" * 68)
@@ -147,7 +147,7 @@ def main() -> None:
         results.append((src, acc, f1))
         print(f"  {src:<20} {len(held):>7,} {acc*100:>7.1f}% {f1_txt:>8}   {note}")
 
-    # -- conclusion ---------------------------------------------------
+    # conclusion
     print("\n" + "=" * 68)
     print("  Conclusion")
     print("=" * 68)

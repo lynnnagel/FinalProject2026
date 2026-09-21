@@ -147,11 +147,8 @@ def test_syntax_is_valid(path: Path) -> None:
     assert result.returncode == 0, f"{path.name}:\n{result.stderr}"
 
 
-# ---------------------------------------------------------------------------
-# Element ids. Nothing ties a page to the JS that drives it, so a renamed
-# id leaves getElementById returning null and the button just stops
-# responding - no console error until something reads a property off it.
-# ---------------------------------------------------------------------------
+# Element ids. Nothing ties a page to its JS, so a renamed id leaves
+# getElementById returning null and the button silently stops working.
 PAGES = [
     (ROOT / "frontend" / "js" / "index.js",           ROOT / "frontend" / "index.html"),
     (ROOT / "frontend" / "js" / "login.js",           ROOT / "frontend" / "login.html"),

@@ -1,12 +1,9 @@
 """
 What columns the raw source files actually carry.
 
-94% of the processed corpus has no sender, which disables three of the
-nine rules. Before calling that a limitation of the public data, check
-whether it is ours: every loader in prepare_data.py keeps only [text,
-label], so a sender column would be discarded without a word.
-
-    python ML/inspect_sources.py
+94% of the corpus has no sender, which disables three rules. Before
+blaming the public data, check it is not us: every loader keeps only
+[text, label], so a sender column would be dropped silently.
 """
 from __future__ import annotations
 

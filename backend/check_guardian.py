@@ -27,10 +27,19 @@ import argparse
 import json
 import urllib.error
 import urllib.request
+from datetime import datetime
+
+# The subject carries the run's own stamp, so every run is a message the
+# account has not seen. An alert is raised the first time a message
+# crosses the threshold and never again, so a fixed subject meant the
+# second run against a real mailbox raised none - and the newest alert on
+# the dashboard was then some real message of the account's own, which
+# read as "the alert does not name the sender".
+_RUN = datetime.now().strftime("%d/%m %H:%M:%S")
 
 PHISHING = {
     "sender": "service@bank-leumi-secure.xyz",
-    "subject": "בנק לאומי: חשבונך ייחסם",
+    "subject": f"בנק לאומי: חשבונך ייחסם [בדיקה {_RUN}]",
     "content": (
         "לקוח יקר, זוהתה פעילות חריגה בחשבונך. יש לאמת את פרטי הכניסה "
         "תוך 24 שעות אחרת החשבון ייחסם. http://bank-leumi-secure.xyz/verify"
@@ -84,7 +93,7 @@ def main() -> None:
 
     problems = []
 
-    # -- server and mail --------------------------------------------------
+    # server and mail
     step(1, "Server and mail settings")
     try:
         _, health = call(args.url, "/test-email")
@@ -102,7 +111,7 @@ def main() -> None:
         if key not in ("email_enabled", "EMAIL_ENABLED"):
             print(f"        {key}: {value}")
 
-    # -- accounts -------------------------------------------------------
+    # accounts
     step(2, "Two accounts")
     tokens = {}
     # A real guardian address is usually already registered, so the
@@ -131,7 +140,7 @@ def main() -> None:
         tokens[role] = body["token"]
         ok(f"{role}: {email}" + ("  (existing account)" if existed else ""))
 
-    # -- link -----------------------------------------------------------
+    # link
     step(3, "Linking them")
     status, body = call(args.url, "/guardian/connect", "POST",
                         {"child_email": args.monitored,
@@ -146,7 +155,7 @@ def main() -> None:
         fail(f"the guardian came from the request body: {body.get('guardian')}")
         problems.append("guardian taken from the request body")
 
-    # -- scan -----------------------------------------------------------
+    # scan
     step(4, "Scanning a phishing message as the monitored user")
     status, scan = call(args.url, "/scan", "POST",
                         {"user_email": args.monitored, **PHISHING},
@@ -160,7 +169,7 @@ def main() -> None:
         fail("not classified as phishing - no alert will be created")
         problems.append("the sample did not cross the threshold")
 
-    # -- the guardian's dashboard ---------------------------------------
+    # the guardian's dashboard
     step(5, "The guardian dashboard")
     status, dash = call(args.url, f"/guardian/{args.guardian}",
                         token=tokens["guardian"])
@@ -187,7 +196,7 @@ def main() -> None:
         fail("the alert does not name the sender")
         problems.append("the alert does not name the sender")
 
-    # -- no duplicate on a repeat scan ----------------------------------
+    # no duplicate on a repeat scan
     # The body is changed on purpose: an identical rescan is answered
     # from the cache and never reaches the alert code, so it would pass
     # without testing anything.
@@ -205,7 +214,7 @@ def main() -> None:
         fail(f"alerts went from {before} to {after}")
         problems.append("a repeat scan created a duplicate alert")
 
-    # -- cleanup --------------------------------------------------------
+    # cleanup
     if not args.keep:
         call(args.url, "/guardian/disconnect", "POST",
              {"child_email": args.monitored, "parent_email": args.guardian},
@@ -213,7 +222,7 @@ def main() -> None:
         print("\n   Link removed. The accounts remain - to clear them:\n"
               "   python cleanup_users.py --emails %s --delete" % args.monitored)
 
-    # -- summary --------------------------------------------------------
+    # summary
     print("\n" + "=" * 66)
     if problems:
         print("  Problems found:")

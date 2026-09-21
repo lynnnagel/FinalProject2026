@@ -1,17 +1,10 @@
 """
-Is the difference between two configurations real, or is it noise?
+Is the difference between two configurations real, or just noise?
 
-Accuracy on one split is a point estimate: two systems measured on the
-same 14,862 messages can differ by tenths of a percent purely by which
-messages landed in the split, so a comparison needs a test, not a look.
-
-  McNemar     the paired test for two classifiers on the same rows.
-              Ignores what both got right and both got wrong - those say
-              nothing about which is better - and asks only whether the
-              disagreements are lopsided.
-  Bootstrap   resample the rows with replacement, recompute the metric on
-              each, read the 2.5th and 97.5th percentiles. A confidence
-              interval without assuming a distribution.
+Accuracy on one split is a point estimate, so a comparison needs a test.
+McNemar is the paired test for two classifiers on the same rows: it looks
+only at where they disagree. Bootstrap resamples the rows to get a
+confidence interval without assuming a distribution.
 
     python ML/significance.py
     python ML/significance.py --split val

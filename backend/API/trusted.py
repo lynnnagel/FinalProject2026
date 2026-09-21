@@ -28,13 +28,9 @@ from schemas import TrustedSenderRequest, TrustedSenderList, TrustedSenderItem
 
 router = APIRouter(tags=["trusted"])
 
-# Rule score above which a sender can no longer be marked as known.
-#
-# The feature damps the model's score, so an attacker who talks the user
-# into clicking "I know this sender" earns that damping on every future
-# message. An address the rules have real evidence against cannot be
-# marked at all. 30 is where a substantive finding starts - body
-# impersonation (30), subject (45), official name on a free mailbox (30).
+# Above this rule score a sender can no longer be marked as known. The
+# mark damps the model, so an attacker who talks the user into clicking it
+# earns that damping forever. 30 is where a real finding starts.
 MAX_RULE_SCORE_FOR_TRUST = 30
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")

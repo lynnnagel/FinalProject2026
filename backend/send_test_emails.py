@@ -1,19 +1,19 @@
 """
-שליחת מיילי בדיקה לתיבה שלך, כדי לראות את התוסף עובד.
+Sends test mail to your own inbox, to watch the extension work.
 
-הבדיקה היחידה שבאמת משכנעת היא לראות את התג נדלק על מייל אמיתי בתיבה
-אמיתית. הסקריפט שולח אליך סדרה מדורגת — מפישינג בוטה, דרך מקרים
-עדינים, ועד מיילים תמימים שאסור שיסומנו — כדי שתראי גם מה נתפס וגם
-מה לא, וגם שהמערכת יודעת להבדיל.
+The only convincing test is seeing the badge light up on real mail in a
+real mailbox. This sends a graded series - blatant phishing, then subtle
+cases, then innocent mail that must not be flagged - so you see both what
+is caught and what is not.
 
-כל ההודעות נשלחות אליך ואליך בלבד, ונושאות כותרת X-LURA-Test כדי שיהיה
-אפשר לזהות ולסנן אותן. הן טקסט בלבד: אין בהן קבצים מצורפים, והקישורים
-מצביעים על דומיינים שאינם קיימים.
+Everything goes to you alone, carrying an X-LURA-Test header so it can be
+filtered. Text only: no attachments, and the links point at domains that
+do not exist.
 
-הרצה (מתוך backend/):
-    python send_test_emails.py                 # שולח לכתובת שב-SMTP_USER
+Run from backend/:
+    python send_test_emails.py                 # to the SMTP_USER address
     python send_test_emails.py --to me@gmail.com
-    python send_test_emails.py --list          # מציג בלי לשלוח
+    python send_test_emails.py --list          # show without sending
 """
 from __future__ import annotations
 
@@ -28,15 +28,10 @@ from config import (
     SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, EMAIL_ENABLED,
 )
 
-# ---------------------------------------------------------------------------
 # expect: "high" must be caught, "low" must pass quietly, "medium" is
-# borderline and any result is worth discussing.
-#
-# from_name is a display name only - the real sender is your own mailbox,
-# so the sender-domain rules cannot score fully. A limit of testing
-# against your own inbox, not of the system: check_pipeline.py posts
-# straight to the API with a real sender domain.
-# ---------------------------------------------------------------------------
+# borderline. from_name is a display name only - the real sender is your
+# own mailbox, so the sender rules cannot score fully here. Use
+# check_pipeline.py for that.
 SAMPLES = [
     dict(
         expect="גבוה", from_name="PayPal Security",
@@ -171,17 +166,31 @@ def main() -> None:
     ap.add_argument("--list", action="store_true", help="להציג בלי לשלוח")
     ap.add_argument("--delay", type=float, default=1.5,
                     help="השהיה בין הודעות, בשניות")
+    ap.add_argument("--only", type=int, nargs="+", metavar="N",
+                    help="לשלוח רק את המספרים האלה, למשל --only 1 2")
     args = ap.parse_args()
 
     print(f"\n{len(SAMPLES)} הודעות בדיקה:\n")
-    print(f"  {'צפוי':<8} {'שם השולח':<26} נושא")
-    print("  " + "─" * 74)
-    for s in SAMPLES:
-        print(f"  {s['expect']:<8} {s['from_name']:<26} {s['subject'][:44]}")
+    print(f"  {'#':<4}{'צפוי':<8} {'שם השולח':<26} נושא")
+    print("  " + "─" * 78)
+    for i, s in enumerate(SAMPLES, 1):
+        mark = "*" if args.only and i in args.only else " "
+        print(f"  {i:<2}{mark} {s['expect']:<8} {s['from_name']:<26} {s['subject'][:44]}")
 
     if args.list:
-        print("\nלשליחה בפועל: python send_test_emails.py\n")
+        print("\nלשליחה בפועל: python send_test_emails.py")
+        print("לשליחת חלק מהן:  python send_test_emails.py --only 1 2\n")
         return
+
+    # Numbered rather than sliced, so a demo can ask for one blatant case
+    # and one innocent one without sending the eight in between.
+    chosen = list(enumerate(SAMPLES, 1))
+    if args.only:
+        bad = [n for n in args.only if not 1 <= n <= len(SAMPLES)]
+        if bad:
+            sys.exit(f"\nאין הודעה מספר {', '.join(map(str, bad))}. "
+                     f"הטווח הוא 1 עד {len(SAMPLES)}.\n")
+        chosen = [(i, s) for i, s in chosen if i in args.only]
 
     if not EMAIL_ENABLED:
         sys.exit("\nEMAIL_ENABLED=false ב-.env. יש להדליק כדי לשלוח.\n")
@@ -189,14 +198,14 @@ def main() -> None:
         sys.exit("\nחסרים SMTP_USER או SMTP_PASSWORD ב-.env.\n")
 
     to_addr = args.to or SMTP_USER
-    print(f"\nשולח אל {to_addr} ...\n")
+    print(f"\nשולח {len(chosen)} מתוך {len(SAMPLES)} אל {to_addr} ...\n")
 
     with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as smtp:
         smtp.starttls()
         smtp.login(SMTP_USER, SMTP_PASSWORD)
-        for i, sample in enumerate(SAMPLES, 1):
+        for i, sample in chosen:
             smtp.send_message(build(sample, to_addr, i))
-            print(f"  {i:>2}/{len(SAMPLES)}  {sample['subject'][:56]}")
+            print(f"  {i:>2}  {sample['subject'][:56]}")
             time.sleep(args.delay)
 
     print("\nנשלחו. פתחי את Gmail, המתיני שהתוסף יסרוק, והשווי לעמודת 'צפוי'.")

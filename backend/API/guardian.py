@@ -7,6 +7,7 @@ Guardian mode.
     GET  /guardian/{email}       the older single-account dashboard
 """
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from API.auth import get_current_user
@@ -55,11 +56,9 @@ def connect_guardian(
     child.guardian_id = parent.id
     db.commit()
 
-    # Guardian mode is set up by the guardian alone, so the monitored
-    # person would otherwise never learn of it. Only on a new link -
-    # re-linking is not news, and would let the form send repeated mail.
-    # In the background, so a mail that cannot go out does not fail the
-    # request that created the link.
+    # The guardian sets this up alone, so the monitored person would
+    # otherwise never know. Only on a new link, and in the background, so
+    # a mail that cannot go out does not fail the request.
     if not already_linked:
         background_tasks.add_task(
             send_guardian_link_notice,
@@ -110,7 +109,6 @@ def disconnect_guardian(
     }
 
 
-# ---------------------------------------------------------------------------
 def _setup_state(child: User) -> str:
     """
     How far a watched account is through setup.
@@ -208,9 +206,20 @@ def get_guardian_data(
     # The guardian's alerts, not the monitored user's. Each detection
     # writes both, and only the guardian's names whose inbox it was. The
     # dashboard used to pull the other one, so these were never read.
+    #
+    # And only the ones about a watched inbox. A guardian has a mailbox of
+    # their own, and its alerts are written against the same user id, so
+    # this page mixed the two: mail caught in the guardian's own inbox
+    # appeared on the page meant to report on someone else's, with no name
+    # on it to say whose it was.
+    watched_mail = (
+        select(EmailRecord.id)
+        .where(EmailRecord.user_id.in_([c.id for c in children]))
+    )
     alerts = (
         db.query(Alert)
-        .filter(Alert.user_id == parent.id)
+        .filter(Alert.user_id == parent.id,
+                Alert.email_id.in_(watched_mail))
         .order_by(Alert.created_at.desc())
         .limit(ALERT_HISTORY_LIMIT)
         .all()

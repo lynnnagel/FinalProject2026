@@ -1,11 +1,9 @@
 """
 LURA - turning a numeric score into a risk level and a message.
 
-Depends only on config, so detector, scoring and the API layer can all
-import it without a cycle. It exists because this logic was duplicated
-three times and drifted: the copy in API/scan.py served the cache path
-with stale cut-offs, so a message got one label on its first scan and a
-different one when it came back from the cache.
+Depends only on config, so everything can import it without a cycle. It
+exists because this logic was copied three times and drifted: a message
+got one label on its first scan and another from the cache.
 """
 from config import (
     PHISHING_THRESHOLD,

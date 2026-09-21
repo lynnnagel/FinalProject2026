@@ -59,9 +59,8 @@ class EmailRecord(Base):
     content_hash = Column(String, default="")
 
     # The reasons for the score, as a JSON array. Stored because the cache
-    # returns a saved verdict without rerunning the engines; without this
-    # a rescanned message showed a number and the placeholder "נסרק
-    # בעבר", with no reasons behind it.
+    # returns a saved verdict without rerunning the engines; without it a
+    # rescanned message showed a number and a placeholder, no reasons.
     indicators = Column(String, default="")
 
     user = relationship("User", back_populates="emails")

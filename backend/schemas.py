@@ -4,9 +4,7 @@ from typing import List, Optional
 from pydantic import BaseModel, EmailStr, Field
 
 
-# ---------------------------------------------------------------------------
 # /scan
-# ---------------------------------------------------------------------------
 class EmailInput(BaseModel):
     user_email: EmailStr
     sender: str
@@ -23,9 +21,7 @@ class RiskAnalysis(BaseModel):
     response_time: float
 
 
-# ---------------------------------------------------------------------------
 # /stats
-# ---------------------------------------------------------------------------
 class AlertSummary(BaseModel):
     risk_level: str
     message: str
@@ -41,9 +37,7 @@ class UserStats(BaseModel):
     recent_alerts_list: List[AlertSummary] = []
 
 
-# ---------------------------------------------------------------------------
 # /guardian
-# ---------------------------------------------------------------------------
 class GuardianConnectRequest(BaseModel):
     child_email: EmailStr
     # The guardian comes from the token, never from here. Kept because
@@ -82,7 +76,6 @@ class WatchedList(BaseModel):
 
 
 # /auth
-#------------------------------------------------------------------------------
 
 class RegisterRequest(BaseModel):
     email: EmailStr
@@ -122,9 +115,7 @@ class UserProfile(BaseModel):
     risk_score: float
     daily_active: bool
 
-# ------------------------------------------------------------------------------
 # /trusted-senders
-# ------------------------------------------------------------------------------
 
 class TrustedSenderRequest(BaseModel):
     """A full address (a@b.com) or a domain (b.com)."""

@@ -1,9 +1,9 @@
 """
-POST /auth/register         – יצירת משתמש חדש
-POST /auth/login            – התחברות + קבלת JWT
-POST /auth/forgot-password  – בקשת קישור לאיפוס סיסמה
-POST /auth/reset-password   – איפוס סיסמה באמצעות אסימון חד-פעמי
-GET  /auth/me               – פרטי המשתמש הנוכחי
+POST /auth/register         - create an account
+POST /auth/login            - sign in, returns a JWT
+POST /auth/forgot-password  - request a reset link
+POST /auth/reset-password   - reset with a single-use token
+GET  /auth/me               - the current user
 """
 import hashlib
 from datetime import datetime, timedelta
@@ -37,10 +37,7 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(plain: str, stored: str) -> bool:
-    """
-    בדיקת סיסמה.
-    תומך גם בהאשים ישנים של SHA-256 (לתאימות לאחור).
-    """
+    """Checks a password. Old SHA-256 hashes still verify."""
     if stored.startswith("$2"):
         return bcrypt.checkpw(plain.encode("utf-8"), stored.encode("utf-8"))
     # Old SHA-256 hash - kept for backwards compatibility
@@ -129,10 +126,9 @@ def get_optional_user(
     try:
         email = decode_token(credentials.credentials)
     except HTTPException:
-        # A bad or expired token counts as no token, not as an error.
-        # This path allows unauthenticated requests anyway, so a 401 added
-        # no protection - it only broke scanning outright once a token
-        # aged out, instead of carrying on anonymously.
+        # A bad or expired token counts as no token. This path allows
+        # anonymous requests anyway, so a 401 protected nothing and only
+        # broke scanning once a token aged out.
         return None
     return db.query(User).filter(User.email == email).first()
 
@@ -144,10 +140,9 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
         raise HTTPException(400, "כתובת המייל כבר רשומה במערכת")
 
     if existing:
-        # A row with no password is a placeholder created by guardian
-        # mode, so later scans have somewhere to attach. Nobody has signed
-        # into it, so registering claims it; without this, being named as
-        # someone's monitored account locked that address out.
+        # A row with no password is a placeholder guardian mode created.
+        # Nobody has signed into it, so registering claims it rather than
+        # colliding with it.
         existing.name = data.name or existing.name
         existing.password_hash = hash_password(data.password)
         db.commit(); db.refresh(existing)
@@ -180,8 +175,8 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
 @router.post("/forgot-password", summary="Request a password reset link")
 def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get_db)):
     """
-    שולח קישור איפוס למייל. התשובה זהה בין אם הכתובת רשומה ובין אם לא,
-    כדי לא לחשוף אילו כתובות קיימות במערכת (user enumeration).
+    Mails a reset link. The reply is identical whether or not the address
+    is registered, so it cannot be used to enumerate users.
     """
     user = db.query(User).filter(User.email == str(data.email)).first()
     if user:

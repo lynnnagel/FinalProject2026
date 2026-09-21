@@ -31,16 +31,12 @@ def combine(bert_score: float, rule_score: float, sender: str,
     """
     bert = bert_score
 
-    # Each damping needs a verified sender, and damps the model only - so
-    # impersonation still scores high on a trusted sender. They do not
-    # stack. A fourth, for marketing mail, was removed: it needed no
-    # sender, so it cost 488 misses to save 2 false alarms.
+    # Each damping needs a verified sender and damps the model only, so
+    # impersonation still scores high. They do not stack. A fourth, for
+    # marketing mail, needed no sender: 488 misses to save 2 false alarms.
     #
-    # The brand-domain damping asks one more question than it used to: is
-    # the message demanding credentials or threatening the account? A real
-    # domain plus that demand is the signature of a compromised account,
-    # and damping it cost 19 detections on the test split while saving
-    # none. looks_transactional already vetoes on the same list.
+    # A real domain that also demands credentials is a compromised
+    # account, so the brand damping skips it - 19 detections, none saved.
     asking = detector.asks_for_credentials(subject, content)
 
     if user_trusts_sender:

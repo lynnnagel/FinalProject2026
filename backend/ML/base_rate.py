@@ -1,19 +1,12 @@
 """
-The class balance of the data, and what the numbers mean in a real inbox.
+The class balance of the data, and what it means in a real inbox.
 
-The corpus is roughly half phishing; a real mailbox is one percent or
-less. That gap does not invalidate every measurement, but it changes what
-some of them mean:
+Our corpus is half phishing; a real mailbox is 1% or less. Recall and FPR
+do not care about that mix. Precision does - it collapses as phishing gets
+rarer. Accuracy becomes meaningless: at 1%, "never phishing" scores 99%.
 
-    recall (TPR)    unaffected - of the phishing that arrives, the share
-                    caught does not depend on how much arrives.
-    FPR             unaffected, for the same reason.
-    precision       collapses as phishing gets rarer: the false alarms
-                    come from a much larger pool.
-    accuracy        meaningless - at 1%, "never phishing" scores 99%.
-
-So this reports the actual balance of each split, then projects precision
-from the measured TPR and FPR to base rates a real inbox might have.
+So this reports the real balance, then projects precision from the
+measured TPR and FPR.
 
     python ML/base_rate.py                  # balance + projection
     python ML/base_rate.py --no-bert        # rules only, fast

@@ -29,7 +29,7 @@ from config import PHISHING_THRESHOLD   # noqa: E402
 # label: 1 = phishing, 0 = legitimate. The note says why each is here;
 # several are real failures found in a live inbox.
 EMAILS = [
-    # -- legitimate -------------------------------------------------
+    # legitimate
     dict(
         label=0, note="ordinary newsletter",
         sender="newsletter@company.com",
@@ -85,7 +85,7 @@ EMAILS = [
         ),
     ),
 
-    # -- phishing ---------------------------------------------------
+    # phishing
     dict(
         label=1, note="classic English phishing",
         sender="security-rn@paypal-verify.xyz",
@@ -156,7 +156,7 @@ def main() -> None:
         r["final"] = combine(r["b"], r["h"], r["sender"],
                              r["subject"], r["content"])
 
-    # -- the table --------------------------------------------------
+    # the table
     print("=" * 78)
     print("  Scores")
     print("=" * 78)
@@ -168,7 +168,7 @@ def main() -> None:
         print(f"  {truth:<8} {r['h']:>7.1f} {r['b']:>8.2f} {r['final']:>7.1f}  "
               f"{trust:<6} {r['note']}")
 
-    # -- the threshold ----------------------------------------------
+    # the threshold
     legit = [r for r in rows if r["label"] == 0]
     phish = [r for r in rows if r["label"] == 1]
     worst_legit = max(legit, key=lambda r: r["final"])

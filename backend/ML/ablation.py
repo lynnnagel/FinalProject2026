@@ -184,7 +184,7 @@ def main() -> None:
     print("  " + "-" * 74)
     print(f"  thresholds: ensemble {args.threshold}, raw BERT {args.bert_threshold}")
 
-    # -- who decided ------------------------------------------------------
+    # who decided
     print("\n" + "=" * 78)
     print("  Where the rule engine changed the verdict")
     print("=" * 78)
@@ -224,7 +224,7 @@ def main() -> None:
         for why, n in sorted(by_reason.items(), key=lambda kv: -kv[1]):
             print(f"    {why:<20} {n:>6}")
 
-    # -- how often each damping fires ------------------------------------
+    # how often each damping fires
     print("\n" + "=" * 78)
     print("  How often each damping fires")
     print("=" * 78)

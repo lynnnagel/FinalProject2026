@@ -18,9 +18,7 @@ def det():
     return PhishingDetector()
 
 
-# ---------------------------------------------------------------------------
 # Check 1 – Keyword detection
-# ---------------------------------------------------------------------------
 class TestKeywords:
     def test_hebrew_keywords_raise_score(self, det):
         r = det.analyze_email("a@b.com", "דחוף אימות", "סיסמה")
@@ -66,9 +64,7 @@ class TestKeywords:
         assert not any("מילות מפתח" in ind for ind in r["indicators"])
 
 
-# ---------------------------------------------------------------------------
 # Check 2 – Suspicious sender patterns
-# ---------------------------------------------------------------------------
 class TestSuspiciousSender:
     def test_rn_homoglyph_detected(self, det):
         r = det.analyze_email("noreply@arnazon.com", "test", "test")
@@ -83,9 +79,7 @@ class TestSuspiciousSender:
         assert not any('דוא"ל חשוד' in ind for ind in r["indicators"])
 
 
-# ---------------------------------------------------------------------------
 # Check 3 – Excessive URL count
-# ---------------------------------------------------------------------------
 class TestURLDetection:
     def test_many_urls_flagged(self, det):
         content = (
@@ -100,9 +94,7 @@ class TestURLDetection:
         assert not any("קישורים" in ind for ind in r["indicators"])
 
 
-# ---------------------------------------------------------------------------
 # Check 4 – Urgency language
-# ---------------------------------------------------------------------------
 class TestUrgency:
     def test_urgency_word_detected(self, det):
         r = det.analyze_email("a@b.com", "מיידי!", "expire now")
@@ -113,9 +105,7 @@ class TestUrgency:
         assert not any("דחיפות" in ind for ind in r["indicators"])
 
 
-# ---------------------------------------------------------------------------
 # Check 5 – Domain validation
-# ---------------------------------------------------------------------------
 class TestDomainValidation:
     def test_unknown_tld_flagged(self, det):
         r = det.analyze_email("user@malicious.xyz123", "test", "test")
@@ -129,9 +119,6 @@ class TestDomainValidation:
         assert not any("דומיין" in ind for ind in r["indicators"])
 
 
-# ---------------------------------------------------------------------------
-# Risk classification
-# ---------------------------------------------------------------------------
 class TestClassification:
     def test_score_never_exceeds_100(self, det):
         r = det.analyze_email(
@@ -178,9 +165,7 @@ class TestClassification:
         assert len(r["indicators"]) >= 1
 
 
-# ---------------------------------------------------------------------------
 # Check 9 – Brand impersonation
-# ---------------------------------------------------------------------------
 class TestBrandImpersonation:
     def test_lookalike_domain_flagged(self, det):
         r = det.analyze_email(
@@ -204,8 +189,8 @@ class TestBrandImpersonation:
 
     def test_brand_name_needs_word_boundary(self, det):
         """
-        המפתח "cal" נתפס בתוך call, local ו-calendar, ומייל תמים של
-        Temu סומן כמתחזה לכאל. ההתאמה חייבת להיות על מילה שלמה.
+        The key "cal" matched inside call, local and calendar, so an innocent
+        Temu message was flagged as impersonating Cal. Whole words only.
         """
         r = det.analyze_email(
             "orders@orders.temu.com",
@@ -215,7 +200,7 @@ class TestBrandImpersonation:
         assert not any("מתיימר" in i for i in r["indicators"]), r["indicators"]
 
     def test_hebrew_brand_not_matched_inside_word(self, det):
-        """כאל לא אמור להיתפס בתוך 'כאלה'."""
+        """The Hebrew brand must not match inside a longer Hebrew word."""
         r = det.analyze_email(
             "info@shop.co.il", "מוצרים חדשים", "יש לנו מוצרים כאלה ואחרים בחנות."
         )
@@ -223,9 +208,10 @@ class TestBrandImpersonation:
 
     def test_brand_mentioned_in_body_is_not_impersonation(self, det):
         """
-        מייל של Malwarebytes שהזכיר Google Chrome בגוף ההודעה סומן
-        כמתחזה לגוגל. אזכור מותג אינו טענה להיות המותג — הבדיקה
-        מוגבלת לשורת הנושא, שם תוקף שם את השם כדי לבנות אמון.
+        A Malwarebytes message mentioning Google Chrome in the body was
+        flagged as impersonating Google. Naming a brand is not claiming to
+        be it, so the check is limited to the subject, where an attacker
+        puts the name to build trust.
         """
         r = det.analyze_email(
             "news@e.malwarebytes.com",
@@ -244,9 +230,9 @@ class TestBrandImpersonation:
 
     def test_known_company_does_not_impersonate_another(self, det):
         """
-        מייל אמיתי מלינקדין שהכיל את המילה "partner" סומן כמתחזה
-        לפרטנר וקיבל 45. מי ששולח מ-linkedin.com הוא לינקדין —
-        הוא אינו יכול להתחזות לאף אחד.
+        A real LinkedIn message containing the word "partner" was flagged as
+        impersonating Partner and scored 45. Whoever sends from
+        linkedin.com is LinkedIn and cannot be impersonating anyone.
         """
         r = det.analyze_email(
             "updates-noreply@linkedin.com",
@@ -257,9 +243,9 @@ class TestBrandImpersonation:
 
     def test_ordinary_word_is_not_a_brand_claim(self, det):
         """
-        "yes", "next" ו-"partner" הם גם שמות מותג וגם מילים רגילות.
-        מילה לבדה אינה טענה להיות המותג — נדרש גם קישור שנושא את
-        השם ליעד שאינו שלו.
+        "yes", "next" and "partner" are brand names and ordinary words. The
+        word alone is not a claim; it also needs a link carrying the name
+        to a destination that is not the brand\'s.
         """
         r = det.analyze_email(
             "news@somecompany.com",
@@ -270,8 +256,8 @@ class TestBrandImpersonation:
 
     def test_ambiguous_brand_flagged_when_the_sender_carries_it(self, det):
         """
-        אבל דומיין ששולח את השם — partner-il-secure.net — כן הופך את
-        המילה לטענה, גם בלי שום קישור בגוף.
+        A sending domain carrying the name - partner-il-secure.net - does
+        make the word a claim, with no link in the body at all.
         """
         r = det.analyze_email(
             "billing@partner-il-secure.net",
@@ -281,7 +267,7 @@ class TestBrandImpersonation:
         assert any("מתיימר" in i for i in r["indicators"]), r["indicators"]
 
     def test_ambiguous_brand_flagged_when_a_link_carries_it(self, det):
-        """גם קישור שנושא את השם ליעד שאינו שלו מספיק."""
+        """A link carrying the name to a foreign destination is enough too."""
         r = det.analyze_email(
             "noreply@mailer.net",
             "partner - חשבונית",
@@ -291,8 +277,8 @@ class TestBrandImpersonation:
 
     def test_free_mailbox_is_still_checked(self, det):
         """
-        gmail.com מופיע בטבלה כדומיין של גוגל, אבל כל אחד יכול לפתוח
-        שם תיבה — ולכן מייל ממנו עדיין נבדק להתחזות.
+        gmail.com is listed as a Google domain, but anyone can open a mailbox
+        there, so mail from it is still checked for impersonation.
         """
         r = det.analyze_email(
             "service@gmail.com",

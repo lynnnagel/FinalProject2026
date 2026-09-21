@@ -98,8 +98,8 @@ class TestTrustedSendersScoring:
 
     def test_stored_result_is_recomputed_after_marking(self, client, auth_headers):
         """
-        בלי ביטול המטמון, הסימון לא היה משנה דבר בתיבה: התוצאה כבר
-        שמורה, והסריקה הבאה הייתה מחזירה אותה כמות שהיא.
+        Without invalidating the cache the marking would change nothing in
+        the inbox: the verdict is stored, and the next scan returns it.
         """
         client.post("/scan", json=self.BENIGN)
         r = client.post("/trusted-senders", json={"value": self.BENIGN["sender"]},
@@ -108,11 +108,11 @@ class TestTrustedSendersScoring:
 
     def test_trust_never_silences_the_rule_engine(self, client, auth_headers):
         """
-        הבדיקה החשובה ביותר בקובץ.
+        The most important test here.
 
-        גם אם המשתמש סימן את הכתובת כמוכרת, מייל שמתחזה לבנק ומקשר
-        לדומיין מזויף נשאר מסווג כפישינג. האמון מנמיך את ניחוש המודל,
-        לא את הראיות.
+        Even with the address marked as known, a message impersonating a
+        bank and linking to a forged domain stays classed as phishing.
+        Trust damps the model\'s guess, not the evidence.
         """
         client.post("/trusted-senders",
                     json={"value": self.IMPERSONATION["sender"]},
@@ -135,12 +135,14 @@ class TestTrustedSendersScoring:
 
 class TestTrustCannotBeAbused:
     """
-    הפיצ'ר נותן למשתמש להנמיך את ציון המודל, וזו נקודת התורפה שלו.
-    התוקף אינו צריך לפרוץ לשרת — די לו לשכנע את הקורבן ללחוץ
-    "אני מכיר את השולח הזה", ומאותו רגע כל מייל שלו מונמך.
+    The feature lets a user damp the model\'s score, which is its weak
+    point. An attacker need not breach the server - only persuade the
+    victim to click "I know this sender", and every message from them is
+    damped from then on.
 
-    שלוש שכבות עומדות מולו: אי אפשר לכתוב לרשימה של משתמש אחר, אי
-    אפשר לסמן כתובת שיש נגדה ראיות, ואי אפשר לסמן ספק דואר חינמי שלם.
+    Three layers stand against that: you cannot write to another user\'s
+    list, cannot mark an address there is evidence against, and cannot
+    mark a whole free mail provider.
     """
 
     PHISHING = {
@@ -157,9 +159,9 @@ class TestTrustCannotBeAbused:
         self, client, auth_headers
     ):
         """
-        אחרי שהמערכת ראתה מאותה כתובת מייל שמתחזה למותג, סימונה
-        כמוכרת נדחה — גם אם המשתמש ביקש זאת במפורש. ייתכן מאוד
-        שהמשתמש הוא זה שהוטעה, וזו בדיוק מטרת התוקף.
+        Once a brand-impersonating message has been seen from an address,
+        marking it as known is refused even on an explicit request. The
+        user may well be the one who was fooled - that is the whole aim.
         """
         client.post("/scan", json=self.PHISHING)
 
@@ -181,8 +183,8 @@ class TestTrustCannotBeAbused:
 
     def test_cannot_trust_a_whole_free_provider(self, client, auth_headers):
         """
-        אמון ברמת דומיין על gmail.com היה מנטרל את הזיהוי עבור כל
-        פישינג שנשלח מ-Gmail — אחד הערוצים הנפוצים ביותר.
+        Domain-level trust on gmail.com would disable detection for all
+        phishing sent from Gmail, one of the commonest channels.
         """
         for provider in ["gmail.com", "outlook.com", "hotmail.com"]:
             r = client.post("/trusted-senders", json={"value": provider},
@@ -190,7 +192,7 @@ class TestTrustCannotBeAbused:
             assert r.status_code == 400, f"{provider} התקבל כדומיין מהימן"
 
     def test_a_single_free_provider_address_is_allowed(self, client, auth_headers):
-        """כתובת בודדת מ-Gmail מותרת — היא נוגעת לאדם אחד ולא לספק."""
+        """A single Gmail address is allowed - it names a person, not a provider."""
         r = client.post("/trusted-senders", json={"value": "my.friend@gmail.com"},
                         headers=auth_headers)
         assert r.status_code == 200, r.text
@@ -199,9 +201,9 @@ class TestTrustCannotBeAbused:
         self, client, auth_headers
     ):
         """
-        גם אם הכתובת סומנה לפני שהמערכת ראתה ממנה משהו רע, מייל
-        מתחזה ממנה עדיין מסווג כפישינג. הסימון מנמיך את המודל; את
-        הראיות הוא לא נוגע בהן.
+        Even if the address was marked before anything bad was seen from it,
+        an impersonating message is still classed as phishing. The marking
+        damps the model; it does not touch the evidence.
         """
         assert client.post("/trusted-senders",
                            json={"value": self.PHISHING["sender"]},

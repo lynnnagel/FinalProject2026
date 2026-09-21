@@ -57,7 +57,6 @@ UNKNOWN_BUT_FINE = {
 }
 
 
-# ---------------------------------------------------------------------------
 class Report:
     """Collects what failed, so the run ends with one verdict."""
 
@@ -129,7 +128,6 @@ def account(url: str, rep: Report, email: str) -> str | None:
     return body["token"]
 
 
-# ---------------------------------------------------------------------------
 def check_server(url: str, rep: Report) -> bool:
     """Returns whether outgoing mail is switched on."""
     section(1, "Server and model")
@@ -604,7 +602,6 @@ def check_extension(rep: Report) -> None:
     rep.note("static JS checks:  python -m pytest tests/test_javascript.py")
 
 
-# ---------------------------------------------------------------------------
 def main() -> None:
     ap = argparse.ArgumentParser(description="dress rehearsal before a demo")
     ap.add_argument("--url", default="http://localhost:8000")

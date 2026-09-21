@@ -36,9 +36,7 @@ from scoring import combine   # noqa: E402
 from config import PHISHING_THRESHOLD, RULE_BOOST, TRUST_DAMPING  # noqa: E402
 
 
-# ---------------------------------------------------------------------------
 # Metrics
-# ---------------------------------------------------------------------------
 def confusion(y_true: List[int], y_pred: List[int]) -> Tuple[int, int, int, int]:
     tp = sum(1 for t, p in zip(y_true, y_pred) if t == 1 and p == 1)
     fp = sum(1 for t, p in zip(y_true, y_pred) if t == 0 and p == 1)
@@ -68,9 +66,7 @@ def fmt(m: dict) -> str:
             f"R={m['recall']:.3f}  F1={m['f1']:.3f}  FNR={m['fnr']*100:4.1f}%")
 
 
-# ---------------------------------------------------------------------------
 # Loading data and scoring
-# ---------------------------------------------------------------------------
 def load_split(data_dir: str, name: str) -> pd.DataFrame:
     path = os.path.join(data_dir, "processed", f"{name}.csv")
     if not os.path.exists(path):
@@ -129,9 +125,7 @@ def bert_scores(df: pd.DataFrame) -> List[float]:
     return out
 
 
-# ---------------------------------------------------------------------------
 # The sweep
-# ---------------------------------------------------------------------------
 def sweep(y: List[int], h: List[float], b: List[float] | None,
           trusted: List[bool], metric: str):
     """

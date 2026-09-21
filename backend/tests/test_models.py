@@ -31,9 +31,6 @@ def db():
     Base.metadata.drop_all(bind=engine)
 
 
-# ---------------------------------------------------------------------------
-# User model
-# ---------------------------------------------------------------------------
 class TestUser:
     def test_create_user_default_values(self, db):
         user = User(email="test@example.com", name="Test")
@@ -78,9 +75,6 @@ class TestUser:
         assert user.risk_score == 75.0
 
 
-# ---------------------------------------------------------------------------
-# EmailRecord model
-# ---------------------------------------------------------------------------
 class TestEmailRecord:
     def _make_user(self, db, email="u@example.com"):
         user = User(email=email, name="U")
@@ -128,9 +122,6 @@ class TestEmailRecord:
         assert rec.risk_score == 10.0
 
 
-# ---------------------------------------------------------------------------
-# Alert model
-# ---------------------------------------------------------------------------
 class TestAlert:
     def _setup(self, db):
         user = User(email="u@example.com", name="U")

@@ -42,7 +42,7 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
 from transformers import get_linear_schedule_with_warmup
 
-# ---- local imports (run from backend/) -----------------------------------
+# local imports (run from backend/)
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from ML.bert_model import (
@@ -60,9 +60,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Dataset
-# ---------------------------------------------------------------------------
 class EmailDataset(Dataset):
     def __init__(
         self,
@@ -94,9 +91,6 @@ class EmailDataset(Dataset):
         }
 
 
-# ---------------------------------------------------------------------------
-# Data loading
-# ---------------------------------------------------------------------------
 def load_dataset(data_dir: str) -> Tuple[List[str], List[int]]:
     """
     Load and merge all CSV data sources.
@@ -135,10 +129,8 @@ def load_dataset(data_dir: str) -> Tuple[List[str], List[int]]:
     return texts, labels
 
 
-# ---------------------------------------------------------------------------
 # Split loading – prefers prepare_data.py output (train/val/test.csv),
 # falls back to combining + splitting the raw source CSVs.
-# ---------------------------------------------------------------------------
 def load_split_dataset(data_dir: str):
     processed = ["train.csv", "val.csv", "test.csv"]
     if all(os.path.exists(os.path.join(data_dir, f)) for f in processed):
@@ -164,9 +156,7 @@ def load_split_dataset(data_dir: str):
     return train_texts, train_labels, val_texts, val_labels, test_texts, test_labels
 
 
-# ---------------------------------------------------------------------------
 # Class-weight helper (handles 71 % / 29 % imbalance)
-# ---------------------------------------------------------------------------
 def compute_class_weights(labels: List[int]) -> torch.Tensor:
     counts = np.bincount(labels)          # [n_legit, n_phishing]
     weights = 1.0 / counts
@@ -174,9 +164,6 @@ def compute_class_weights(labels: List[int]) -> torch.Tensor:
     return torch.tensor(weights, dtype=torch.float).to(DEVICE)
 
 
-# ---------------------------------------------------------------------------
-# Evaluation helper
-# ---------------------------------------------------------------------------
 def evaluate(model, loader, criterion) -> Tuple[float, float, float]:
     model.eval()
     all_preds, all_labels, total_loss = [], [], 0.0
@@ -197,9 +184,6 @@ def evaluate(model, loader, criterion) -> Tuple[float, float, float]:
     return total_loss / len(loader), f1, acc
 
 
-# ---------------------------------------------------------------------------
-# Training
-# ---------------------------------------------------------------------------
 def train(args: argparse.Namespace):
     # 1. Load train/val/test splits (prefers prepare_data.py output)
     train_texts, train_labels, val_texts, val_labels, test_texts, test_labels = load_split_dataset(args.data_dir)
@@ -356,9 +340,7 @@ def train(args: argparse.Namespace):
                 test_f1 >= 0.88, fn_rate < 0.05, auc >= 0.92)
 
 
-# ---------------------------------------------------------------------------
 # CLI entry point
-# ---------------------------------------------------------------------------
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="LURA BERT Training Pipeline"

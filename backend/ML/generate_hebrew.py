@@ -1,24 +1,22 @@
 """
-מחולל מיילים בעברית לאימון LURA
-================================
+Hebrew email generator for training LURA.
 
-הבעיה: המאגר מכיל ~300 מיילים בעברית מתוך ~132,000. המודל כמעט לא
-רואה עברית, ולכן הטענה על תמיכה בעברית אינה מדידה.
+The corpus holds ~300 Hebrew messages out of ~132,000, so the model
+barely sees Hebrew and the claim to support it is not measurable.
 
-תרגום מכונה נוסה ונפסל — התוצאה לא נשמעת כמו מייל עברי אמיתי.
-המחולל הזה כותב בעברית מלכתחילה, בשיטה קומבינטורית:
+Machine translation was tried and rejected - it does not read like real
+Hebrew mail. This writes Hebrew from the start, combinatorially:
 
-    מותג × עילה × ניסוח × סכום × אסמכתא × קישור  →  אלפי צירופים
+    brand x pretext x phrasing x amount x reference x link
 
-הרצה (מתוך backend/):
+Run from backend/:
     python ML/generate_hebrew.py --n 3000
-    python ML/generate_hebrew.py --n 20 --preview   # לראות דוגמאות
+    python ML/generate_hebrew.py --n 20 --preview
 
-הפלט: ML/data/hebrew_generated.csv — נאסף אוטומטית על ידי prepare_data.py
+Writes ML/data/hebrew_generated.csv, which prepare_data.py picks up.
 
-מגבלה: דאטה סינתטי. הווריאציה כאן רחבה, אבל היא לא מחליפה מיילים
-אותנטיים. ראה --noise שמוסיף שגיאות כתיב וניסוח לא אחיד כדי לצמצם
-את הפער.
+Limitation: synthetic. The variation is wide but does not replace
+authentic mail; --noise adds typos and uneven phrasing to narrow the gap.
 """
 from __future__ import annotations
 
@@ -29,9 +27,7 @@ import random
 import re
 import sys
 
-# ---------------------------------------------------------------------------
 # Israeli brands: name, real domain, forged domain
-# ---------------------------------------------------------------------------
 BRANDS = {
     "bank": [
         ("בנק הפועלים", "bankhapoalim.co.il", ["bankhapoalim-secure.net", "hapoalim-verify.com", "bank-hapoalim.info"]),
@@ -81,9 +77,7 @@ FIRST_NAMES = ["נועה", "יובל", "איתי", "שירה", "דניאל", "מ
                "אורי", "ליאור", "רותם", "אסף", "הילה", "גיא", "עדי", "רון",
                "יעל", "אלון", "מיכל", "נדב", "שני", "עמית", "טל", "ניר"]
 
-# ---------------------------------------------------------------------------
 # Legitimate messages
-# ---------------------------------------------------------------------------
 LEGIT = {
     "bank": [
         "דוח חשבון חודשי | {brand}\nשלום {name},\nדוח החשבון שלך לחודש {month} מוכן לצפייה באזור האישי.\nיתרה נוכחית: {amount} ₪ | תנועות בחודש: {count}\nלצפייה: {real}\n\nלשאלות ניתן לפנות למוקד בשעות הפעילות.",
@@ -116,9 +110,7 @@ LEGIT = {
     ],
 }
 
-# ---------------------------------------------------------------------------
 # Phishing, on the common pretexts
-# ---------------------------------------------------------------------------
 PHISH = {
     "bank": [
         "אזהרה: פעילות חריגה בחשבונך | {brand}\nשלום,\nזיהינו ניסיון גישה לא מורשה לחשבונך מהתקן לא מוכר.\n{urgency}\nלאימות זהותך ושחרור החשבון: {fake}\nאם לא תאמת תוך {hours} שעות, החשבון ייחסם באופן זמני.",
@@ -153,14 +145,9 @@ PHISH = {
     ],
 }
 
-# ---------------------------------------------------------------------------
-# Borderline cases. The first version separated the classes perfectly -
-# legitimate always https to an official domain, phishing always http to
-# a hyphenated one - so a model learns "hyphen means phishing", not how
-# to spot phishing. Calibrating on it gave a perfect F1 and a threshold
-# low enough to flag a real invoice. These two groups break that:
+# Borderline cases. Perfectly separated classes teach "hyphen means
+# phishing", not how to spot phishing. These two groups break that:
 # legitimate mail that looks suspicious, phishing that looks innocent.
-# ---------------------------------------------------------------------------
 
 # Legitimate, with signs that look suspicious: real urgency, genuine
 # verification requests, subdomains, and financial language that also
@@ -257,11 +244,9 @@ REAL_MAILBOXES = ["noreply", "no-reply", "service", "info", "billing",
 FAKE_MAILBOXES = ["no-reply", "security", "alert", "verify", "service-il",
                   "account-security", "support"]
 
-# Mailboxes that sound alarming but that real organisations use - a
-# bank's fraud alert really does come from security@. Before this,
-# "security" and "alert" appeared only in phishing rows, so the word
-# before the @ predicted the label: overlapping the domains was not
-# enough, and a classifier reading the address still scored 0.985.
+# Mailboxes that sound alarming but are real - a bank's fraud alert does
+# come from security@. Without this the word before the @ predicted the
+# label on its own, and a classifier still scored 0.985.
 ALERTING_MAILBOXES = ["security", "alerts", "fraud-alert", "account-notice",
                       "verification", "secure-messages"]
 FREE_PROVIDERS = ["gmail.com", "outlook.com", "hotmail.com", "walla.co.il"]
@@ -311,17 +296,10 @@ def rnd_sender(brand: tuple, legit: bool, rng: random.Random,
 
     if legit:
         roll = rng.random()
-        # No free-provider branch here, deliberately. Giving 18% of
-        # legitimate rows a Gmail address, to stop the sender predicting
-        # the label, was a mistake: every template here presents the
-        # message as the brand, so a brand-claiming mail from gmail.com
-        # labelled legitimate is a mislabelled impersonation. The rules
-        # flagged 34 of them, rightly.
-        #
-        # For brand transactional mail the sender is what makes it
-        # legitimate, so a sender predicting the label is the subject
-        # matter, not leakage. Overlapping is right only where the message
-        # claims nothing about who sent it - what ML/senders.py does.
+        # No free-provider branch, deliberately. Every template presents
+        # the message as the brand, so one from gmail.com labelled
+        # legitimate is a mislabelled impersonation; the rules flagged 34
+        # of them, rightly.
         if hard and roll < 0.60:
             # An official subdomain - looks unusual, entirely valid
             sub = rng.choice(LEGIT_SUBDOMAINS)
@@ -390,7 +368,7 @@ def fill(template: str, brand: tuple, rng: random.Random, hard: bool = False) ->
 
 
 def add_noise(text: str, rng: random.Random) -> str:
-    """שגיאות כתיב וניסוח לא אחיד — מיילים אמיתיים אינם מושלמים."""
+    """Typos and uneven phrasing - real mail is not perfect."""
     if rng.random() < 0.15:
         src, dst = rng.choice(TYPOS)
         text = text.replace(src, dst, 1)
@@ -403,11 +381,11 @@ def add_noise(text: str, rng: random.Random) -> str:
 
 def generate(n: int, seed: int, noise: bool, hard_ratio: float = 0.30) -> list[dict]:
     """
-    מפיק שורות עם sender, subject ו-content בנפרד.
+    Rows with sender, subject and content as separate fields.
 
-    הפרדת השדות חיונית: מנוע החוקים מריץ שלוש מתוך שמונה בדיקותיו על
-    כתובת השולח בלבד. דאטה שמכיל רק גוף מייל אחיד לא מאפשר להעריך את
-    האנסמבל כפי שהוא רץ בפועל, אלא רק את BERT.
+    The separation matters: three of the rule engine's eight checks run on
+    the sender alone. Data that is only a body cannot evaluate the
+    ensemble as it actually runs - only BERT.
     """
     rng = random.Random(seed)
     rows, seen = [], set()

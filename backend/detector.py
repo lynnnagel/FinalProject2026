@@ -151,7 +151,7 @@ class PhishingDetector:
         "ebay":             ["ebay.com"],
         "dropbox":          ["dropbox.com"],
 
-        # -- Security vendors, subscriptions and retail ---------------
+        # Security vendors, subscriptions and retail
         # Here for is_trusted_sender: renewal notices and security alerts
         # barely exist in the training data, so BERT flags them.
         "temu":             ["temu.com"],
@@ -179,7 +179,7 @@ class PhishingDetector:
         "notion":           ["notion.so"],
         "canva":            ["canva.com"],
 
-        # -- Shops and services whose operational mail fills an inbox --
+        # Shops and services whose operational mail fills an inbox
         # The category the system got wrong most often: the shape of an
         # order confirmation - many links, "order", "account" - sets off
         # the rules, and the model flags it nearly every time.
@@ -305,7 +305,7 @@ class PhishingDetector:
         body_l = (content or "").lower()
         urls = self._URL_RE.findall(content or "")
 
-        # -- Step 1: the subject line ---------------------------------
+        # Step 1: the subject line
         # An attacker puts the brand in the subject to build trust from
         # the first line. The strong signal, so it carries the full score.
         for brand, official_domains in self.BRAND_DOMAINS.items():
@@ -319,7 +319,7 @@ class PhishingDetector:
                 continue             # מילה רגילה, לא שם מותג
             return brand, domain, "subject"
 
-        # -- Step 2: the body, under stricter conditions ---------------
+        # Step 2: the body, under stricter conditions
         # Unconditionally this flagged a real Malwarebytes mail mentioning
         # Chrome; skipped, it missed office365-alert.net. So: there is a
         # link, and none goes to the brand's own domain.
@@ -394,17 +394,17 @@ class PhishingDetector:
 
     def looks_promotional(self, subject: str, content: str) -> bool:
         """
-        האם המייל הוא דיוור שיווקי או התראת שירות, ולא ניסיון פישינג.
+        Marketing or service mail rather than phishing.
 
-        המודל אומן על נתונים שבהם ספאם תויג יחד עם פישינג, ולכן פרסומת
-        של Temu מקבלת ממנו 99.99 בדיוק כמו בקשה לפרטי אשראי. אבל LURA
-        מזהה פישינג, לא ספאם — סימון פרסומת כ"סכנה" שוחק את האמון בכל
-        שאר ההתרעות.
+        Spam was labelled alongside phishing in training, so a Temu advert
+        scores 99.99 just like a request for card details. LURA detects
+        phishing, not spam, and calling an advert dangerous costs trust in
+        every other alert.
 
-        נדרשת ראיה חיובית לקטגוריה השיווקית, ולא שקט של מנוע החוקים —
-        דווקא פישינג מנוסח היטב משתיק אותם. בנוסף נדרש שלא תופיע בקשת
-        אישורים או איום על החשבון, כי "זכית בפרס, לחץ כאן" הוא פישינג
-        שעוטה מעטה של פרסומת.
+        Needs positive evidence of the marketing category - silence from
+        the rules is not enough, since well-written phishing is silent
+        too - and no credential request or account threat, because "you
+        have won a prize, click here" is phishing dressed as an advert.
         """
         haystack = f"{subject or ''} {content or ''}".lower()
         if not any(marker in haystack for marker in self.PROMO_MARKERS):
@@ -484,16 +484,16 @@ class PhishingDetector:
 
     def is_trusted_sender(self, sender: str) -> bool:
         """
-        האם המייל נשלח באמת מדומיין של חברה מוכרת.
+        Whether the mail really comes from a known company's own domain.
 
-        ראיה חיובית ללגיטימיות, לא רק היעדר ראיה להתחזות: תוקף יכול
-        לכתוב מה שירצה בגוף המייל, אבל אינו יכול לשלוח מ-
-        accounts.google.com. שקט של מנוע החוקים אינו אומר דבר — הוא
-        שותק גם על מייל בלי שולח כלל.
+        Positive evidence of legitimacy, not merely the absence of
+        evidence of impersonation: an attacker can write anything in the
+        body but cannot send from accounts.google.com. Silence from the
+        rules says nothing - they are silent on mail with no sender.
 
-        משמש להנמכת ציון BERT, שמסמן ב-99.99 גם איפוס סיסמה שהמשתמש
-        עצמו ביקש, כי כמעט אין בנתוני האימון דואר לגיטימי בענייני
-        חשבון ואבטחה.
+        Used to damp BERT, which scores 99.99 on a password reset the user
+        asked for themselves: the training data holds almost no legitimate
+        account and security mail.
         """
         domain = self._sender_domain(sender)
         if not domain:

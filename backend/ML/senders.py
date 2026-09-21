@@ -1,41 +1,22 @@
 """
 Giving every row in the corpus a sender address.
 
-Three of the nine rule checks read the sender, including brand
-impersonation, which carries the highest score in the engine. Most rows
-in the English corpora have no From line, so there the rules run on four
-checks instead of seven - and every error in ML/errors.py lacks a sender.
-The ensemble had never been measured on the input the extension actually
-receives, where Gmail always supplies one.
+Three of the nine rule checks read the sender, impersonation among them.
+Most English rows have no From line, so there the engine runs crippled -
+and every error in ML/errors.py lacks a sender.
 
-Two ways to fix it, not equally good:
+Two ways to fix it. EXTRACT first: Enron and SpamAssassin still carry
+headers in the body, which is real data and cannot leak. GENERATE only
+for what is left.
 
-1. EXTRACT. Enron and SpamAssassin are raw dumps and many rows still
-   carry their headers in the body. Real data, costs nothing, cannot
-   leak. Runs first and takes everything it can get.
-2. GENERATE. Only for rows where extraction found nothing.
+Generating is risky. If phishing rows get phishing-shaped addresses, the
+label is written into the feature and the rules "detect" our generator
+rather than the mail. Three defences: both classes draw from the same
+pools; where the body names a brand the domain follows the brand, not the
+label; and --audit trains a classifier on the address alone to check.
 
-Generation risks label leakage: if phishing rows get phishing-shaped
-addresses and legitimate rows legitimate ones, the label is written into
-the feature, the rules "detect" it at ~100%, and the numbers mean
-nothing. Three defences:
-
-  a. OVERLAPPING POOLS. Both classes draw from the same pools at similar
-     rates - attackers and real people both send from Gmail - so the
-     commonest sender shape carries no label information.
-  b. CONTENT-CONDITIONED. Where the body names a brand the domain comes
-     from that brand: the real one if legitimate, a lookalike if not.
-     The one place the label influences the address, because that is the
-     relationship the impersonation rule exists to catch. Kept to a
-     minority of rows and reported separately.
-  c. AN AUDIT. --audit trains a char n-gram classifier on the sender
-     string alone and reports how well it recovers the label, with the
-     extracted senders as the control.
-
-May be claimed: the sender rules now run on every row, and the pipeline
-is measured end to end on complete inputs. May not: any accuracy figure
-on generated senders as a product result - report those separately, as
-synthetic, beside the numbers on real senders.
+So the sender rules now run on every row - but no accuracy figure measured
+on generated senders is a product result. Report those separately.
 
 Usage
 -----
@@ -71,21 +52,9 @@ SYNTHETIC_SOURCES = frozenset({
 })
 
 
-# ---------------------------------------------------------------------------
-# 1. Extraction - real senders, wherever the corpus still has them
-# ---------------------------------------------------------------------------
-# Every row recovered here is one fewer that has to be generated. The
-# shapes are not equally trustworthy, so each is tried in order and the
-# method recorded:
-#
-#   From:            the header the extension itself reads. Authoritative.
-#   From <addr> ...  the mbox separator line - no colon. SpamAssassin is
-#                    distributed as mbox files and many rows kept it.
-#   Sender:          set when the sender differs from the author.
-#   Return-Path:     the envelope sender. Weaker: in phishing it often
-#                    differs from From: on purpose, and the extension
-#                    never sees it.
-#   bare address     a guess, taken only from the opening lines.
+# 1. Extraction - real senders, wherever the corpus still has them.
+# Tried in this order, strongest first, and the method is recorded:
+#   From:  |  mbox "From addr"  |  Sender:  |  Return-Path:  |  bare address
 _ADDRESS = re.compile(r"[\w.+%-]+@[\w-]+(?:\.[\w-]+)+")
 
 _HEADER_PATTERNS = [
@@ -178,11 +147,9 @@ def extract_sender(text: str, with_method: bool = False):
                 if address and not _NOT_A_SENDER.search(address):
                     return (address, method) if with_method else address
 
-    # Flattened text: clean_text collapses whitespace, so a message that
-    # still has headers arrives as one long line and the block above finds
-    # nothing. A rescue for already-processed data - the real fix is to
-    # extract before cleaning, since clean_text also deletes <addr@host>
-    # as though it were an HTML tag, and nothing brings those back.
+    # Flattened text: clean_text collapses whitespace, so headers arrive as
+    # one long line. A rescue for already-processed data; the real fix is
+    # to extract before cleaning.
     if not block:
         flat = re.search(
             r"\bfrom[ \t]*:[ \t]*(?:[^<>@\s]{0,60}?[ \t])?<?"
@@ -207,11 +174,8 @@ def extract_sender(text: str, with_method: bool = False):
     return empty
 
 
-# ---------------------------------------------------------------------------
-# 2. Generation - only where extraction failed
-# ---------------------------------------------------------------------------
-# The anti-leakage core: the commonest kind of sender is drawn by
-# phishing and legitimate rows alike.
+# 2. Generation - only where extraction failed. The anti-leakage core:
+# both classes draw the commonest kind of sender.
 FREE_PROVIDERS = [
     "gmail.com", "yahoo.com", "hotmail.com", "outlook.com",
     "walla.co.il", "protonmail.com", "mail.com", "bezeqint.net",
@@ -276,18 +240,10 @@ def _brand_in_text(text: str) -> tuple[str, list] | None:
     return None
 
 
-# The mixture, as (weight when phishing, weight when legitimate).
-#
-# Every pool but one is drawn by both classes at close to the same rate,
-# so a classifier reading only the address cannot separate them on the
-# shape of the domain. The first version gave each class its own pools -
-# odd TLDs to phishing, no-reply to legitimate - and the audit scored AUC
-# 0.835 against 0.500 for real headers. Textbook leakage.
-#
-# "lookalike" is the exception: a domain wearing a brand's name that is
-# not the brand's is what impersonation *is*, and cannot appear in
-# legitimate mail without ceasing to be legitimate. Held to a ninth of
-# the phishing rows so it informs the data without defining it.
+# (weight when phishing, weight when legitimate). Both classes draw from
+# nearly every pool at the same rate, so the address alone cannot predict
+# the label. Giving each class its own pools scored AUC 0.835 - leakage.
+# "lookalike" is the one exception: it is what impersonation *is*.
 POOL_WEIGHTS = {
     "free":           (0.38, 0.34),
     "corporate":      (0.22, 0.26),
@@ -364,9 +320,7 @@ def _rng_for(text: str, label: int, nonce: int = 0):
     return random.Random(int(digest[:16], 16))
 
 
-# ---------------------------------------------------------------------------
 # 3. The leakage audit
-# ---------------------------------------------------------------------------
 def audit(df: pd.DataFrame, column: str, title: str) -> float:
     """
     How much of the label can be recovered from the sender string alone?
@@ -449,7 +403,6 @@ def verdict(auc_generated: float, auc_reference: float,
         print("  bound rather than merging them into a headline figure.")
 
 
-# ---------------------------------------------------------------------------
 def load(split: str, data_dir: str) -> pd.DataFrame:
     path = os.path.join(data_dir, f"{split}.csv")
     if not os.path.exists(path):
@@ -604,10 +557,8 @@ def main() -> None:
         print("=" * 74)
         combined = pd.concat(frames.values(), ignore_index=True)
 
-        # "Already present" covers two things that must not be audited
-        # together: Enron and SpamAssassin senders parsed from real
-        # headers, and Hebrew/legitimate rows written by our own
-        # generators, which carry label information by construction.
+        # Two different things that must not be audited together: senders
+        # parsed from real headers, and rows our own generators wrote.
         # Averaged into one bucket they inflate the reference.
         source = combined.get("source", pd.Series("", index=combined.index))
         is_synthetic = source.astype(str).isin(SYNTHETIC_SOURCES)
