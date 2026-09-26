@@ -20,9 +20,9 @@
                  U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF;
 }
 
-/* אותם טוקנים כמו frontend/css/main.css. התוסף הוא חבילה נפרדת ואינו
-   יכול לייבא את הגיליון של האתר, ולכן הם משוכפלים כאן — אבל פעם אחת
-   ובמקום אחד, במקום כערכים גולמיים פזורים לאורך הקובץ. */
+/* The same tokens as frontend/css/main.css. The extension is a separate
+   package and cannot import the site's sheet, so they are duplicated -
+   but once, here, rather than as raw values throughout the file. */
 :root {
   --blue: #42A5F5;
   --purple: #7C4DFF;
@@ -65,7 +65,7 @@ body {
   min-height: 100vh;
 }
 
-/* ── Header ── */
+/* Header */
 .header {
   padding: 20px 20px 16px;
   text-align: center;
@@ -118,7 +118,7 @@ body {
   50%       { opacity: 0.3; }
 }
 
-/* ── Login box ── */
+/* Login box */
 .login-box {
   padding: 8px 16px 20px;
 }
@@ -193,7 +193,7 @@ body {
   text-align: center;
 }
 
-/* ── User pill (logged-in header) ── */
+/* User pill (logged-in header) */
 .user-pill {
   display: flex;
   align-items: center;
@@ -245,7 +245,7 @@ body {
   color: #dc2626;
 }
 
-/* ── Stats Grid ── */
+/* Stats Grid */
 .stats {
   padding: 0 16px 16px;
   display: grid;
@@ -288,7 +288,7 @@ body {
   margin-top: 2px;
 }
 
-/* ── Risk Meter ── */
+/* Risk Meter */
 .risk-section {
   margin: 0 16px 16px;
   background: var(--surface);
@@ -325,7 +325,7 @@ body {
   transition: width 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-/* ── Actions ── */
+/* Actions */
 .actions {
   padding: 0 16px 16px;
   display: flex;
@@ -418,7 +418,7 @@ body {
   background: var(--surface);
 }
 
-/* ── Footer ── */
+/* Footer */
 .footer {
   padding: 12px 16px;
   text-align: center;
@@ -427,7 +427,7 @@ body {
   border-top: 1px solid rgba(124, 77, 255, 0.08);
 }
 
-/* ── Loading ── */
+/* Loading */
 .loading {
   padding: 40px 20px;
   text-align: center;

@@ -22,17 +22,12 @@
                  U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF;
 }
 
-/* ===========================================================================
-   LURA — גיליון הסגנון של האתר
-   ---------------------------------------------------------------------------
-   החלק הראשון הוא דף הלקוחות כפי שאושר, מילה במילה. הוא מגדיר את שפת
-   העיצוב: הפלטה, הרדיוסים (8 ו-14), נוסחת הצללים, והמרווחים.
+/* LURA site stylesheet.
 
-   החלק השני מיישם את אותה שפה על עמודי ההתחברות ולוח הבקרה. הם נכתבו
-   לפני האישור ונשארו מאחור, עד שהופרדו ממנו לגמרי — רקע פסטל, כרטיסי
-   זכוכית וצבעים שאינם בפלטה. הפורט מובא כאן ולא בקובץ נפרד כדי
-   שהטוקנים יוגדרו פעם אחת.
-   =========================================================================== */
+   Part one is the approved home page: the palette, the radii (8 and 14),
+   the shadow formula and the spacing. Part two applies that language to
+   the login and dashboard pages, which predate it. Both live here so the
+   tokens are defined once. */
 
 :root{
     --brand-blue:#42A5F5; --brand-purple:#7C4DFF; --brand-magenta:#E040FB;
@@ -82,7 +77,7 @@
     font-family:inherit;cursor:pointer}
   .nav-cta:hover{background:var(--bg);color:var(--text)}
 
-  /* ═══ HERO ═══ */
+  /* HERO */
   .hero-wrap{position:relative;overflow:hidden;border-bottom:1px solid var(--border);
     background:radial-gradient(circle at 18% -5%,rgba(124,77,255,.10),transparent 55%),
                radial-gradient(circle at 88% 20%,rgba(66,165,245,.08),transparent 50%),
@@ -138,7 +133,7 @@
   .fc-t{font-weight:600;display:block;margin-bottom:1px}
   .fc-s{color:var(--text-3);font-size:11.5px}
 
-  /* ═══ SECTIONS ═══ */
+  /* SECTIONS */
   .sec{padding:82px 0}
   .sec-head{margin-bottom:38px}
   .sec-tag{font-size:12px;font-weight:600;letter-spacing:.09em;color:var(--accent);
@@ -336,14 +331,11 @@
     .step{border-left:none;border-bottom:1px solid var(--ink-line)}
     .cta h2{font-size:28px}}
 
-/* ===========================================================================
-   עמודי התחברות ולוח בקרה
-   =========================================================================== */
+/* Login and dashboard pages */
 
-/* שני מחלקות שהמסמכים משתמשים בהן ומעולם לא הוגדרו: שם המשתמש
-   בסרגל, וכפתור פעולה הרסנית. הכפתור היה קודם btn-primary עם
-   background אדום בשורה — מה שהשאיר עליו את הצל הסגול של הכפתור
-   הראשי, כלומר הילה סגולה מתחת לכפתור אדום. */
+/* Two classes the pages used and nobody had defined. The danger button
+   was btn-primary with an inline red background, which kept the primary
+   button's purple shadow: a purple glow under a red button. */
 .nav-user {
   font-size: 13.5px;
   color: var(--text-secondary);
@@ -369,7 +361,7 @@
 .btn-danger svg   { width: 16px; height: 16px; }
 
 
-/* ── Auth Page ── */
+/* Auth Page */
 .auth-page {
   background: radial-gradient(circle at 18% -5%, rgba(124,77,255,.10), transparent 55%),
               radial-gradient(circle at 88% 20%, rgba(66,165,245,.08), transparent 50%),
@@ -380,8 +372,8 @@
   min-height: 100vh;
 }
 
-/* כרטיס אטום ולא זכוכית מטושטשת. עמוד הבית בונה כל כרטיס מ---surface
-   מלא, ו-backdrop-filter מופיע בו רק בסרגל העליון. */
+/* Opaque, not frosted glass: on the home page every card is solid
+   --surface and backdrop-filter appears only in the top bar. */
 .auth-container {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -471,10 +463,10 @@
 .auth-switch { text-align: center; font-size: 13px; color: var(--muted); }
 .auth-switch a { color: var(--accent); }
 
-/* ── Dashboard Layout ── */
+/* Dashboard Layout */
 .dash-page { background: var(--bg); }
 
-/* אייקוני SVG בניווט הצד, בכרטיסים ובכפתורים — במקום האימוג'י שהיו כאן */
+/* SVG icons in the side nav, the cards and the buttons - they were emoji */
 .sidebar-link { display: flex; align-items: center; gap: 10px; }
 .sidebar-link svg { width: 18px; height: 18px; flex-shrink: 0; }
 .stat-icon { display: flex; justify-content: center; margin-bottom: 8px; }
@@ -530,7 +522,7 @@
 .dash-section { max-width: 900px; }
 .section-title { font-size: 20px; font-weight: 800; margin-bottom: 24px; }
 
-/* ── Dashboard Stats ── */
+/* Dashboard Stats */
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -570,7 +562,7 @@
 .stat-card.green .stat-val { color: var(--green); }
 .stat-lbl { font-size: 12px; color: var(--muted); font-weight: 600; }
 
-/* ── Risk Card ── */
+/* Risk Card */
 .risk-card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -606,7 +598,7 @@
 .risk-bar-fill { height: 100%; background: linear-gradient(90deg, var(--green), var(--orange), var(--orange), var(--red)); transition: width 0.6s ease; border-radius: 4px; }
 .risk-desc { font-size: 12px; color: var(--muted); }
 
-/* ── Alerts ── */
+/* Alerts */
 .alerts-list { display: flex; flex-direction: column; gap: 12px; }
 .alert-item {
   display: flex;
@@ -625,7 +617,7 @@
 
 .empty-state { text-align: center; padding: 40px; color: var(--muted); font-size: 14px; }
 
-/* ── Guardian ── */
+/* Guardian */
 .guardian-box {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -682,7 +674,7 @@
   to   { opacity: 1; transform: translateY(0)    scale(1);   }
 }
 
-/* ── Responsive ── */
+/* Responsive */
 @media (max-width: 768px) {
   .hero { flex-direction: column; padding: 40px 16px; }
   .hero h1 { font-size: 36px; }
@@ -693,10 +685,8 @@
   .sidebar { width: 100%; flex-direction: row; flex-wrap: wrap; padding: 16px; }
   .sidebar-nav { flex-direction: row; }
 }
-/* ===========================================================================
-   מקטע ההתקנה, ותוצאת סריקת קישור בלוח הבקרה — שהוצגה עד כה בלי שום
-   עיצוב. אותה שפה: רדיוסים 8 ו-14, טוקנים מלמעלה, בלי צבע חדש.
-   =========================================================================== */
+/* The install section and the dashboard's URL-scan result, which had no
+   styling at all. Same language: radii 8 and 14, tokens from above. */
 
 .result-card{border:1px solid var(--border);border-right-width:4px;
   border-radius:var(--r);padding:16px 18px;background:var(--bg)}
@@ -760,11 +750,8 @@
 .guardian-box .btn-primary svg { width: 16px; height: 16px; }
 .guardian-box .btn-danger { flex: none; white-space: nowrap; }
 
-/* ===========================================================================
-   מצב מפקח — רשימת החשבונות במעקב.
-   קישור כתובת הוא רק השלב הראשון מתוך שלושה, ולכן כל שורה אומרת באיזה
-   שלב היא נמצאת ומה חסר. אותה שפה: רדיוסים 8 ו-14, טוקנים מלמעלה.
-   =========================================================================== */
+/* Guardian mode - the watched accounts. Linking an address is only the
+   first of three steps, so each row says which step it is on. */
 
 .connect-row { display: flex; gap: 8px; align-items: stretch; }
 .connect-row input { flex: 1; min-width: 0; }

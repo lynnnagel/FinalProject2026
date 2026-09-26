@@ -40,8 +40,11 @@ from config import (
 )
 
 # The icon embedded in the message body. The files live under extension/icons/.
+#
+# The id carries a domain part because RFC 2392 defines a Content-ID as an
+# addr-spec, and Gmail drew a broken image for the bare word.
 ICON_PATH = Path(__file__).parent.parent / "extension" / "icons" / "icon128.png"
-ICON_CID = "lura_icon"
+ICON_CID = "lura_icon@lura.local"
 
 logger = logging.getLogger(__name__)
 
@@ -135,15 +138,23 @@ def _risk_color(risk_score: float) -> str:
 
 
 def _attach_icon(msg: MIMEMultipart) -> None:
-    """Attaches the LURA icon as an inline image (cid) for an <img> tag."""
+    """
+    Attaches the LURA icon as an inline image (cid) for an <img> tag.
+
+    The filename and the root's type parameter are what a mail client
+    needs to tie the part to the cid: reference in the HTML. Without
+    them Gmail drew a broken image where the logo should be.
+    """
     if not ICON_PATH.exists():
         logger.warning("[Email] אייקון לא נמצא: %s", ICON_PATH)
         return
     with open(ICON_PATH, "rb") as f:
-        img = MIMEImage(f.read())
+        img = MIMEImage(f.read(), _subtype="png")
     img.add_header("Content-ID", f"<{ICON_CID}>")
-    img.add_header("Content-Disposition", "inline")
+    img.add_header("Content-Disposition", "inline", filename="lura.png")
     msg.attach(img)
+    # RFC 2387: multipart/related names the part its other parts belong to.
+    msg.set_param("type", "multipart/alternative")
 
 
 # One shell for every message. Mail clients strip <style>, so this is a

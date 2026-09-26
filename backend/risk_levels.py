@@ -28,9 +28,35 @@ def risk_level(score: float) -> str:
     return next(name for cutoff, name, _ in _LEVELS if score >= cutoff)
 
 
-def recommendation(score: float) -> str:
-    """The advice shown to the user for a score."""
-    return next(text for cutoff, _, text in _LEVELS if score >= cutoff)
+# Lines that say nothing was found. They are indicators in the list, but
+# they are not signs, and the advice must not count them as such.
+_DENIALS = (
+    "לא נמצאו אינדיקטורים חשודים",
+    "לא נמצאו סימנים טכניים",
+)
+
+
+def found_signs(indicators) -> bool:
+    """Did anything real turn up, as opposed to a line saying nothing did."""
+    return any(
+        i and not any(i.startswith(d) for d in _DENIALS)
+        for i in (indicators or [])
+    )
+
+
+def recommendation(score: float, indicators=None) -> str:
+    """
+    The advice shown to the user for a score.
+
+    On a safe score the advice used to deny outright, and sat under a
+    list of the signs that had just been found: four weak keywords and a
+    line of urgency scored 31, and the window said none were found. The
+    denial is only correct when the list is empty.
+    """
+    text = next(text for cutoff, _, text in _LEVELS if score >= cutoff)
+    if score < LOW_RISK_THRESHOLD and found_signs(indicators):
+        return "הסימנים שנמצאו חלשים מכדי להצביע על פישינג."
+    return text
 
 
 def is_phishing(score: float) -> bool:
@@ -49,5 +75,5 @@ def apply(result: dict, corroborated: bool = True) -> dict:
     score = result["risk_score"]
     result["is_phishing"] = is_phishing(score)
     result["risk_level"] = risk_level(score)
-    result["recommendation"] = recommendation(score)
+    result["recommendation"] = recommendation(score, result.get("indicators"))
     return result

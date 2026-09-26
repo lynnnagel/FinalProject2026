@@ -47,7 +47,6 @@
     }
     window.addEventListener('hashchange', openSectionFromHash);
 
-    // -- known senders ---------------------------------------------
     async function loadTrusted() {
       const el = document.getElementById('trustedList');
       if (!el) return;
@@ -232,8 +231,13 @@
         document.getElementById('statScanned').textContent = d.total_scanned;
         document.getElementById('statBlocked').textContent = d.phishing_blocked;
         document.getElementById('statAlerts').textContent  = d.recent_alerts;
-        const detectionRate = d.total_scanned > 0 ? Math.round((d.phishing_blocked / d.total_scanned) * 100) : 0;
-        document.getElementById('statStatus').textContent = detectionRate + '%';
+        // The share of this user's mail that was flagged - not a measure of
+        // how well the system detects. The label read "אחוז זיהוי", which
+        // says the opposite: under that name a high number looks good,
+        // while it actually means more phishing reached the inbox.
+        const phishingShare = d.total_scanned > 0
+          ? Math.round((d.phishing_blocked / d.total_scanned) * 100) : 0;
+        document.getElementById('statStatus').textContent = phishingShare + '%';
 
         renderRisk(Math.round(d.risk_score || 0));
 
@@ -295,7 +299,7 @@
       }
     }
 
-    // -- guardian mode ---------------------------------------------
+    // guardian mode
     // Linking is one of three steps; the person also has to open an
     // account and sign the extension in. This names the missing one.
     const WATCH_STATE = {

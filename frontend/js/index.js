@@ -1,9 +1,7 @@
 const API = 'http://localhost:8000';
 
-// ── Nav state ─────────────────────────────────────────────
-// $ returns null quietly for an element that is not on the page, so a
-// missing section cannot throw and take the rest of the setup with it -
-// the reveal animations included.
+// $ returns null quietly, so a missing section cannot throw and take the
+// reveal animations down with it.
 const $ = id => document.getElementById(id);
 
 function show(id, visible) {
@@ -46,7 +44,6 @@ function goGuardian() {
   }
 }
 
-// ── Live stats ────────────────────────────────────────────
 async function loadStats() {
   try {
     const r = await fetch(`${API}/metrics`);
@@ -60,7 +57,6 @@ async function loadStats() {
   }
 }
 
-// ── Smooth scroll for in-page anchors ─────────────────────
 function initSmoothScroll() {
   document.querySelectorAll('a[href^="#"]').forEach(a => {
     a.addEventListener('click', e => {
@@ -76,7 +72,6 @@ function initSmoothScroll() {
   });
 }
 
-// ── Reveal sections on scroll ─────────────────────────────
 function initReveal() {
   const io = new IntersectionObserver(entries => {
     entries.forEach(entry => {
@@ -90,7 +85,6 @@ function initReveal() {
   document.querySelectorAll('.rv').forEach(el => io.observe(el));
 }
 
-// ── Boot ──────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   initNav();
   loadStats();

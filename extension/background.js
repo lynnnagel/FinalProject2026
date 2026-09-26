@@ -57,7 +57,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
-// Handle email scan
 async function handleEmailScan(emailData) {
   try {
     const response = await fetch(`${API_URL}/scan`, {
@@ -97,7 +96,6 @@ async function handleEmailScan(emailData) {
   }
 }
 
-// Update statistics
 async function updateStats(data) {
   return new Promise((resolve) => {
     chrome.storage.local.get(['stats'], (result) => {
@@ -129,7 +127,6 @@ async function updateStats(data) {
   });
 }
 
-// Show phishing notification
 function showPhishingNotification(data) {
   chrome.notifications.create({
     type: 'basic',

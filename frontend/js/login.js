@@ -74,11 +74,9 @@ async function handleLogin(e) {
   }
 }
 
-// Where to land after signing in: a visitor who clicked "Guardian mode"
-// wants that screen, not the overview, and the sign-in is in the way. The
-// home page writes the target and this reads it back. Only a same-page
-// relative target is accepted - an attacker who can set this key must not
-// be able to bounce the user elsewhere right after they type a password.
+// Where to land after signing in - the home page writes it, this reads it
+// back. Only a same-page relative target: whoever can set this key must
+// not be able to bounce the user elsewhere right after a password.
 function afterLogin() {
   const want = localStorage.getItem('lura_after_login') || '';
   localStorage.removeItem('lura_after_login');

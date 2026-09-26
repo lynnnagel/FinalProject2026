@@ -186,7 +186,7 @@ def scan_email(
             is_phishing=existing.is_phishing,
             risk_level=risk_levels.risk_level(existing.risk_score),
             indicators=saved or ["נסרק בעבר"],
-            recommendation=risk_levels.recommendation(existing.risk_score),
+            recommendation=risk_levels.recommendation(existing.risk_score, saved),
             response_time=0.0,
         )
 
