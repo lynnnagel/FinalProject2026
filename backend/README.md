@@ -113,50 +113,65 @@ are derived from it, so they cannot drift apart when it is retuned.
 
 | Score | Classification |
 |---|---|
-| ≥ 76 | High risk |
-| ≥ 57 | Phishing |
-| ≥ 34 | Caution |
-| < 34 | Safe |
+| ≥ 84 | High risk |
+| ≥ 70 | Suspicious — classified as phishing |
+| ≥ 42 | Caution |
+| < 42 | Safe |
 
 ## Results
 
-Measured on a held-out test set of 16,137 emails, deduplicated before the
+Measured at the configured threshold of 70, on a held-out test set of 14,862
+emails — 7,218 phishing and 7,644 legitimate — deduplicated before the
 train/test split.
 
 | Metric | Result | Target |
 |---|---:|---:|
 | Overall accuracy | 99.4% | 85% |
-| F1-score (phishing) | 0.994 | 0.88 |
-| False negative rate | 0.9% | < 5% |
-| False positive rate | 0.4% | — |
+| F1-score (phishing) | 0.993 | 0.88 |
+| False negative rate | 0.7% | < 5% |
+| False positive rate | 0.5% | — |
 
 By language:
 
-| | Samples | Accuracy | F1 | Precision |
+| | Samples | False alarms | Misses | Accuracy |
 |---|---:|---:|---:|---:|
-| Hebrew | 638 | 99.2% | 0.990 | 100% |
-| English | 15,499 | 99.4% | 0.994 | 99.6% |
+| Hebrew | 759 | 0 | 0 | 100% |
+| English | 14,103 | 41 | 53 | 99.3% |
 
-31 false alarms across 8,007 legitimate emails, and none at all in Hebrew.
+41 false alarms across 7,644 legitimate emails, and none at all in Hebrew.
+
+An earlier revision of this section quoted 16,137 test emails at a threshold
+of 57. Those figures predate three changes — spam relabelled as not-phishing,
+a generator added for legitimate transactional mail, and the threshold raised
+to 70 — and have been replaced. The per-experiment numbers, including the
+threshold sweep these come from, are in [docs/findings.md](../docs/findings.md).
 
 ### What the numbers cost to get
 
-The first ensemble scored **52.8% accuracy with F1 0.121** on the same test
-set, while BERT alone scored 99.4%. The weighted average was the cause. It
-capped the model's contribution at `BERT_WEIGHT × 100 = 40`, below the
-threshold of 57, so BERT could never cross on its own however certain it was.
+The first ensemble scored **52.8% accuracy with F1 0.121** on the test set of
+the time, while BERT alone scored 99.4%. The weighted average was the cause.
+It capped the model's contribution at `BERT_WEIGHT × 100 = 40`, below the
+threshold then in force (57), so BERT could never cross on its own however
+certain it was.
 It also treated a rule score of 0 as evidence of legitimacy, when zero only
 means the rules have nothing to say — which is also what happens when there is
 no sender for three of the nine checks to read. Replacing the average with the
 formula above recovered the full 99.4%.
 
-Two limitations are worth stating. 96% of the corpus rows carry no `From`
+Three limitations are worth stating. 96% of the corpus rows carry no `From`
 line, so three rule checks cannot run on them; the extension always has a
 sender from Gmail, making the deployed pipeline stronger than this figure
-suggests. And leave-one-source-out validation drops to 67.2% accuracy, which
+suggests. Leave-one-source-out validation drops to 67.2% accuracy, which
 means part of any high score on public corpora reflects recognising the
 dataset rather than recognising phishing. The rule engine is corpus-
 independent and is what carries the system on mail it has never seen.
+
+And the Hebrew corpus is generated, not collected. A classifier trained on
+the sender address alone — no subject, no body, no links — reached a perfect
+AUC on it: the generator was drawing each class's addresses from a separate
+pool, so one field predicted the label. The generator was fixed to draw both
+classes from the same pools. A perfect Hebrew score on generated mail is
+still easier than real mail and should be read that way.
 
 Trained on ~119,000 emails from multiple sources, including a Hebrew corpus
 built specifically for this project.
