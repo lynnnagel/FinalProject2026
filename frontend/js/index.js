@@ -1,5 +1,3 @@
-const API = 'http://localhost:8000';
-
 // $ returns null quietly, so a missing section cannot throw and take the
 // reveal animations down with it.
 const $ = id => document.getElementById(id);
@@ -44,19 +42,6 @@ function goGuardian() {
   }
 }
 
-async function loadStats() {
-  try {
-    const r = await fetch(`${API}/metrics`);
-    if (!r.ok) return;
-    const d = await r.json();
-    const scanned = $('totalScanned'), blocked = $('totalBlocked');
-    if (scanned) scanned.textContent = (d.total_emails_scanned || 0).toLocaleString();
-    if (blocked) blocked.textContent = (d.phishing_blocked || 0).toLocaleString();
-  } catch {
-    // Server is down - the stats stay as placeholders
-  }
-}
-
 function initSmoothScroll() {
   document.querySelectorAll('a[href^="#"]').forEach(a => {
     a.addEventListener('click', e => {
@@ -87,7 +72,6 @@ function initReveal() {
 
 document.addEventListener('DOMContentLoaded', () => {
   initNav();
-  loadStats();
   initSmoothScroll();
   initReveal();
 });

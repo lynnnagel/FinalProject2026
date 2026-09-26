@@ -162,6 +162,28 @@ class TestScanEndpoint:
         longer = dict(full, content=full["content"] + " בנק לאומי")
         assert client.post("/scan", json=longer).status_code == 200
 
+    def test_advice_does_not_deny_the_signs_listed_beside_it(self, client):
+        """
+        A safe score with weak signs still lists them, and the advice used
+        to read "nothing suspicious was found" directly underneath: four
+        weak keywords and a line of urgency scored 31, and the window
+        both listed them and denied them.
+        """
+        r = client.post("/scan", json={
+            "user_email": "advice@example.com",
+            "sender": "idm@biu.ac.il",
+            "subject": "עדכון פרטי חשבון",
+            "content": ("יש לעדכן את פרטי החשבון והאשראי בהקדם ובדחיפות, "
+                        "אחרת לא נוכל להמשיך בתהליך."),
+        }).json()
+
+        import risk_levels
+        listed = risk_levels.found_signs(r["indicators"])
+        if r["risk_level"] == "בטוח" and listed:
+            assert "לא נמצאו" not in r["recommendation"], r
+        if r["risk_level"] == "בטוח" and not listed:
+            assert "לא נמצאו" in r["recommendation"], r
+
 
 # /stats
 class TestStatsEndpoint:
@@ -244,6 +266,41 @@ class TestGuardianEndpoint:
     def test_other_user_dashboard_forbidden(self, client, parent_headers):
         r = client.get("/guardian/someone-else@example.com", headers=parent_headers)
         assert r.status_code == 403
+
+    def test_dashboard_leaves_out_the_guardians_own_alerts(
+        self, client, phishing_email, parent_headers, make_user
+    ):
+        """
+        A guardian has a mailbox of their own, and its alerts carry the
+        same user id as the ones about a watched inbox. Unfiltered, mail
+        caught in the guardian's own inbox appeared on the page reporting
+        on someone else's, with no name on it to say whose it was.
+        """
+        child_headers = make_user("test@example.com")
+        client.post("/guardian/connect",
+                    json={"child_email": "test@example.com"},
+                    headers=parent_headers)
+        # Only the first crossing raises an alert, so scan it once, and
+        # after the link exists.
+        client.post("/scan", json=phishing_email, headers=child_headers)
+
+        # The guardian's own inbox catches something afterwards, so its
+        # alert is the newer of the two.
+        client.post("/scan", json={
+            "user_email": "parent@example.com",
+            "sender": "billing@paypa1-secure.xyz",
+            "subject": "PayPal: verify your account now",
+            "content": ("verify your account password urgent click here "
+                        "http://paypa1-secure.xyz/verify http://evil.com"),
+        }, headers=parent_headers)
+
+        alerts = client.get("/guardian/parent@example.com",
+                            headers=parent_headers).json()["recent_alerts"]
+        assert alerts, "the alert about the watched inbox went missing"
+        for a in alerts:
+            assert "paypa1-secure.xyz" not in a["message"], \
+                "the guardian's own alert reached the guardian dashboard"
+        assert any("test" in a["message"] for a in alerts)
 
     def test_guardian_data_no_children_returns_empty_state(
         self, client, safe_email, parent_headers
