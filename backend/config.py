@@ -39,7 +39,7 @@ CORS_ORIGIN_REGEX = (
 )
 
 # Only the threshold is calibrated; the bands are derived from it, so they
-# cannot drift apart. Raised 60 -> 70: same 66 misses, three fewer false
+# cannot drift apart. Raised 60 -> 70: same 65 misses, three fewer false
 # alarms.  Set it with:  python ML/tradeoff.py
 PHISHING_THRESHOLD = 70       # at or above this, classed as phishing
 
