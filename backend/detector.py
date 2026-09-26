@@ -1,4 +1,3 @@
-
 """
 LURA - the rule engine.
 
