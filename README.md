@@ -1,8 +1,6 @@
 <div align="center">
 
-# LURA
-
-### Don't Take the Bait
+<img src="docs/images/logo.png" alt="LURA — Don't Take the Bait" width="420">
 
 **Real-time phishing detection for Gmail — Chrome Extension + FastAPI backend**
 
@@ -10,6 +8,13 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
 ![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?logo=pytorch&logoColor=white)
 ![Chrome Extension](https://img.shields.io/badge/Chrome_Extension-4285F4?logo=googlechrome&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-143%20passing-1F7A3D)
+
+Selected as the outstanding final project of the year.
+
+<img src="docs/images/inbox.png" alt="Every message in the Gmail inbox carries a risk score before it is opened" width="720">
+
+<sub>Every message is scored before it is opened — red for danger, amber for caution, green for safe.</sub>
 
 </div>
 
@@ -280,19 +285,34 @@ backend/
 ├── config.py            Environment configuration
 ├── database.py          SQLAlchemy setup
 ├── models.py            ORM models
-└── server.py            FastAPI application
+├── server.py            FastAPI application
+└── tests/               143 tests — see Testing below
 
 extension/               Chrome Extension (content script + popup)
 frontend/                Dashboard and authentication pages
-presentation/            Project presentation
+docs/                    Findings, measurements and the project write-up
 ```
 
 ## Testing
 
 ```bash
 cd backend
-pytest
+pytest -v
 ```
+
+143 tests, all passing.
+
+| File | Tests | Covers |
+|---|---:|---|
+| `test_api.py` | 53 | Every endpoint: scanning, auth, stats, guardian. Status codes, response shape, caching, and the rescan rules |
+| `test_detector.py` | 33 | The rule engine — each of the nine checks, and the damping conditions |
+| `test_trusted_senders.py` | 18 | The known-sender list, including the refusal to trust an address the rules found impersonation in |
+| `test_models.py` | 10 | ORM models and their constraints |
+| `test_javascript.py` | 4 | Static checks over the extension's content script |
+
+Fixtures live in `tests/conftest.py`. Every test runs against an in-memory
+SQLite database created and dropped around it, so no test can see what another
+one left behind, and the development database is never touched.
 
 ## Tech Stack
 

@@ -20,6 +20,7 @@ backend/figs/
 *.png
 !extension/icons/*.png
 !frontend/icons/*.png
+!docs/images/*.png
 
 # Local backups of the processed splits
 backend/ML/data/processed.backup/
