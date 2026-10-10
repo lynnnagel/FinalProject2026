@@ -1,0 +1,21 @@
+# Dependencies needed to run the test suite, and nothing more.
+#
+# torch and transformers are deliberately absent, not forgotten. The
+# import in API/scan.py is guarded, and a missing model is a valid state
+# the system falls back from (rules-only mode) rather than a failure.
+# Every test that touches the model mocks it, so no test needs the
+# ~900 MB download. CI finishes in seconds instead of minutes.
+#
+# The full set, including training, is in requirements.txt.
+
+fastapi==0.115.0
+pydantic[email]==2.10.0
+sqlalchemy==2.0.36
+bcrypt==4.2.0
+PyJWT==2.8.0
+python-multipart==0.0.6
+python-dotenv==1.0.0
+
+pytest==7.4.3
+pytest-asyncio==0.21.1
+httpx==0.25.2
