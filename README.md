@@ -8,7 +8,7 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
 ![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?logo=pytorch&logoColor=white)
 ![Chrome Extension](https://img.shields.io/badge/Chrome_Extension-4285F4?logo=googlechrome&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-143%20passing-1F7A3D)
+[![Tests](https://github.com/lynnnagel/FinalProject2026/actions/workflows/tests.yml/badge.svg)](https://github.com/lynnnagel/FinalProject2026/actions/workflows/tests.yml)
 
 Selected as the outstanding final project of the year.
 
