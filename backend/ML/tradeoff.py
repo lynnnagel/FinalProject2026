@@ -28,7 +28,7 @@ computed on the balanced corpus.
 What it showed: across that range recall barely moves while precision at
 1% climbs steeply. Two consequences. Raising the threshold is nearly
 free, so it should be raised - 60 -> 70 cost no misses at all. And the
-threshold is a weak lever: the projection at the configured 70 is 72.5%,
+threshold is a weak lever: the projection at the configured 70 is 65.1%,
 and 80% needs fewer false alarms than any cut-off here delivers. That
 takes new evidence of legitimacy, not a different number.
 
