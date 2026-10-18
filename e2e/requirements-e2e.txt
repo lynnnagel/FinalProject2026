@@ -1,0 +1,5 @@
+# Browser tests only. Kept apart from backend/requirements.txt because
+# these never run in CI: they need a running server and a browser.
+pytest==7.4.3
+pytest-playwright==0.5.2
+requests==2.32.3
